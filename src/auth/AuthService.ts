@@ -36,8 +36,7 @@ export class AuthService {
       },
     };
 
-    this.msalClient = new PublicClientApplication(this.config);
-  }  async login(): Promise<AuthToken> {
+    this.msalClient = new PublicClientApplication(this.config);  }  async login(useRedirectFlow = false): Promise<AuthToken> {
     try {
       // Start with minimal permissions that most users should have
       const authRequest = {
@@ -49,12 +48,15 @@ export class AuthService {
           const { shell } = await import('electron');
           await shell.openExternal(url);
         },
+        // Use system browser for redirect flow
+        // This is more compatible with mobile authentication flows
+        redirectUri: useRedirectFlow ? 'https://login.microsoftonline.com/common/oauth2/nativeclient' : undefined,
         successTemplate: `
           <html>
             <head><title>Authentication Successful</title></head>
             <body>
               <h1>Authentication Successful!</h1>
-              <p>You can now close this window and return to EntraPulseLite.</p>
+              <p>You can now close this window and return to EntraPulse Lite.</p>
               <script>window.close();</script>
             </body>
           </html>
@@ -64,7 +66,7 @@ export class AuthService {
             <head><title>Authentication Failed</title></head>
             <body>
               <h1>Authentication Failed</h1>
-              <p>Please try again. You can close this window and return to EntraPulseLite.</p>
+              <p>Please try again. You can close this window and return to EntraPulse Lite.</p>
               <script>window.close();</script>
             </body>
           </html>

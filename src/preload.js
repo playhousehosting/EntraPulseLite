@@ -1,12 +1,19 @@
-// Preload script for EntraPulseLite - Electron security bridge
+// Preload script for EntraPulse Lite - Electron security bridge
 const { contextBridge, ipcRenderer } = require('electron');
 
 // Expose protected methods that allow the renderer process to use
 // the ipcRenderer without exposing the entire object
+contextBridge.exposeInMainWorld('electron', {
+  // Asset handling
+  getAssetPath: (assetName) => {
+    return ipcRenderer.invoke('app:getAssetPath', assetName);
+  }
+});
+
 contextBridge.exposeInMainWorld('electronAPI', {
   // Authentication methods
   auth: {
-    login: () => ipcRenderer.invoke('auth:login'),
+    login: (useRedirectFlow = false) => ipcRenderer.invoke('auth:login', useRedirectFlow),
     logout: () => ipcRenderer.invoke('auth:logout'),
     getToken: () => ipcRenderer.invoke('auth:getToken'),
     getCurrentUser: () => ipcRenderer.invoke('auth:getCurrentUser'),

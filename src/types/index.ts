@@ -1,4 +1,4 @@
-// Global type definitions for EntraPulseLite
+// Global type definitions for EntraPulse Lite
 
 export type LogLevel = 'Error' | 'Warning' | 'Info' | 'Verbose';
 
@@ -71,7 +71,7 @@ export interface AppConfig {
 
 export interface ElectronAPI {
   auth: {
-    login: () => Promise<AuthToken>;
+    login: (useRedirectFlow?: boolean) => Promise<AuthToken>;
     logout: () => Promise<void>;
     getToken: () => Promise<AuthToken | null>;
     getCurrentUser: () => Promise<User | null>;

@@ -1,4 +1,4 @@
-// Main Chat component for EntraPulseLite
+// Main Chat component for EntraPulse Lite
 import React, { useState, useEffect } from 'react';
 import {
   Box,
@@ -18,6 +18,8 @@ import {
   Divider,
   IconButton,
   Tooltip,
+  FormControlLabel,
+  Checkbox,
 } from '@mui/material';
 import {
   Send as SendIcon,
@@ -27,8 +29,11 @@ import {
   Logout as LogoutIcon,
   Settings as SettingsIcon,
   Timeline as TraceIcon,
+  Shield as ShieldIcon,
 } from '@mui/icons-material';
+import { getAssetPath } from '../utils/assetUtils';
 import { ChatMessage, User, AuthToken } from '../../types';
+import { AppIcon } from './AppIcon';
 
 interface ChatComponentProps {}
 
@@ -42,6 +47,7 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
   const [error, setError] = useState<string | null>(null);
   const [currentPermissions, setCurrentPermissions] = useState<string[]>(['User.Read']);
   const [permissionRequests, setPermissionRequests] = useState<string[]>([]);
+  const [useRedirectFlow, setUseRedirectFlow] = useState(false);
 
   useEffect(() => {
     initializeApp();
@@ -66,7 +72,7 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
         const welcomeMessage: ChatMessage = {
           id: 'welcome',
           role: 'assistant',
-          content: `Welcome to EntraPulseLite! I'm your Microsoft Entra assistant. I can help you query your Microsoft Graph data, understand identity concepts, and analyze your directory structure. What would you like to explore?`,
+          content: `Welcome to EntraPulse Lite! I'm your Microsoft Entra assistant. I can help you query your Microsoft Graph data, understand identity concepts, and analyze your directory structure. What would you like to explore?`,
           timestamp: new Date(),
         };
         setMessages([welcomeMessage]);
@@ -76,11 +82,12 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
       setError('Failed to initialize application');
     }
   };
-
   const handleLogin = async () => {
     try {
       setIsLoading(true);
-      const token = await window.electronAPI.auth.login();
+      // Pass the redirect flow preference to the login function
+      // The actual implementation will need to be added to AuthService
+      const token = await window.electronAPI.auth.login(useRedirectFlow);
       setAuthToken(token);
       const currentUser = await window.electronAPI.auth.getCurrentUser();
       setUser(currentUser);
@@ -222,23 +229,56 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
       setIsLoading(false);
     }
   };
-
   if (!authToken) {
     return (
-      <Container maxWidth="sm">
-        <Box
-          display="flex"
-          flexDirection="column"
-          alignItems="center"
-          justifyContent="center"
-          minHeight="100vh"
-          gap={3}
-        >
-          <Typography variant="h3" component="h1" gutterBottom>
-            EntraPulseLite
+      <Box 
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          minHeight: '100vh',
+          background: (theme) => theme.palette.mode === 'dark' 
+            ? 'linear-gradient(145deg, #1a202c 0%, #2d3748 100%)' 
+            : 'linear-gradient(145deg, #e6f2ff 0%, #f0f7ff 100%)',
+          padding: 2,
+        }}
+      >        <Card 
+          elevation={8}
+          sx={{
+            maxWidth: 500,
+            width: '100%',
+            borderRadius: 2,
+            overflow: 'visible',
+            position: 'relative',
+            padding: '2rem',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 2,
+          }}
+        >          {/* App Logo */}          <Box
+            sx={{
+              position: 'relative',
+              marginBottom: 3,
+              display: 'flex',
+              justifyContent: 'center',
+              width: '90%',
+            }}          >            <AppIcon 
+              size={100} 
+              sx={{ 
+                margin: '10px 0',
+                filter: 'drop-shadow(0px 4px 8px rgba(0, 0, 0, 0.15))',
+              }} 
+            />
+          </Box>
+          
+          <Typography variant="h4" component="h1" align="center" gutterBottom>
+            Welcome to EntraPulse Lite
           </Typography>
-          <Typography variant="h6" color="textSecondary" textAlign="center">
-            Your Microsoft Entra assistant powered by local LLM
+          
+          <Typography variant="body1" align="center" color="textSecondary" paragraph>
+            Sign in with your Microsoft Entra ID account to access intelligent insights and analysis of your identity environment.
           </Typography>
           
           {error && (
@@ -248,7 +288,7 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
           )}
 
           {!llmAvailable && (
-            <Alert severity="warning" sx={{ width: '100%' }}>
+            <Alert severity="warning" sx={{ width: '100%', mt: 1 }}>
               Local LLM is not available. Please make sure Ollama or LM Studio is running.
             </Alert>
           )}
@@ -256,22 +296,50 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
           <Button
             variant="contained"
             size="large"
+            fullWidth
             startIcon={<LoginIcon />}
             onClick={handleLogin}
             disabled={isLoading}
-            sx={{ minWidth: 200 }}
+            sx={{ 
+              mt: 2,
+              py: 1.5,
+              borderRadius: 1.5,
+              textTransform: 'none',
+              fontSize: '1rem',
+            }}
           >
             {isLoading ? <CircularProgress size={24} /> : 'Sign in with Microsoft'}
           </Button>
-        </Box>
-      </Container>
+          
+          <Box sx={{ mt: 2, width: '100%' }}>
+            <FormControlLabel
+              control={
+                <Checkbox 
+                  size="small" 
+                  checked={useRedirectFlow}
+                  onChange={(e) => setUseRedirectFlow(e.target.checked)}
+                />
+              }
+              label="Use redirect flow (mobile-friendly)"
+            />
+          </Box>
+            <Typography variant="caption" align="center" sx={{ mt: 1 }}>
+            By signing in, you agree to our terms of service and privacy policy.
+          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5, mt: 1 }}>
+            <ShieldIcon sx={{ fontSize: 14, color: 'primary.main' }} />
+            <Typography variant="caption" align="center" sx={{ fontWeight: 'medium' }}>
+              Secured by Microsoft Entra ID
+            </Typography>
+          </Box>
+        </Card>
+      </Box>
     );
   }
 
   return (
     <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
-      {/* Header */}
-      <Box
+      {/* Header */}      <Box
         sx={{
           p: 2,
           borderBottom: 1,
@@ -280,9 +348,16 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
           justifyContent: 'space-between',
           alignItems: 'center',
         }}
-      >
-        <Box display="flex" alignItems="center" gap={2}>
-          <Typography variant="h6">EntraPulseLite</Typography>
+      >          <Box display="flex" alignItems="center" gap={2}>          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <AppIcon 
+              size={28} 
+              sx={{ 
+                backgroundColor: 'transparent',
+                padding: 0
+              }} 
+            />
+            <Typography variant="h6">EntraPulse Lite</Typography>
+          </Box>
           {!llmAvailable && (
             <Chip 
               label="LLM Offline" 

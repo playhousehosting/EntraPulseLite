@@ -20,8 +20,7 @@ const commonConfig = {
       '@llm': path.resolve(__dirname, 'src/llm'),
       '@types': path.resolve(__dirname, 'src/types')
     }
-  },
-  module: {
+  },  module: {
     rules: [
       {
         test: /\.tsx?$/,
@@ -36,6 +35,13 @@ const commonConfig = {
       {
         test: /\.css$/,
         use: ['style-loader', 'css-loader']
+      },
+      {
+        test: /\.(png|jpg|jpeg|gif|ico|svg)$/,
+        type: 'asset/resource',
+        generator: {
+          filename: 'assets/[name][ext]'
+        }
       }
     ]
   }
@@ -67,8 +73,7 @@ const rendererConfig = {
   output: {
     path: path.resolve(__dirname, 'dist'),
     filename: 'renderer.js'
-  },
-  plugins: [
+  },  plugins: [
     new HtmlWebpackPlugin({
       template: './src/renderer/index.html',
       filename: 'index.html'
@@ -82,6 +87,10 @@ const rendererConfig = {
         {
           from: './src/index.css',
           to: 'index.css'
+        },
+        {
+          from: './assets',
+          to: 'assets'
         }
       ]
     })

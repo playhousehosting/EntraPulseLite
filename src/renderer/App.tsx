@@ -1,9 +1,10 @@
-// Main App component for EntraPulseLite
+// Main App component for EntraPulse Lite
 import React, { useState, useEffect } from 'react';
 import { Box, AppBar, Toolbar, Typography, IconButton, Switch, FormControlLabel } from '@mui/material';
 import { Settings as SettingsIcon, Brightness4, Brightness7 } from '@mui/icons-material';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { ChatComponent } from './components/ChatComponent';
+import { AppIcon } from './components/AppIcon';
 
 export const App: React.FC = () => {
   const [darkMode, setDarkMode] = useState(true);
@@ -60,13 +61,16 @@ export const App: React.FC = () => {
         flexDirection: 'column', 
         height: '100vh',
         bgcolor: 'background.default' 
-      }}>
-        {/* App Bar */}
-        <AppBar position="static" elevation={1}>
+      }}>        {/* App Bar */}        <AppBar position="static" elevation={1}>
           <Toolbar>
-            <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-              EntraPulseLite
-            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <AppIcon size={32} sx={{ marginRight: 1 }} />
+              <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
+                EntraPulse Lite
+              </Typography>
+            </Box>
+            
+            <Box sx={{ flexGrow: 1 }} />
             
             <FormControlLabel
               control={

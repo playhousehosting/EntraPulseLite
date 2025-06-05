@@ -25,9 +25,9 @@
       "@/shared/*": ["shared/*"],
       "@/types/*": ["types/*"]
     }
-  },
-  "include": [
-    "src/**/*"
+  },  "include": [
+    "src/**/*",
+    "src/types/assets.d.ts"
   ],
   "exclude": [
     "node_modules",

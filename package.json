@@ -1,6 +1,6 @@
 {
   "name": "entrapulselite",
-  "productName": "EntraPulseLite",
+  "productName": "EntraPulse Lite",
   "version": "1.0.0",
   "description": "A freemium desktop application for natural language querying of Microsoft Graph APIs through local LLM integration",
   "main": "dist/main.js",
@@ -15,10 +15,11 @@
   "scripts": {
     "start": "npm run build && electron-forge start",
     "dev": "webpack --mode=development --watch",
-    "build": "webpack --mode=production",
-    "build:dev": "webpack --mode=development",
+    "build": "webpack --mode=production && node copy-assets.js",
+    "build:dev": "webpack --mode=development && node copy-assets.js",
     "clean": "rimraf dist",
     "package": "npm run build && electron-forge package",
+    "asset-diagnostics": "node asset-diagnostics.js",
     "make": "npm run build && electron-forge make",
     "publish": "npm run build && electron-forge publish",
     "lint": "eslint src/**/*.{ts,tsx}",

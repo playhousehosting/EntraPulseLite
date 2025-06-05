@@ -1,4 +1,4 @@
-// Main Electron process for EntraPulseLite
+// Main Electron process for EntraPulse Lite
 import { app, BrowserWindow, ipcMain, Menu } from 'electron';
 import * as path from 'path';
 import { AuthService } from '../auth/AuthService';
@@ -6,6 +6,11 @@ import { GraphService } from '../shared/GraphService';
 import { LLMService } from '../llm/LLMService';
 import { MCPClient } from '../mcp/clients/MCPClient';
 import { AppConfig } from '../types';
+
+// Set app ID for Windows taskbar integration
+if (process.platform === 'win32') {
+  app.setAppUserModelId('com.increment.entrapulselite');
+}
 
 // Load environment variables
 require('dotenv').config();
@@ -67,8 +72,12 @@ class EntraPulseLiteApp {
     this.llmService = new LLMService(this.config.llm);
     this.mcpClient = new MCPClient(this.config.mcpServers);
   }
-
   private setupEventHandlers(): void {
+    // Set application ID for Windows taskbar
+    if (process.platform === 'win32') {
+      app.setAppUserModelId('com.increment.entrapulselite');
+    }
+    
     app.whenReady().then(() => {
       this.createWindow();
       this.setupMenu();
@@ -83,14 +92,14 @@ class EntraPulseLiteApp {
       if (process.platform !== 'darwin') app.quit();
     });
   }
-
   private createWindow(): void {
-    this.mainWindow = new BrowserWindow({
-      width: 1200,
-      height: 800,
-      minWidth: 800,
-      minHeight: 600,
-      icon: path.join(__dirname, '../../assets/icon.png'), // We'll create this later
+    this.mainWindow = new BrowserWindow({      width: 1280,
+      height: 900,
+      minWidth: 900,
+      minHeight: 700,
+      icon: process.platform === 'win32'
+        ? path.resolve(app.getAppPath(), 'assets', 'icon.ico')
+        : path.resolve(app.getAppPath(), 'assets', 'EntraPulseLiteLogo.png'),
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
@@ -165,7 +174,7 @@ class EntraPulseLiteApp {
         label: 'Help',
         submenu: [
           {
-            label: 'About EntraPulseLite',
+            label: 'About EntraPulse Lite',
             click: () => {
               // Show about dialog
             },
@@ -177,12 +186,17 @@ class EntraPulseLiteApp {
     const menu = Menu.buildFromTemplate(template);
     Menu.setApplicationMenu(menu);
   }
-
   private setupIpcHandlers(): void {
+    // Asset path handler
+    ipcMain.handle('app:getAssetPath', (event, assetName: string) => {
+      const assetPath = path.join(app.getAppPath(), 'assets', assetName);
+      return assetPath;
+    });
+
     // Authentication handlers
-    ipcMain.handle('auth:login', async () => {
+    ipcMain.handle('auth:login', async (_, useRedirectFlow = false) => {
       try {
-        return await this.authService.login();
+        return await this.authService.login(useRedirectFlow);
       } catch (error) {
         console.error('Login failed:', error);
         throw error;

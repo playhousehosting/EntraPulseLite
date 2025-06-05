@@ -1,7 +1,7 @@
-# EntraPulseLite Copilot Instructions
+# EntraPulse Lite Copilot Instructions
 
 ## Project Overview
-EntraPulseLite is a freemium desktop application that provides natural language querying of Microsoft Graph APIs through local LLM integration. It's a lightweight derivative of the EntraPulse project.
+EntraPulse Lite is a freemium desktop application that provides natural language querying of Microsoft Graph APIs through local LLM integration. It's a lightweight derivative of the EntraPulse project.
 
 ## Architecture
 - **Platform**: Electron desktop application

@@ -1,11 +1,11 @@
-# Progressive Permissions in EntraPulseLite
+# Progressive Permissions in EntraPulse Lite
 
-EntraPulseLite implements a progressive permissions model that starts with minimal permissions and requests additional access as needed. This approach improves the user experience and reduces permission-related failures.
+EntraPulse Lite implements a progressive permissions model that starts with minimal permissions and requests additional access as needed. This approach improves the user experience and reduces permission-related failures.
 
 ## How It Works
 
 ### 1. Initial Authentication
-When users first sign in, EntraPulseLite only requests the most basic permission:
+When users first sign in, EntraPulse Lite only requests the most basic permission:
 - `User.Read` - Allows reading the current user's profile
 
 This permission is available to virtually all users and rarely requires admin consent.

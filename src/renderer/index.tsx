@@ -1,4 +1,4 @@
-// Main renderer entry point for EntraPulseLite
+// Main renderer entry point for EntraPulse Lite
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
@@ -22,6 +22,24 @@ const theme = createTheme({
   },
   typography: {
     fontFamily: 'Segoe UI, system-ui, sans-serif',
+  },
+  components: {
+    MuiCard: {
+      styleOverrides: {
+        root: {
+          backgroundImage: 'none',
+        },
+      },
+    },
+    MuiButton: {
+      styleOverrides: {
+        containedPrimary: {
+          '&:hover': {
+            backgroundColor: '#106ebe',
+          },
+        },
+      },
+    },
   },
 });
 

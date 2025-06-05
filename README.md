@@ -1,6 +1,6 @@
-# EntraPulseLite
+# EntraPulse Lite
 
-A freemium desktop application that provides natural language querying of Microsoft Graph APIs through local LLM integration. EntraPulseLite is a lightweight derivative of the EntraPulse project, designed as an all-in-one desktop solution similar to Claude Desktop.
+A freemium desktop application that provides natural language querying of Microsoft Graph APIs through local LLM integration. EntraPulse Lite is a lightweight derivative of the EntraPulse project, designed as an all-in-one desktop solution similar to Claude Desktop.
 
 ## 🚀 Features
 
@@ -175,7 +175,7 @@ npm run lint       # Run code linting
 
 ## 🌐 MCP Servers
 
-EntraPulseLite includes built-in MCP (Model Context Protocol) servers:
+EntraPulse Lite includes built-in MCP (Model Context Protocol) servers:
 
 ### Lokka MCP Server
 - **Purpose**: Microsoft Graph API integration
@@ -277,4 +277,4 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ---
 
-**EntraPulseLite** - Bringing natural language AI to Microsoft Graph APIs in a secure, local-first desktop application.
+**EntraPulse Lite** - Bringing natural language AI to Microsoft Graph APIs in a secure, local-first desktop application.

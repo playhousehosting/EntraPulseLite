@@ -54,7 +54,7 @@ export class LLMService {
       content: msg.content,
     }));
 
-    const systemPrompt = `You are an expert Microsoft Entra (Azure AD) and Microsoft Graph API assistant integrated into EntraPulseLite. 
+    const systemPrompt = `You are an expert Microsoft Entra (Azure AD) and Microsoft Graph API assistant integrated into EntraPulse Lite. 
 
 You have access to Microsoft Graph APIs through built-in MCP servers and can help users:
 - Query user accounts, groups, applications, and service principals
@@ -94,7 +94,7 @@ Always be helpful, accurate, and security-conscious in your responses.`;
       content: msg.content,
     }));
 
-    const systemPrompt = `You are an expert Microsoft Entra (Azure AD) and Microsoft Graph API assistant integrated into EntraPulseLite. 
+    const systemPrompt = `You are an expert Microsoft Entra (Azure AD) and Microsoft Graph API assistant integrated into EntraPulse Lite. 
 
 You have access to Microsoft Graph APIs through built-in MCP servers and can help users:
 - Query user accounts, groups, applications, and service principals
