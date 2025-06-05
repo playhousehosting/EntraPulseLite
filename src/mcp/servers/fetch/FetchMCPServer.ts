@@ -21,6 +21,11 @@ interface FetchPermissionsParams {
   category?: string;
 }
 
+interface FetchMerillPermissionsParams {
+  permission?: string;
+  includeDetails?: boolean;
+}
+
 export class FetchMCPServer {
   private config: MCPServerConfig;
   private tools: MCPTool[] = [];
@@ -31,7 +36,6 @@ export class FetchMCPServer {
     this.config = config;
     this.initializeTools();
   }
-
   private initializeTools(): void {
     this.tools = [
       {
@@ -91,6 +95,24 @@ export class FetchMCPServer {
             }
           }
         }
+      },
+      {
+        name: 'fetch_merill_permissions',
+        description: 'Fetch detailed Microsoft Graph permission information from graphpermissions.merill.net',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            permission: { 
+              type: 'string', 
+              description: 'Specific permission to look up (e.g., User.Read, Mail.ReadWrite). If not provided, returns a list of all permissions.'
+            },
+            includeDetails: {
+              type: 'boolean',
+              description: 'Whether to include detailed API method information',
+              default: true
+            }
+          }
+        }
       }
     ];
   }
@@ -122,8 +144,7 @@ export class FetchMCPServer {
           }
         };
     }
-  }
-  private async executeTool(request: MCPRequest): Promise<MCPResponse> {
+  }  private async executeTool(request: MCPRequest): Promise<MCPResponse> {
     const toolName = request.params.name;
     const args = request.params.arguments || {};
     
@@ -143,6 +164,11 @@ export class FetchMCPServer {
           return {
             id: request.id,
             result: await this.fetchPermissionsInfo(args as FetchPermissionsParams)
+          };
+        case 'fetch_merill_permissions':
+          return {
+            id: request.id,
+            result: await this.fetchMerillPermissions(args as FetchMerillPermissionsParams)
           };
         default:
           return {
@@ -314,23 +340,140 @@ export class FetchMCPServer {
     }
   }
 
-  /**
-   * Extract plain text from HTML content
-   * This is a simplified implementation - in production code we would use a proper HTML parser
-   */
-  private extractTextContent(html: string): string {
-    // Extract the main content from the HTML (very simplistic approach)
-    const bodyPattern = /<body[^>]*>([\s\S]*)<\/body>/i;
-    const bodyMatch = bodyPattern.exec(html);
-    const bodyContent = bodyMatch ? bodyMatch[1] : html;
-    
-    // Remove scripts, styles, and HTML tags
-    return bodyContent
-      .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
-      .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '')
-      .replace(/<\/?[^>]+(>|$)/g, ' ') // Replace HTML tags with spaces
-      .replace(/&nbsp;/g, ' ')
-      .replace(/\s+/g, ' ') // Replace multiple spaces with a single space
+  private async fetchMerillPermissions(params: FetchMerillPermissionsParams): Promise<any> {
+    try {
+      if (params.permission) {
+        // Fetch specific permission details
+        const permissionUrl = `https://graphpermissions.merill.net/permission/${params.permission}`;
+        
+        const response = await axios.get(permissionUrl, {
+          headers: {
+            'User-Agent': 'EntraPulse-Lite/1.0'
+          }
+        });
+        
+        const html = response.data;
+        
+        // Extract the permission details
+        const titlePattern = /<h1[^>]*>(.*?)<\/h1>/i;
+        const titleMatch = titlePattern.exec(html);
+        const title = titleMatch ? titleMatch[1].trim() : params.permission;
+        
+        // Extract description
+        const descriptionPattern = /<blockquote[^>]*>([\s\S]*?)<\/blockquote>/i;
+        const descriptionMatch = descriptionPattern.exec(html);
+        const description = descriptionMatch ? this.extractTextContent(descriptionMatch[1]).trim() : '';
+        
+        // Extract methods if requested
+        let methods: string[] = [];
+        if (params.includeDetails) {
+          // Extract API methods from tables
+          const methodsPattern = /<table[^>]*>[\s\S]*?<th[^>]*>Methods<\/th>[\s\S]*?<tbody>([\s\S]*?)<\/tbody>/gi;
+          let methodsMatch;
+          while ((methodsMatch = methodsPattern.exec(html)) !== null) {
+            const methodsBodyContent = methodsMatch[1];
+            const methodRows = methodsBodyContent.match(/<tr[^>]*>([\s\S]*?)<\/tr>/gi);
+            
+            if (methodRows) {
+              methodRows.forEach(row => {
+                const methodCellPattern = /<td[^>]*>([\s\S]*?)<\/td>/i;
+                const methodCellMatch = methodCellPattern.exec(row);
+                if (methodCellMatch && methodCellMatch[1]) {
+                  const method = this.extractTextContent(methodCellMatch[1]).trim();
+                  if (method) methods.push(method);
+                }
+              });
+            }
+          }
+        }
+        
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `# ${title}\n\n${description}\n\n${methods.length > 0 ? '## Available API Methods\n\n' + methods.map(m => `- ${m}`).join('\n') : ''}`
+            },
+            {
+              type: 'link',
+              url: permissionUrl,
+              name: 'Microsoft Graph Permission Details'
+            }
+          ]
+        };
+      } else {
+        // Fetch list of all permissions
+        const allPermissionsUrl = 'https://graphpermissions.merill.net/permission/';
+        
+        const response = await axios.get(allPermissionsUrl, {
+          headers: {
+            'User-Agent': 'EntraPulse-Lite/1.0'
+          }
+        });
+        
+        const html = response.data;
+        
+        // Extract the permissions table
+        const permissionsPattern = /<table[^>]*>[\s\S]*?<thead[^>]*>[\s\S]*?<tr[^>]*>[\s\S]*?<th[^>]*>Permission<\/th>[\s\S]*?<th[^>]*>Description<\/th>[\s\S]*?<\/tr>[\s\S]*?<\/thead>[\s\S]*?<tbody>([\s\S]*?)<\/tbody>[\s\S]*?<\/table>/i;
+        const permissionsMatch = permissionsPattern.exec(html);
+        
+        let permissionsList = '';
+        
+        if (permissionsMatch && permissionsMatch[1]) {
+          const permissionsBody = permissionsMatch[1];
+          const rowPattern = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
+          
+          let rowMatch;
+          let permissions: Array<{name: string, description: string}> = [];
+          
+          while ((rowMatch = rowPattern.exec(permissionsBody)) !== null) {
+            const permissionRow = rowMatch[1];
+            const cellPattern = /<td[^>]*>([\s\S]*?)<\/td>/gi;
+            const cells: string[] = [];
+            
+            let cellMatch;
+            while ((cellMatch = cellPattern.exec(permissionRow)) !== null) {
+              cells.push(this.extractTextContent(cellMatch[1]).trim());
+            }
+            
+            if (cells.length >= 2) {
+              permissions.push({
+                name: cells[0],
+                description: cells[1]
+              });
+            }
+          }
+          
+          permissionsList = permissions.map(p => `- **${p.name}**: ${p.description}`).join('\n');
+        }
+        
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `# Microsoft Graph Permissions\n\n${permissionsList || 'No permissions found.'}`
+            },
+            {
+              type: 'link',
+              url: allPermissionsUrl,
+              name: 'Microsoft Graph Permissions Explorer'
+            }
+          ]
+        };
+      }
+    } catch (error) {
+      console.error('Error fetching Merill permissions info:', error);
+      throw new Error(`Failed to fetch Merill permissions info: ${(error as Error).message}`);
+    }
+  }  private extractTextContent(html: string): string {
+    // A very simplified HTML to text extraction - in production code, use a proper HTML parser
+    const text = html
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')  // Remove scripts
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')    // Remove styles
+      .replace(/<!--[\s\S]*?-->/g, '')                   // Remove comments
+      .replace(/<[^>]+>/g, ' ')                          // Remove remaining tags
+      .replace(/\s+/g, ' ')                              // Collapse whitespace
       .trim();
+    
+    return text;
   }
 }
