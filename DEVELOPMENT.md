@@ -113,6 +113,35 @@ npm run make
 - Some features are placeholder implementations
 - Need to create actual MCP server implementations
 
+## 🧪 Test Suite Progress
+
+- **✅ Test Runner**: Jest configuration fixed - all tests passing (9 suites, 30 tests)
+- **✅ Component Tests**: Placeholder tests implemented for React components
+- **✅ E2E Tests**: Placeholder tests implemented
+
+### Pending Test Tasks
+
+1. **Install Playwright for E2E Tests**:
+   ```bash
+   npm install --save-dev playwright @playwright/test
+   ```
+   - Rename `app.test.ts.disabled` to `app.test.ts` once installed
+
+2. **Implement Component Tests**:
+   - Add proper React component tests once components are fully implemented
+   - Add tests for Material-UI components and interactions
+   - Add tests for state management
+
+3. **Implement MCP Tests**:
+   - Add actual tests for MCPClient once implemented
+   - Add tests for Lokka MCP server
+   - Add tests for Fetch MCP server
+
+4. **Add Main Process Test Coverage**:
+   - Add test coverage for main process IPC handlers
+   - Mock Electron IPC for testing main process functions
+   - Test window management and application lifecycle
+
 ## 🎯 Architecture Status
 
 - **✅ Electron Framework**: Working
