@@ -22,9 +22,7 @@ export class LLMService {
       console.error('LLM chat failed:', error);
       throw new Error('Failed to communicate with local LLM');
     }
-  }
-
-  async isAvailable(): Promise<boolean> {
+  }  async isAvailable(): Promise<boolean> {
     try {
       if (this.config.provider === 'ollama') {
         const response = await axios.get(`${this.config.baseUrl}/api/tags`, {
@@ -39,7 +37,13 @@ export class LLMService {
       }
       return false;
     } catch (error) {
-      console.error('LLM availability check failed:', error);
+      // Don't log connection refused errors as they're expected when LLM is not running
+      if (error && typeof error === 'object' && 'code' in error && error.code === 'ECONNREFUSED') {
+        console.log(`${this.config.provider} is not running at ${this.config.baseUrl}`);
+      } else {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        console.error('LLM availability check failed:', errorMessage);
+      }
       return false;
     }
   }

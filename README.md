@@ -4,14 +4,15 @@ A freemium desktop application that provides natural language querying of Micros
 
 ## 🚀 Features
 
+- **Progressive Authentication**: Start with basic permissions, request more as needed
 - **Microsoft Business Account Authentication**: Secure login with MSAL integration
 - **Natural Language Querying**: Chat with your Microsoft Graph data using plain English
 - **Local LLM Integration**: Works with Ollama and LM Studio for privacy-focused AI
 - **Built-in MCP Servers**: 
   - Lokka MCP for Microsoft Graph API access
   - Fetch MCP for Microsoft Learn documentation and Permissions Explorer
-- **Chat Interface**: Modern UI with trace visualization
-- **Freemium Model**: Basic features free, advanced features require app registration
+- **Chat Interface**: Modern UI with trace visualization and permission management
+- **Freemium Model**: No App Registration required for basic usage
 
 ## 🏗️ Architecture
 
@@ -69,10 +70,11 @@ src/
    npm install
    ```
 
-3. **Configure environment**
+3. **Configure environment (optional)**
    ```bash
    cp .env.example .env.local
-   # Edit .env.local with your configuration
+   # Edit .env.local with your configuration if needed
+   # For basic usage, no configuration is required!
    ```
 
 4. **Start development**
@@ -80,15 +82,18 @@ src/
    npm start
    ```
 
+**Note**: For basic usage, no Microsoft Entra App Registration is required! The application uses progressive permissions starting with minimal access (`User.Read`) and requests additional permissions only when needed. You can upgrade to your own App Registration later for advanced features.
+
 ## ⚙️ Configuration
 
 Copy `.env.example` to `.env.local` and configure:
 
-### Microsoft Entra App Registration
+### Microsoft Entra App Registration (Optional)
 ```env
+# Leave empty for interactive user login with Microsoft Graph PowerShell client
 MSAL_CLIENT_ID=your_client_id_here
 MSAL_TENANT_ID=your_tenant_id_here
-MSAL_CLIENT_SECRET=your_client_secret_here
+# Note: MSAL_CLIENT_SECRET is not needed for public client authentication
 ```
 
 ### Local LLM Configuration
@@ -223,13 +228,14 @@ npm run make
 ## 🎯 Freemium Model
 
 ### Free Features
-- Basic Microsoft Graph queries
+- Progressive authentication (no App Registration required)
+- Basic Microsoft Graph queries with minimal permissions
 - Local LLM integration
 - Standard MCP servers
 - Community support
 
-### Premium Features
-- Advanced Graph API access
+### Premium Features (requires App Registration)
+- Advanced Graph API access with elevated permissions
 - Custom MCP server integration
 - Priority support
 - Advanced analytics

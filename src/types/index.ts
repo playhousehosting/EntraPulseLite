@@ -75,6 +75,8 @@ export interface ElectronAPI {
     logout: () => Promise<void>;
     getToken: () => Promise<AuthToken | null>;
     getCurrentUser: () => Promise<User | null>;
+    requestPermissions: (permissions: string[]) => Promise<AuthToken | null>;
+    getTokenWithPermissions: (permissions: string[]) => Promise<AuthToken | null>;
   };
   graph: {
     query: (endpoint: string, method?: string, data?: any) => Promise<any>;

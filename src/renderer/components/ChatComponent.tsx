@@ -40,6 +40,8 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
   const [authToken, setAuthToken] = useState<AuthToken | null>(null);
   const [llmAvailable, setLlmAvailable] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [currentPermissions, setCurrentPermissions] = useState<string[]>(['User.Read']);
+  const [permissionRequests, setPermissionRequests] = useState<string[]>([]);
 
   useEffect(() => {
     initializeApp();
@@ -97,6 +99,7 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
       setAuthToken(null);
       setUser(null);
       setMessages([]);
+      setCurrentPermissions(['User.Read']); // Reset to basic permissions
     } catch (error) {
       console.error('Logout failed:', error);
       setError('Logout failed');
@@ -146,6 +149,77 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
       handleSendMessage();
+    }
+  };  const requestPermissions = async (permissions: string[]) => {
+    try {
+      setIsLoading(true);
+      const token = await window.electronAPI.auth.requestPermissions(permissions);
+      if (token) {
+        setAuthToken(token);
+        setCurrentPermissions(prev => [...new Set([...prev, ...permissions])]);
+        setError(null);
+        
+        // Add a system message about the permission grant
+        const systemMessage: ChatMessage = {
+          id: Date.now().toString(),
+          role: 'assistant',
+          content: `✅ Permissions granted: ${permissions.join(', ')}. You can now access additional Microsoft Graph resources.`,
+          timestamp: new Date(),
+        };
+        setMessages(prev => [...prev, systemMessage]);
+      } else {
+        setError('Permission request was denied or failed');
+      }
+    } catch (error) {
+      console.error('Permission request failed:', error);
+      setError('Failed to request permissions');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  const testGraphQuery = async (endpoint: string, requiredPermissions: string[]) => {
+    try {
+      setIsLoading(true);
+      
+      // Check if we have the required permissions
+      const hasPermissions = requiredPermissions.every(perm => currentPermissions.includes(perm));
+      
+      if (!hasPermissions) {
+        const missingPermissions = requiredPermissions.filter(perm => !currentPermissions.includes(perm));
+        setPermissionRequests(missingPermissions);
+        
+        const systemMessage: ChatMessage = {
+          id: Date.now().toString(),
+          role: 'assistant',
+          content: `Missing permissions for ${endpoint}: ${missingPermissions.join(', ')}. Would you like to request these permissions?`,
+          timestamp: new Date(),
+        };
+        setMessages(prev => [...prev, systemMessage]);
+        return;
+      }
+
+      // Make the Graph API call
+      const result = await window.electronAPI.graph.query(endpoint);
+      
+      const systemMessage: ChatMessage = {
+        id: Date.now().toString(),
+        role: 'assistant',
+        content: `Successfully queried ${endpoint}:\n\`\`\`json\n${JSON.stringify(result, null, 2)}\n\`\`\``,
+        timestamp: new Date(),
+      };
+      setMessages(prev => [...prev, systemMessage]);
+      
+    } catch (error: any) {
+      console.error('Graph query failed:', error);
+      const errorMessage: ChatMessage = {
+        id: Date.now().toString(),
+        role: 'assistant',
+        content: `Failed to query ${endpoint}: ${error.message}`,
+        timestamp: new Date(),
+      };
+      setMessages(prev => [...prev, errorMessage]);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -328,6 +402,74 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
             <SendIcon />
           </Button>
         </Box>
+      </Box>
+
+      {/* Permissions Status Panel */}
+      <Box sx={{ p: 2, backgroundColor: 'background.paper', borderBottom: 1, borderColor: 'divider' }}>
+        <Typography variant="subtitle2" gutterBottom>Current Permissions:</Typography>
+        <Box display="flex" flexWrap="wrap" gap={1} mb={2}>
+          {currentPermissions.map((permission) => (
+            <Chip 
+              key={permission}
+              label={permission}
+              size="small"
+              color="primary"
+              variant="outlined"
+            />
+          ))}
+        </Box>
+        
+        {/* Quick Test Buttons */}
+        <Typography variant="subtitle2" gutterBottom>Quick Tests:</Typography>
+        <Box display="flex" flexWrap="wrap" gap={1}>
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={() => testGraphQuery('/me', ['User.Read'])}
+            disabled={isLoading}
+          >
+            Get My Profile
+          </Button>
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={() => testGraphQuery('/users', ['User.ReadBasic.All'])}
+            disabled={isLoading}
+          >
+            List Users
+          </Button>
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={() => testGraphQuery('/groups', ['Group.Read.All'])}
+            disabled={isLoading}
+          >
+            List Groups
+          </Button>
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={() => testGraphQuery('/applications', ['Application.Read.All'])}
+            disabled={isLoading}
+          >
+            List Applications
+          </Button>
+        </Box>
+        
+        {/* Permission Request Buttons */}
+        {permissionRequests.length > 0 && (
+          <Box mt={2}>
+            <Typography variant="subtitle2" gutterBottom>Grant Required Permissions:</Typography>
+            <Button
+              size="small"
+              variant="contained"
+              onClick={() => requestPermissions(permissionRequests)}
+              disabled={isLoading}
+            >
+              Grant {permissionRequests.join(', ')}
+            </Button>
+          </Box>
+        )}
       </Box>
     </Box>
   );

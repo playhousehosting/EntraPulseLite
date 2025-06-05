@@ -22,13 +22,16 @@ class EntraPulseLiteApp {
     this.initializeServices();
     this.setupEventHandlers();
   }
-
   private initializeServices(): void {
     // Initialize configuration
     this.config = {
       auth: {
-        clientId: process.env.MSAL_CLIENT_ID || '',
-        tenantId: process.env.MSAL_TENANT_ID || '',
+        clientId: process.env.MSAL_CLIENT_ID && process.env.MSAL_CLIENT_ID.trim() !== '' 
+          ? process.env.MSAL_CLIENT_ID 
+          : '14d82eec-204b-4c2f-b7e8-296a70dab67e', // Microsoft Graph PowerShell fallback
+        tenantId: process.env.MSAL_TENANT_ID && process.env.MSAL_TENANT_ID.trim() !== '' 
+          ? process.env.MSAL_TENANT_ID 
+          : 'common',
         scopes: ['User.Read', 'User.ReadBasic.All', 'Directory.Read.All', 'Group.Read.All'],
       },
       llm: {
@@ -209,6 +212,25 @@ class EntraPulseLiteApp {
         return await this.authService.getCurrentUser();
       } catch (error) {
         console.error('Get current user failed:', error);
+        return null;
+      }
+    });
+
+    // Progressive permission handlers
+    ipcMain.handle('auth:requestPermissions', async (event, permissions: string[]) => {
+      try {
+        return await this.authService.requestAdditionalPermissions(permissions);
+      } catch (error) {
+        console.error('Request permissions failed:', error);
+        return null;
+      }
+    });
+
+    ipcMain.handle('auth:getTokenWithPermissions', async (event, permissions: string[]) => {
+      try {
+        return await this.authService.getTokenWithPermissions(permissions);
+      } catch (error) {
+        console.error('Get token with permissions failed:', error);
         return null;
       }
     });

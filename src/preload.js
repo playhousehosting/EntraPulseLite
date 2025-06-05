@@ -10,6 +10,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     logout: () => ipcRenderer.invoke('auth:logout'),
     getToken: () => ipcRenderer.invoke('auth:getToken'),
     getCurrentUser: () => ipcRenderer.invoke('auth:getCurrentUser'),
+    requestPermissions: (permissions) => ipcRenderer.invoke('auth:requestPermissions', permissions),
+    getTokenWithPermissions: (permissions) => ipcRenderer.invoke('auth:getTokenWithPermissions', permissions),
   },
 
   // Microsoft Graph methods
