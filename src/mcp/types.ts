@@ -1,5 +1,12 @@
 // MCP (Model Context Protocol) type definitions
 
+export interface MCPAuthConfig {
+  type: 'msal' | 'apiKey' | 'basic' | 'none';
+  scopes?: string[];
+  clientId?: string;
+  tenantId?: string;
+}
+
 export interface MCPServerConfig {
   name: string;
   type: 'lokka' | 'fetch' | string;
@@ -8,6 +15,7 @@ export interface MCPServerConfig {
   url?: string;
   apiKey?: string;
   options?: Record<string, any>;
+  authConfig?: MCPAuthConfig;
 }
 
 export interface MCPMessage {

@@ -4,7 +4,10 @@ import * as path from 'path';
 import { AuthService } from '../auth/AuthService';
 import { GraphService } from '../shared/GraphService';
 import { LLMService } from '../llm/LLMService';
-import { MCPClient } from '../mcp/clients/MCPClient';
+import { MCPClient } from '../mcp/clients/MCPSDKClient';
+import { MCPAuthService } from '../mcp/auth/MCPAuthService';
+import { GraphMCPClient } from '../mcp/clients/GraphMCPClient';
+import { MCPErrorHandler, ErrorCode } from '../mcp/utils';
 import { AppConfig } from '../types';
 
 // Set app ID for Windows taskbar integration
@@ -64,13 +67,27 @@ class EntraPulseLiteApp {
         enablePremiumFeatures: process.env.ENABLE_PREMIUM_FEATURES === 'true',
         enableTelemetry: process.env.ENABLE_TELEMETRY === 'true',
       },
-    };
+    };    // Update MCP server configs with auth configuration
+    this.config.mcpServers.forEach(server => {
+      if (server.type === 'lokka') {
+        // Add authentication config for Graph API
+        server.authConfig = {
+          type: 'msal',
+          scopes: this.config.auth.scopes,
+          clientId: this.config.auth.clientId,
+          tenantId: this.config.auth.tenantId
+        };
+      }
+    });
 
     // Initialize services
     this.authService = new AuthService();
     this.graphService = new GraphService(this.authService);
     this.llmService = new LLMService(this.config.llm);
-    this.mcpClient = new MCPClient(this.config.mcpServers);
+    
+    // Initialize MCP services
+    const mcpAuthService = new MCPAuthService(this.authService);
+    this.mcpClient = new MCPClient(this.config.mcpServers, mcpAuthService);
   }
   private setupEventHandlers(): void {
     // Set application ID for Windows taskbar
@@ -283,15 +300,21 @@ class EntraPulseLiteApp {
         console.error('LLM availability check failed:', error);
         return false;
       }
-    });
-
-    // MCP handlers
-    ipcMain.handle('mcp:call', async (event, server: string, method: string, params: any) => {
+    });    // MCP handlers
+    ipcMain.handle('mcp:call', async (event, server: string, toolName: string, arguments_: any) => {
       try {
-        return await this.mcpClient.call(server, method, params);
+        return await this.mcpClient.callTool(server, toolName, arguments_);
       } catch (error) {
-        console.error('MCP call failed:', error);
-        throw error;
+        const mcpError = MCPErrorHandler.handleError(error, `mcp:call(${server}, ${toolName})`);
+        console.error('MCP tool call failed:', mcpError);
+        
+        // Return the error in a consistent format that the renderer can handle
+        return {
+          error: {
+            code: mcpError.code,
+            message: mcpError.message
+          }
+        };
       }
     });
 
@@ -299,7 +322,18 @@ class EntraPulseLiteApp {
       try {
         return this.mcpClient.getAvailableServers();
       } catch (error) {
-        console.error('MCP list servers failed:', error);
+        const mcpError = MCPErrorHandler.handleError(error, 'mcp:listServers');
+        console.error('MCP list servers failed:', mcpError);
+        return [];
+      }
+    });
+
+    ipcMain.handle('mcp:listTools', async (event, server: string) => {
+      try {
+        return await this.mcpClient.listTools(server);
+      } catch (error) {
+        const mcpError = MCPErrorHandler.handleError(error, `mcp:listTools(${server})`);
+        console.error(`MCP list tools for server ${server} failed:`, mcpError);
         return [];
       }
     });

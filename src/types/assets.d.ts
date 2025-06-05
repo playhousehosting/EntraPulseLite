@@ -38,25 +38,4 @@ interface Window {
   electron: {
     getAssetPath: (assetName: string) => string;
   };
-  electronAPI: {
-    auth: {
-      login: (useRedirectFlow?: boolean) => Promise<any>;
-      logout: () => Promise<void>;
-      getToken: () => Promise<any>;
-      getCurrentUser: () => Promise<any>;
-      requestPermissions: (permissions: string[]) => Promise<any>;
-      getTokenWithPermissions: (permissions: string[]) => Promise<any>;
-    };    graph: {
-      query: (endpoint: string, method: string, data?: any) => Promise<any>;
-      getUserPhoto: (userId?: string) => Promise<string | null>;
-    };
-    llm: {
-      chat: (messages: any[]) => Promise<string>;
-      isAvailable: () => Promise<boolean>;
-    };
-    mcp: {
-      call: (server: string, method: string, params: any) => Promise<any>;
-      listServers: () => Promise<any[]>;
-    };
-  };
 }

@@ -32,11 +32,15 @@ describe('LLMService', () => {
             content: 'This is a test response'
           }
         }
-      });
-
-      const messages = [
-        { role: 'user', content: 'Hello, this is a test' }
-      ];      const response = await llmService.chat(messages);
+      });      const messages = [
+        { 
+          id: '1', 
+          role: 'user' as 'user', 
+          content: 'Hello, this is a test',
+          timestamp: new Date()
+        }
+      ];
+      const response = await llmService.chat(messages);
       
       // Just verify it was called with the right endpoint and contains our model
       expect(mockedAxios.post).toHaveBeenCalled();
@@ -48,10 +52,13 @@ describe('LLMService', () => {
 
     it('should handle API errors gracefully', async () => {
       // Mock failed response
-      mockedAxios.post.mockRejectedValueOnce(new Error('API Error'));
-
-      const messages = [
-        { role: 'user', content: 'Hello, this is a test' }
+      mockedAxios.post.mockRejectedValueOnce(new Error('API Error'));      const messages = [
+        { 
+          id: '2', 
+          role: 'user' as 'user', 
+          content: 'Hello, this is a test',
+          timestamp: new Date()
+        }
       ];
 
       await expect(llmService.chat(messages)).rejects.toThrow();
@@ -83,10 +90,13 @@ describe('LLMService', () => {
             }
           ]
         }
-      });
-
-      const messages = [
-        { role: 'user', content: 'Hello LM Studio' }
+      });      const messages = [
+        { 
+          id: '3', 
+          role: 'user' as 'user', 
+          content: 'Hello LM Studio',
+          timestamp: new Date()
+        }
       ];
 
       const response = await llmService.chat(messages);
@@ -101,10 +111,13 @@ describe('LLMService', () => {
         provider: 'unsupported' as any,
         baseUrl: 'http://example.com',
         model: 'test'
-      });
-
-      const messages = [
-        { role: 'user', content: 'Hello' }
+      });      const messages = [
+        { 
+          id: '4', 
+          role: 'user' as 'user', 
+          content: 'Hello',
+          timestamp: new Date()
+        }
       ];
 
       await expect(invalidService.chat(messages)).rejects.toThrow('Failed to communicate with local LLM');

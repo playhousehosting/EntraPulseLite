@@ -35,8 +35,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // MCP methods
   mcp: {
-    call: (server, method, params) => ipcRenderer.invoke('mcp:call', server, method, params),
+    call: (server, toolName, arguments_) => ipcRenderer.invoke('mcp:call', server, toolName, arguments_),
     listServers: () => ipcRenderer.invoke('mcp:listServers'),
+    listTools: (server) => ipcRenderer.invoke('mcp:listTools', server),
   },
 
   // Configuration methods

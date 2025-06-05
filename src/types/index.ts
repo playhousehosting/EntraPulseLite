@@ -49,11 +49,22 @@ export interface LLMConfig {
   maxTokens?: number;
 }
 
+export interface MCPAuthConfig {
+  type: 'msal' | 'apiKey' | 'basic' | 'none';
+  scopes?: string[];
+  clientId?: string;
+  tenantId?: string;
+}
+
 export interface MCPServerConfig {
   name: string;
   type: 'lokka' | 'fetch';
   port: number;
   enabled: boolean;
+  url?: string;
+  apiKey?: string;
+  options?: Record<string, any>;
+  authConfig?: MCPAuthConfig;
 }
 
 export interface AppConfig {
@@ -85,9 +96,8 @@ export interface ElectronAPI {
   llm: {
     chat: (messages: ChatMessage[]) => Promise<string>;
     isAvailable: () => Promise<boolean>;
-  };
-  mcp: {
-    call: (server: string, method: string, params: any) => Promise<any>;
+  };  mcp: {
+    call: (server: string, toolName: string, arguments_: any) => Promise<any>;
     listServers: () => Promise<MCPServerConfig[]>;
   };
   config: {

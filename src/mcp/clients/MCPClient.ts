@@ -1,5 +1,7 @@
 // MCP Client for communicating with Model Context Protocol servers
-import { MCPServerConfig } from '../types.js';
+import { MCPServerConfig } from '../types';
+import { MCPServerManager } from '../servers/MCPServerManager';
+import { MCPAuthService } from '../auth/MCPAuthService';
 
 export interface MCPRequest {
   jsonrpc: string;
@@ -20,9 +22,13 @@ export interface MCPResponse {
 }
 
 export class MCPClient {
+  private serverManager: MCPServerManager;
   private servers: Map<string, MCPServerConfig> = new Map();
-
-  constructor(serverConfigs: MCPServerConfig[]) {
+  constructor(serverConfigs: MCPServerConfig[], authService?: MCPAuthService) {
+    // Initialize server manager with auth service if provided
+    this.serverManager = new MCPServerManager(serverConfigs, authService);
+    
+    // Keep track of server configs for backward compatibility
     serverConfigs.forEach(config => {
       this.servers.set(config.name, config);
     });
@@ -74,128 +80,37 @@ export class MCPClient {
 
   getAvailableServers(): MCPServerConfig[] {
     return Array.from(this.servers.values()).filter(server => server.enabled);
-  }
-
-  private async sendRequest(server: MCPServerConfig, request: MCPRequest): Promise<MCPResponse> {
-    // This is a placeholder for the actual MCP communication
-    // In the real implementation, this would connect to the MCP server
-    // via stdio, websocket, or HTTP based on the server configuration
-    
-    if (server.type === 'lokka') {
-      return this.handleLokkaRequest(request);
-    } else if (server.type === 'fetch') {
-      return this.handleFetchRequest(request);
-    } else {
-      throw new Error(`Unsupported MCP server type: ${server.type}`);
-    }
-  }
-
-  private async handleLokkaRequest(request: MCPRequest): Promise<MCPResponse> {
-    // Placeholder for Lokka MCP server communication
-    // This would integrate with the Microsoft Graph API
-    
-    switch (request.method) {
-      case 'tools/list':
-        return {
-          jsonrpc: '2.0',
-          id: request.id,
-          result: [
-            {
-              name: 'microsoft_graph_query',
-              description: 'Query Microsoft Graph API',
-              inputSchema: {
-                type: 'object',
-                properties: {
-                  endpoint: { type: 'string' },
-                  method: { type: 'string', default: 'GET' },
-                  data: { type: 'object' },
-                },
-                required: ['endpoint'],
-              },
-            },
-          ],
-        };
+  }  private async sendRequest(server: MCPServerConfig, request: MCPRequest): Promise<MCPResponse> {
+    try {
+      // Convert the request format if needed
+      const mcpRequest = {
+        id: request.id,
+        method: request.method,
+        params: request.params
+      };
       
-      case 'tools/call':
-        if (request.params?.name === 'microsoft_graph_query') {
-          // This would call the actual Graph API
-          return {
-            jsonrpc: '2.0',
-            id: request.id,
-            result: {
-              content: [
-                {
-                  type: 'text',
-                  text: 'Graph API query result placeholder',
-                },
-              ],
-            },
-          };
-        }
-        break;
-    }
-
-    return {
-      jsonrpc: '2.0',
-      id: request.id,
-      error: {
-        code: -32601,
-        message: 'Method not found',
-      },
-    };
-  }
-
-  private async handleFetchRequest(request: MCPRequest): Promise<MCPResponse> {
-    // Placeholder for Fetch MCP server communication
-    // This would fetch Microsoft Learn documentation
-    
-    switch (request.method) {
-      case 'tools/list':
-        return {
-          jsonrpc: '2.0',
-          id: request.id,
-          result: [
-            {
-              name: 'fetch_documentation',
-              description: 'Fetch Microsoft Learn documentation',
-              inputSchema: {
-                type: 'object',
-                properties: {
-                  url: { type: 'string' },
-                  query: { type: 'string' },
-                },
-                required: ['url'],
-              },
-            },
-          ],
-        };
+      // Use the server manager to handle the request
+      const response = await this.serverManager.handleRequest(server.name, mcpRequest);
       
-      case 'tools/call':
-        if (request.params?.name === 'fetch_documentation') {
-          // This would fetch actual documentation
-          return {
-            jsonrpc: '2.0',
-            id: request.id,
-            result: {
-              content: [
-                {
-                  type: 'text',
-                  text: 'Documentation content placeholder',
-                },
-              ],
-            },
-          };
+      // Convert the response back to the expected format
+      return {
+        jsonrpc: '2.0',
+        id: request.id,
+        result: response.result,
+        error: response.error
+      };
+    } catch (error) {
+      console.error(`Error calling MCP server ${server.name}:`, error);
+      return {
+        jsonrpc: '2.0',
+        id: request.id,
+        error: {
+          code: -32603,
+          message: `Internal server error: ${(error as Error).message}`
         }
-        break;
+      };
     }
-
-    return {
-      jsonrpc: '2.0',
-      id: request.id,
-      error: {
-        code: -32601,
-        message: 'Method not found',
-      },
-    };
   }
+  // No need for separate handlers for each server type
+  // All request handling is now delegated to the server implementations via the factory
 }
