@@ -411,7 +411,8 @@ export class FetchMCPServer {
         let resources: string[] = [];
         let resourceTypes: Array<{name: string, properties?: Array<{name: string, type: string, description: string}>}> = [];
         
-        if (params.includeDetails) {          // Pattern 1: Standard Methods table with "Methods" header
+        if (params.includeDetails) {
+          // Extract API methods from tables with enhanced parsing
           const methodsPattern = /<table[^>]*>[\s\S]*?<th[^>]*>Methods<\/th>[\s\S]*?<tbody>([\s\S]*?)<\/tbody>/gi;
           let methodsMatch;
           
@@ -421,174 +422,35 @@ export class FetchMCPServer {
             
             if (methodRows) {
               methodRows.forEach(row => {
-                const methodCellPattern = /<td[^>]*>([\s\S]*?)<\/td>/gi;
-                let methodCellMatch;
-                let rowText = '';
-                
-                // Gather all cells in the row to form a complete method
-                while ((methodCellMatch = methodCellPattern.exec(row)) !== null) {
-                  const cellContent = this.extractTextContent(methodCellMatch[1]).trim();
-                  rowText += (rowText ? ' ' : '') + cellContent;
-                }
-                
-                // Process the complete row text
-                if (rowText && !methods.includes(rowText)) {
-                  // Detect if this looks like a Graph API method
-                  if (/(GET|POST|DELETE|PATCH|PUT)\s+\/(identityGovernance|users|groups)/.test(rowText)) {
-                    methods.push(rowText);
-                  }
+                const methodCellPattern = /<td[^>]*>([\s\S]*?)<\/td>/i;
+                const methodCellMatch = methodCellPattern.exec(row);
+                if (methodCellMatch && methodCellMatch[1]) {
+                  const method = this.extractTextContent(methodCellMatch[1]).trim();
+                  if (method && !methods.includes(method)) methods.push(method);
                 }
               });
             }
           }
           
-          // Pattern 2: "Graph Methods" structure
-          const graphMethodsPattern = /<h2[^>]*>Graph Methods<\/h2>[\s\S]*?<table[^>]*>[\s\S]*?<tbody>([\s\S]*?)<\/tbody>/gi;
-          let graphMethodsMatch;
-          
-          while ((graphMethodsMatch = graphMethodsPattern.exec(html)) !== null) {
-            const methodsBodyContent = graphMethodsMatch[1];
-            const methodRows = methodsBodyContent.match(/<tr[^>]*>([\s\S]*?)<\/tr>/gi);
-            
-            if (methodRows) {
-              methodRows.forEach(row => {
-                const methodCellPattern = /<td[^>]*>([\s\S]*?)<\/td>/gi;
-                let methodCellMatch;
-                let rowText = '';
-                
-                // Gather all cells in the row to form a complete method
-                while ((methodCellMatch = methodCellPattern.exec(row)) !== null) {
-                  const cellContent = this.extractTextContent(methodCellMatch[1]).trim();
-                  rowText += (rowText ? ' ' : '') + cellContent;
-                }
-                
-                // Process the complete row text
-                if (rowText && !methods.includes(rowText)) {
-                  // Detect if this looks like a Graph API method
-                  if (/(GET|POST|DELETE|PATCH|PUT)\s+\/(identityGovernance|users|groups)/.test(rowText)) {
-                    methods.push(rowText);
-                  } else if (/identityGovernance\/entitlementManagement\//.test(rowText)) {
-                    // Special case for entitlement management paths
-                    const methodMatch = /GET\s+(\/[^\s]+)/.exec(rowText);
-                    if (methodMatch && methodMatch[1]) {
-                      const method = `GET ${methodMatch[1]}`;
-                      if (!methods.includes(method)) {
-                        methods.push(method);
-                      }
-                    }
-                  }
-                }
-              });
-            }
-          }
-          
-          // Pattern 3: Find method info directly from the href links in the table
-          const methodLinkPattern = /<td[^>]*>.*?<div[^>]*>.*?<a[^>]*>(GET\s+\/[^<]+)<\/a>.*?<\/div>.*?<\/td>/gi;
-          let methodLinkMatch;
-          
-          while ((methodLinkMatch = methodLinkPattern.exec(html)) !== null) {
-            const methodPath = methodLinkMatch[1].trim();
-            if (methodPath && !methods.includes(methodPath)) {
-              methods.push(methodPath);
-            }
-          }
-          
-          // Pattern 4: If other patterns fail, try a more generic approach for tables
+          // If the standard pattern fails, try an alternative approach to find methods
           if (methods.length === 0) {
-            const tablePattern = /<table[^>]*>([\s\S]*?)<\/table>/gi;
-            let tableMatch;
+            const altMethodsPattern = /<td[^>]*>(GET|POST|PATCH|PUT|DELETE)[^<]*<\/td>/gi;
+            let altMethodMatch;
             
-            while ((tableMatch = tablePattern.exec(html)) !== null) {
-              const tableContent = tableMatch[1];
-              
-              if (/(GET|POST|PATCH|PUT|DELETE)/.test(tableContent) || 
-                  /\/identityGovernance\/entitlementManagement\//.test(tableContent)) {
-                const rows = tableContent.match(/<tr[^>]*>([\s\S]*?)<\/tr>/gi);
-                if (rows) {
-                  rows.forEach(row => {
-                    const cellPattern = /<td[^>]*>([\s\S]*?)<\/td>/gi;
-                    let cellMatch;
-                    let rowText = '';
-                    
-                    while ((cellMatch = cellPattern.exec(row)) !== null) {
-                      const cellContent = this.extractTextContent(cellMatch[1]).trim();
-                      rowText += (rowText ? ' ' : '') + cellContent;
-                    }
-                    
-                    if (rowText && !methods.includes(rowText)) {
-                      if (/(GET|POST|DELETE|PATCH|PUT)\s+\/(identityGovernance|users|groups)/.test(rowText)) {
-                        methods.push(rowText);
-                      }
-                    }
-                  });
-                }
-              }
-            }
-          }
-            // Pattern 5: Look for method examples specifically for entitlementManagement
-          const entitlementMethodPattern = /\/identityGovernance\/entitlementManagement\/[\w\/{}\-]+/gi;
-          let entitlementMatch;
-          
-          while ((entitlementMatch = entitlementMethodPattern.exec(html)) !== null) {
-            const methodPath = entitlementMatch[0];
-            const method = `GET ${methodPath}`;
-            
-            if (!methods.includes(method)) {
-              // Check if the path is potentially a parameter or variable
-              if (!methodPath.includes('parameterValue') && !methodPath.includes('{id}')) {
-                methods.push(method);
-              } else {
-                // For paths with parameters, try to normalize to avoid duplicates
-                const normalizedPath = methodPath
-                  .replace(/\{[^}]+\}/g, '{id}')  // Convert all parameters to {id}
-                  .replace(/'parameterValue'/g, "'{id}'");  // Convert quoted parameter values
-                  
-                const normalizedMethod = `GET ${normalizedPath}`;
-                if (!methods.includes(normalizedMethod)) {
-                  methods.push(normalizedMethod);
-                }
-              }
+            while ((altMethodMatch = altMethodsPattern.exec(html)) !== null) {
+              const method = this.extractTextContent(altMethodMatch[0]).trim();
+              if (method && !methods.includes(method)) methods.push(method);
             }
           }
           
-          // Pattern 6: Look for POST/PATCH/PUT/DELETE methods which might be missed
-          const otherMethodsPattern = /(POST|PATCH|PUT|DELETE)\s+\/identityGovernance\/entitlementManagement\/[\w\/{}\-]+/gi;
-          let otherMethodMatch;
+          // Extract resource information with improved detection for tabbed resources
           
-          while ((otherMethodMatch = otherMethodsPattern.exec(html)) !== null) {
-            const method = otherMethodMatch[0];
-            if (!methods.includes(method)) {
-              methods.push(method);
-            }
-          }
-          
-          // Pattern 7: Extract methods from any href attributes that look like API paths
-          const hrefMethodPattern = /href="[^"]*\/graph\/api\/[^"]*"[^>]*>([^<]*\/identityGovernance\/entitlementManagement\/[^<]*)<\/a>/gi;
-          let hrefMatch;
-          
-          while ((hrefMatch = hrefMethodPattern.exec(html)) !== null) {
-            const methodPath = hrefMatch[1].trim();
-            if (methodPath && /(GET|POST|PATCH|PUT|DELETE)/.test(methodPath)) {
-              const method = methodPath;
-              if (!methods.includes(method)) {
-                methods.push(method);
-              }
-            } else if (methodPath) {
-              // If the HTTP method is not specified, assume GET
-              const method = `GET ${methodPath}`;
-              if (!methods.includes(method)) {
-                methods.push(method);
-              }
-            }
-          }// Extract resource information with improved detection for tabbed resources
-          
-          // Pattern 1: Classic tab group format
+          // First check for tabbed resources (like in AuditLog.Read.All)
           const tabGroupMatch = html.match(/<div\s+class="tabGroup"\s+id="tabgroup_2"[\s\S]*?<ul\s+role="tablist">([\s\S]*?)<\/ul>/i);
           
           if (tabGroupMatch && tabGroupMatch[1]) {
             // Extract resource type tabs
             const tabsContent = tabGroupMatch[1];
-            // Support both old and new tab formats
             const tabsPattern = /<a\s+href="#tabpanel_2_([^"]*)"[^>]*>([^<]+)<\/a>/gi;
             let tabMatch;
             
@@ -601,7 +463,7 @@ export class FetchMCPServer {
                 resources.push(resourceTypeName);
               }
               
-              // Find the resource panel content - handle both old and new formats
+              // Find the resource panel content
               const tabPanelPattern = new RegExp(`<section\\s+id="tabpanel_2_${resourceId}"[^>]*>[\\s\\S]*?Graph reference:\\s*<a[^>]*>([^<]+)<\\/a>[\\s\\S]*?<table[^>]*>[\\s\\S]*?<tbody>([\\s\\S]*?)<\\/tbody>`, 'i');
               const tabPanelMatch = tabPanelPattern.exec(html);
               
@@ -637,105 +499,7 @@ export class FetchMCPServer {
               }
             }
           } else {
-            // Pattern 2: Modern tab structure with data-tab attributes
-            const tabPanelPattern = /<section\s+id="tabpanel_[^"]*"\s+role="tabpanel"\s+data-tab="[^"]*"[^>]*>[\s\S]*?Graph reference:\s*<a[^>]*>([^<]+)<\/a>/gi;
-            let tabPanelMatch;
-            
-            while ((tabPanelMatch = tabPanelPattern.exec(html)) !== null) {
-              // Extract resource name from reference link
-              const refLink = tabPanelMatch[1];
-              const resourceName = refLink.split('/').pop()?.trim() || '';
-              
-              if (resourceName && !resources.includes(resourceName)) {
-                resources.push(resourceName);
-                
-                // Extract section content to find properties
-                const sectionContent = tabPanelMatch[0];
-                const sectionTablePattern = /<table[^>]*>[\s\S]*?<tbody>([\s\S]*?)<\/tbody>/i;
-                const sectionTableMatch = sectionTablePattern.exec(sectionContent);
-                
-                if (sectionTableMatch && sectionTableMatch[1]) {
-                  const propertiesRows = sectionTableMatch[1].match(/<tr[^>]*>([\s\S]*?)<\/tr>/gi);
-                  const properties: Array<{name: string, type: string, description: string}> = [];
-                  
-                  if (propertiesRows) {
-                    propertiesRows.forEach(row => {
-                      const cells = row.match(/<td[^>]*>([\s\S]*?)<\/td>/gi);
-                      if (cells && cells.length >= 3) {
-                        const propName = this.extractTextContent(cells[0]).trim();
-                        const propType = this.extractTextContent(cells[1]).trim();
-                        const propDesc = this.extractTextContent(cells[2]).trim();
-                        
-                        properties.push({
-                          name: propName,
-                          type: propType,
-                          description: propDesc
-                        });
-                      }
-                    });
-                  }
-                  
-                  resourceTypes.push({
-                    name: resourceName,
-                    properties: properties
-                  });
-                } else {
-                  // If we can't extract properties, just add the resource name
-                  resourceTypes.push({ name: resourceName });
-                }
-              }
-            }
-          }
-            // Pattern 3: Handle newer tabbed format with different HTML structure
-          if (resources.length === 0) {
-            const alternativeTabPattern = /<a\s+href="#tabpanel_[^"]*"[^>]*role="tab"[^>]*>([^<]+)<\/a>/gi;
-            let alternativeTabMatch;
-            
-            while ((alternativeTabMatch = alternativeTabPattern.exec(html)) !== null) {
-              const resourceName = this.extractTextContent(alternativeTabMatch[1]).trim();
-              if (resourceName && !resources.includes(resourceName)) {
-                resources.push(resourceName);
-                resourceTypes.push({ name: resourceName });
-              }
-            }
-          }
-          
-          // Pattern 4: Extract resource types from the HTML content directly
-          if (resources.length === 0) {
-            // Look for resource types in the content based on common patterns
-            const resourcePatterns = [
-              /accessPackage/g,
-              /approval/g,
-              /entitlementManagement/g,
-              /connectedOrganization/g
-            ];
-            
-            const uniqueResources = new Set<string>();
-            
-            resourcePatterns.forEach(pattern => {
-              let match;
-              while ((match = pattern.exec(html)) !== null) {
-                const contextBeforeAfter = html.substring(Math.max(0, match.index - 50), Math.min(html.length, match.index + 150));
-                
-                // Look for class or type indicators in the surrounding context
-                if ((/class/i.test(contextBeforeAfter) || /type/i.test(contextBeforeAfter)) && 
-                    !uniqueResources.has(match[0])) {
-                  uniqueResources.add(match[0]);
-                }
-              }
-            });
-            
-            // Add the discovered resources
-            uniqueResources.forEach(resource => {
-              if (!resources.includes(resource)) {
-                resources.push(resource);
-                resourceTypes.push({ name: resource });
-              }
-            });
-          }
-          
-          // Pattern 3: Fallback for non-tabbed resources with explicit Resources heading
-          if (resources.length === 0) {
+            // Fallback for non-tabbed resources
             const resourceListMatch = html.match(/<h2[^>]*>Resources<\/h2>[\s\S]*?<ul[^>]*>([\s\S]*?)<\/ul>/i);
             
             if (resourceListMatch && resourceListMatch[1]) {
@@ -752,29 +516,28 @@ export class FetchMCPServer {
                   resourceTypes.push({ name: resourceTypeName });
                 }
               }
-            } else {
-              // Pattern 4: Try more general resource list pattern
-              const resourcesPattern = /<h2[^>]*>Resources<\/h2>([\s\S]*?)<(?:h2|\/body)/i;
-              const resourcesMatch = resourcesPattern.exec(html);
-              if (resourcesMatch && resourcesMatch[1]) {
-                const resourcesList = resourcesMatch[1];
-                const resourceItemPattern = /<li[^>]*>([\s\S]*?)<\/li>/gi;
-                let resourceItemMatch;
-                
-                while ((resourceItemMatch = resourceItemPattern.exec(resourcesList)) !== null) {
-                  const resource = this.extractTextContent(resourceItemMatch[1]).trim();
-                  if (resource && !resources.includes(resource)) {
-                    resources.push(resource);
-                    resourceTypes.push({ name: resource });
-                  }
-                }
+            }
+          }
+          
+          // If no resource tabs found, try the standard resource list approach
+          if (resources.length === 0) {
+            const resourcesPattern = /<h2[^>]*>Resources<\/h2>([\s\S]*?)<(?:h2|\/body)/i;
+            const resourcesMatch = resourcesPattern.exec(html);
+            if (resourcesMatch && resourcesMatch[1]) {
+              const resourcesList = resourcesMatch[1];
+              const resourceItemPattern = /<li[^>]*>([\s\S]*?)<\/li>/gi;
+              let resourceItemMatch;
+              
+              while ((resourceItemMatch = resourceItemPattern.exec(resourcesList)) !== null) {
+                const resource = this.extractTextContent(resourceItemMatch[1]).trim();
+                if (resource && !resources.includes(resource)) resources.push(resource);
               }
             }
           }
           
-          // Pattern 5: Last resort - try to find any Resources heading
+          // If no resources found, try alternative patterns
           if (resources.length === 0) {
-            const altResourcesPattern = /<h[2-4][^>]*>Resources<\/h[2-4]>([\s\S]*?)(?:<h[2-4]|<\/body)/i;
+            const altResourcesPattern = /<h[34][^>]*>Resources<\/h[34]>([\s\S]*?)<(?:h[234]|\/body)/i;
             const altResourcesMatch = altResourcesPattern.exec(html);
             if (altResourcesMatch && altResourcesMatch[1]) {
               const resourcesList = altResourcesMatch[1];
@@ -783,10 +546,7 @@ export class FetchMCPServer {
               
               while ((resourceItemMatch = resourceItemPattern.exec(resourcesList)) !== null) {
                 const resource = this.extractTextContent(resourceItemMatch[1]).trim();
-                if (resource && !resources.includes(resource)) {
-                  resources.push(resource);
-                  resourceTypes.push({ name: resource });
-                }
+                if (resource && !resources.includes(resource)) resources.push(resource);
               }
             }
           }

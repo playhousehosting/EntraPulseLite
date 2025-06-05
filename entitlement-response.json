@@ -1,0 +1,16 @@
+{
+  "id": "123",
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "# EntitlementManagement.Read.All\n\n**Permission type: Delegated, Application**\n\nAllows the app to read access packages and related entitlement management resources on behalf of the signed-in user.\n\n## Available API Methods\n\n- `GET /identityGovernance/entitlementManagement/accessPackages`\n- `GET /identityGovernance/entitlementManagement/accessPackages/{accessPackageId}`\n- `GET /identityGovernance/entitlementManagement/catalogs`\n- `GET /identityGovernance/entitlementManagement/catalogs/{accessPackageCatalogId}`\n\n## Resources\n\n### Access Package\n\n| Property | Type | Description |\n| --- | --- | --- |\n| `id` | String | The unique identifier for the access package. |\n| `displayName` | String | The display name of the access package. |\n| `description` | String | The description of the access package. |\n\n### Catalog\n\n| Property | Type | Description |\n| --- | --- | --- |\n| `id` | String | The unique identifier for the catalog. |\n| `displayName` | String | The display name of the catalog. |\n| `state` | String | Whether the catalog is published or not. |\n\n### Setting\n\n| Property | Type | Description |\n| --- | --- | --- |\n| `requestApprovalSettings` | Object | Settings for approval of requests. |\n| `expirationSettings` | Object | Settings for expiration of access. |\n\n"
+      },
+      {
+        "type": "link",
+        "url": "https://graphpermissions.merill.net/permission/EntitlementManagement.Read.All",
+        "name": "Microsoft Graph Permission Details"
+      }
+    ]
+  }
+}

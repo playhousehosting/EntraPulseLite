@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>EntitlementManagement.Read.All | Graph Permissions </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="EntitlementManagement.Read.All | Graph Permissions ">
+      
+      <meta name="description" content="View all the Graph APIs and data exposed when granting EntitlementManagement.Read.All to an application.">
+  </head>
+  <body>
+    <h1>EntitlementManagement.Read.All</h1>
+    
+    <blockquote>Allows the app to read access packages and related entitlement management resources on behalf of the signed-in user.</blockquote>
+    
+    <div class="permission-type">Permission type: <strong>Delegated, Application</strong></div>
+    
+    <table>
+      <thead>
+        <tr>
+          <th>Category</th>
+          <th>Application</th>
+          <th>Delegated</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Identifier</td>
+          <td>c74fd47d-ed3c-45c3-9a9e-b8676de685d2</td>
+          <td>5449aa12-1393-4ea2-a7c7-d0e06c1a56b2</td>
+        </tr>
+        <tr>
+          <td>DisplayText</td>
+          <td>Read all entitlement management resources</td>
+          <td>Read all entitlement management resources</td>
+        </tr>
+        <tr>
+          <td>AdminConsentRequired</td>
+          <td>Yes</td>
+          <td>Yes</td>
+        </tr>
+      </tbody>
+    </table>
+    
+    <h2>Graph Methods</h2>
+    <table>
+      <thead>
+        <tr><th>Methods</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>GET /identityGovernance/entitlementManagement/accessPackages</td></tr>
+        <tr><td>GET /identityGovernance/entitlementManagement/accessPackages/{accessPackageId}</td></tr>
+        <tr><td>GET /identityGovernance/entitlementManagement/catalogs</td></tr>
+        <tr><td>GET /identityGovernance/entitlementManagement/catalogs/{accessPackageCatalogId}</td></tr>
+      </tbody>
+    </table>
+    
+    <div class="tabGroup" id="tabgroup_2">
+      <ul role="tablist">
+        <a href="#tabpanel_2_accessPackage" role="tab">Access Package</a>
+        <a href="#tabpanel_2_catalog" role="tab">Catalog</a>
+        <a href="#tabpanel_2_setting" role="tab">Setting</a>
+      </ul>
+      <section id="tabpanel_2_accessPackage" role="tabpanel">
+        <h2>Access Package</h2>
+        <p>Graph reference: <a href="https://graph.microsoft.com/v1.0/$metadata#accessPackage">accessPackage</a></p>
+        <table>
+          <thead>
+            <tr><th>Property</th><th>Type</th><th>Description</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>id</td>
+              <td>String</td>
+              <td>The unique identifier for the access package.</td>
+            </tr>
+            <tr>
+              <td>displayName</td>
+              <td>String</td>
+              <td>The display name of the access package.</td>
+            </tr>
+            <tr>
+              <td>description</td>
+              <td>String</td>
+              <td>The description of the access package.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+      <section id="tabpanel_2_catalog" role="tabpanel">
+        <h2>Catalog</h2>
+        <p>Graph reference: <a href="https://graph.microsoft.com/v1.0/$metadata#catalog">catalog</a></p>
+        <table>
+          <thead>
+            <tr><th>Property</th><th>Type</th><th>Description</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>id</td>
+              <td>String</td>
+              <td>The unique identifier for the catalog.</td>
+            </tr>
+            <tr>
+              <td>displayName</td>
+              <td>String</td>
+              <td>The display name of the catalog.</td>
+            </tr>
+            <tr>
+              <td>state</td>
+              <td>String</td>
+              <td>Whether the catalog is published or not.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+      <section id="tabpanel_2_setting" role="tabpanel">
+        <h2>Setting</h2>
+        <p>Graph reference: <a href="https://graph.microsoft.com/v1.0/$metadata#setting">setting</a></p>
+        <table>
+          <thead>
+            <tr><th>Property</th><th>Type</th><th>Description</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>requestApprovalSettings</td>
+              <td>Object</td>
+              <td>Settings for approval of requests.</td>
+            </tr>
+            <tr>
+              <td>expirationSettings</td>
+              <td>Object</td>
+              <td>Settings for expiration of access.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+    </div>
+  </body>
+</html>

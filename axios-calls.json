@@ -1,0 +1,10 @@
+[
+  [
+    "https://graphpermissions.merill.net/permission/EntitlementManagement.Read.All",
+    {
+      "headers": {
+        "User-Agent": "EntraPulse-Lite/1.0"
+      }
+    }
+  ]
+]
