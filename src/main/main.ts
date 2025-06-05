@@ -247,15 +247,22 @@ class EntraPulseLiteApp {
         console.error('Get token with permissions failed:', error);
         return null;
       }
-    });
-
-    // Microsoft Graph handlers
+    });    // Microsoft Graph handlers
     ipcMain.handle('graph:query', async (event, endpoint: string, method?: string, data?: any) => {
       try {
         return await this.graphService.query(endpoint, method, data);
       } catch (error) {
         console.error('Graph query failed:', error);
         throw error;
+      }
+    });
+    
+    ipcMain.handle('graph:getUserPhoto', async (event, userId?: string) => {
+      try {
+        return await this.graphService.getUserPhoto(userId);
+      } catch (error) {
+        console.error('Get user photo failed:', error);
+        return null;
       }
     });
 

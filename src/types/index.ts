@@ -9,6 +9,7 @@ export interface User {
   userPrincipalName: string;
   jobTitle?: string;
   department?: string;
+  photoUrl?: string;
 }
 
 export interface AuthToken {
@@ -77,9 +78,9 @@ export interface ElectronAPI {
     getCurrentUser: () => Promise<User | null>;
     requestPermissions: (permissions: string[]) => Promise<AuthToken | null>;
     getTokenWithPermissions: (permissions: string[]) => Promise<AuthToken | null>;
-  };
-  graph: {
+  };  graph: {
     query: (endpoint: string, method?: string, data?: any) => Promise<any>;
+    getUserPhoto: (userId?: string) => Promise<string | null>;
   };
   llm: {
     chat: (messages: ChatMessage[]) => Promise<string>;

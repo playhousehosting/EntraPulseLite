@@ -2,6 +2,7 @@
 import { Client } from '@microsoft/microsoft-graph-client';
 import { AuthService } from '../auth/AuthService';
 import { GraphApiCall } from '../types';
+import { ProfilePhotoService } from './ProfilePhotoService';
 
 // Define permission tiers for different operations
 export const PERMISSION_TIERS = {
@@ -15,6 +16,7 @@ export const PERMISSION_TIERS = {
 export class GraphService {
   private client: Client;
   private authService: AuthService;
+  private profilePhotoService: ProfilePhotoService;
   private currentPermissions: string[] = ['User.Read']; // Start with basic permissions
 
   constructor(authService: AuthService) {
@@ -30,9 +32,11 @@ export class GraphService {
           }
         } catch (error) {
           done(error, null);
-        }
-      },
+        }      },
     });
+    
+    // Initialize the profile photo service
+    this.profilePhotoService = new ProfilePhotoService(this.client);
   }
 
   async ensurePermissions(requiredPermissions: string[]): Promise<boolean> {
@@ -162,9 +166,11 @@ export class GraphService {
     // Default to basic permissions for unknown endpoints
     return PERMISSION_TIERS.BASIC;
   }
-
   async getMe(): Promise<any> {
     return this.query('/me');
+  }  async getUserPhoto(userId: string = 'me'): Promise<string | null> {
+    // Use the dedicated ProfilePhotoService for better photo retrieval
+    return this.profilePhotoService.getUserPhoto(userId);
   }
 
   async getUsers(filter?: string): Promise<any> {

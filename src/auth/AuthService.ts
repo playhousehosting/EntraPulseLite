@@ -1,5 +1,6 @@
 // Authentication service using MSAL for Electron
 import { PublicClientApplication, Configuration, AuthenticationResult, LogLevel } from '@azure/msal-node';
+import { Client } from '@microsoft/microsoft-graph-client';
 import { AuthToken, User } from '../types';
 
 export class AuthService {
@@ -177,20 +178,28 @@ export class AuthService {
       console.error('Token retrieval failed:', error);
       return null;
     }
-  }
-
-  async getCurrentUser(): Promise<User | null> {
+  }  async getCurrentUser(): Promise<User | null> {
     try {
       const token = await this.getToken();
       if (!token) return null;
 
-      // This would typically make a call to Microsoft Graph
-      // For now, return a placeholder
+      // Create a temporary Graph client to make the API call
+      const client = Client.init({
+        authProvider: async (done: (error: any, accessToken: string | null) => void) => {
+          done(null, token.accessToken);
+        }
+      });
+
+      // Call Microsoft Graph API to get user profile
+      const response = await client.api('/me').get();
+      
       return {
-        id: 'user-id',
-        displayName: 'Current User',
-        mail: 'user@domain.com',
-        userPrincipalName: 'user@domain.com',
+        id: response.id,
+        displayName: response.displayName,
+        mail: response.mail || response.userPrincipalName,
+        userPrincipalName: response.userPrincipalName,
+        jobTitle: response.jobTitle,
+        department: response.department,
       };
     } catch (error) {
       console.error('Failed to get current user:', error);

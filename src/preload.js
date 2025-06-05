@@ -24,6 +24,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Microsoft Graph methods
   graph: {
     query: (endpoint, method, data) => ipcRenderer.invoke('graph:query', endpoint, method, data),
+    getUserPhoto: (userId) => ipcRenderer.invoke('graph:getUserPhoto', userId),
   },
 
   // Local LLM methods

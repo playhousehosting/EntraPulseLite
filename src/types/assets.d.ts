@@ -46,9 +46,9 @@ interface Window {
       getCurrentUser: () => Promise<any>;
       requestPermissions: (permissions: string[]) => Promise<any>;
       getTokenWithPermissions: (permissions: string[]) => Promise<any>;
-    };
-    graph: {
+    };    graph: {
       query: (endpoint: string, method: string, data?: any) => Promise<any>;
+      getUserPhoto: (userId?: string) => Promise<string | null>;
     };
     llm: {
       chat: (messages: any[]) => Promise<string>;

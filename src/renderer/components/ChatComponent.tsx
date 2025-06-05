@@ -34,6 +34,7 @@ import {
 import { getAssetPath } from '../utils/assetUtils';
 import { ChatMessage, User, AuthToken } from '../../types';
 import { AppIcon } from './AppIcon';
+import { UserProfileAvatar } from './UserProfileAvatar';
 
 interface ChatComponentProps {}
 
@@ -48,11 +49,23 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
   const [currentPermissions, setCurrentPermissions] = useState<string[]>(['User.Read']);
   const [permissionRequests, setPermissionRequests] = useState<string[]>([]);
   const [useRedirectFlow, setUseRedirectFlow] = useState(false);
+  const [userPhotoUrl, setUserPhotoUrl] = useState<string | null>(null);
 
   useEffect(() => {
     initializeApp();
   }, []);
-
+  // We don't need this useEffect anymore as the UserProfileAvatar component handles photo loading
+  // But we keep the state for shared use cases
+  useEffect(() => {
+    // No-op - photo loading handled by UserProfileAvatar component
+  }, [user]);// We're now using the UserProfileAvatar component to handle photos
+  const handlePhotoLoaded = (photoUrl: string | null) => {
+    if (photoUrl && user) {
+      setUserPhotoUrl(photoUrl);
+      // Update user object to include photoUrl for other components
+      setUser(prevUser => prevUser ? { ...prevUser, photoUrl } : null);
+    }
+  };
   const initializeApp = async () => {
     try {
       // Check authentication status
@@ -61,6 +74,8 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
         setAuthToken(token);
         const currentUser = await window.electronAPI.auth.getCurrentUser();
         setUser(currentUser);
+        
+        // No need to call fetchUserPhoto here as it will be triggered by the useEffect
       }
 
       // Check LLM availability
@@ -81,8 +96,7 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
       console.error('Failed to initialize app:', error);
       setError('Failed to initialize application');
     }
-  };
-  const handleLogin = async () => {
+  };  const handleLogin = async () => {
     try {
       setIsLoading(true);
       // Pass the redirect flow preference to the login function
@@ -92,6 +106,8 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
       const currentUser = await window.electronAPI.auth.getCurrentUser();
       setUser(currentUser);
       setError(null);
+      
+      // Note: No need to explicitly call fetchUserPhoto here, as it will be triggered by the useEffect
     } catch (error) {
       console.error('Login failed:', error);
       setError('Login failed. Please try again.');
@@ -99,12 +115,12 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
       setIsLoading(false);
     }
   };
-
   const handleLogout = async () => {
     try {
       await window.electronAPI.auth.logout();
       setAuthToken(null);
       setUser(null);
+      setUserPhotoUrl(null);
       setMessages([]);
       setCurrentPermissions(['User.Read']); // Reset to basic permissions
     } catch (error) {
@@ -203,10 +219,8 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
         };
         setMessages(prev => [...prev, systemMessage]);
         return;
-      }
-
-      // Make the Graph API call
-      const result = await window.electronAPI.graph.query(endpoint);
+      }      // Make the Graph API call
+      const result = await window.electronAPI.graph.query(endpoint, 'GET');
       
       const systemMessage: ChatMessage = {
         id: Date.now().toString(),
@@ -366,13 +380,7 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
             />
           )}
         </Box>
-        
-        <Box display="flex" alignItems="center" gap={1}>
-          {user && (
-            <Typography variant="body2" color="textSecondary">
-              {user.displayName}
-            </Typography>
-          )}
+          <Box display="flex" alignItems="center" gap={1}>          {user && <UserProfileAvatar user={user} />}
           <Tooltip title="Settings">
             <IconButton>
               <SettingsIcon />
@@ -390,10 +398,15 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
       <Box sx={{ flex: 1, overflow: 'auto', p: 2 }}>
         <List>
           {messages.map((message) => (
-            <ListItem key={message.id} alignItems="flex-start" sx={{ mb: 2 }}>
-              <Avatar sx={{ mr: 2, mt: 0.5 }}>
-                {message.role === 'user' ? <PersonIcon /> : <BotIcon />}
-              </Avatar>
+            <ListItem key={message.id} alignItems="flex-start" sx={{ mb: 2 }}>              <Box sx={{ mr: 2, mt: 0.5 }}>
+                {message.role === 'user' ? 
+                  (user ? 
+                    <UserProfileAvatar user={user} size={40} showName={false} /> : 
+                    <Avatar><PersonIcon /></Avatar>
+                  ) : 
+                  <Avatar sx={{ bgcolor: 'secondary.main' }}><BotIcon /></Avatar>
+                }
+              </Box>
               <Box sx={{ flex: 1 }}>
                 <ListItemText
                   primary={
