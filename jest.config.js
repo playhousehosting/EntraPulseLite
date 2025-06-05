@@ -1,17 +1,16 @@
 module.exports = {
   preset: "ts-jest",
   testEnvironment: "jsdom",
-  setupFilesAfterEnv: ["<rootDir>/src/tests/setup.ts"],
-  testMatch: [
-    "<rootDir>/src/tests/**/*.test.ts",
-    "<rootDir>/src/tests/**/*.test.tsx"
+  setupFilesAfterEnv: ["<rootDir>/src/tests/setup.ts"],  testMatch: [
+    "<rootDir>/src/tests/**/*.test.{ts,tsx}"
   ],
   transform: {
     "^.+\\.tsx?$": "ts-jest"
   },
   moduleFileExtensions: ["ts", "tsx", "js", "jsx", "json"],
   moduleNameMapper: {
-    "^@/(.*)$": "<rootDir>/src/$1"
+    "^@/(.*)$": "<rootDir>/src/$1",
+    "\\.(jpg|jpeg|png|gif|ico|svg)$": "<rootDir>/src/tests/mocks/fileMock.js"
   },
   collectCoverageFrom: [
     "src/**/*.{ts,tsx}",

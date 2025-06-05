@@ -1,0 +1,68 @@
+// E2E tests for critical user flows
+// Disabled until Playwright is installed
+// To enable, run: npm install --save-dev playwright @playwright/test
+// Then rename this file to app.test.ts
+
+/*
+import { _electron as electron } from 'playwright';
+import { test, expect } from '@playwright/test';
+
+test.describe('EntraPulse Lite E2E Tests', () => {
+  let electronApp;
+  let firstWindow;
+
+  test.beforeAll(async () => {
+    // Launch Electron app
+    electronApp = await electron.launch({ args: ['dist/main.js'] });
+    
+    // Get the first window
+    firstWindow = await electronApp.firstWindow();
+    await firstWindow.waitForLoadState('domcontentloaded');
+  });
+
+  test.afterAll(async () => {
+    // Close app
+    await electronApp.close();
+  });
+
+  test('App starts and shows login screen', async () => {
+    // Check window title
+    const title = await firstWindow.title();
+    expect(title).toBe('EntraPulse Lite');
+    
+    // Check for login button
+    const loginButton = await firstWindow.getByRole('button', { name: /Sign in/i });
+    expect(await loginButton.isVisible()).toBeTruthy();
+  });
+
+  test('Can navigate to about page', async () => {
+    // Click menu item
+    await firstWindow.getByRole('menuitem', { name: /About/i }).click();
+    
+    // Check for about content
+    const aboutHeading = await firstWindow.getByRole('heading', { name: /About EntraPulse Lite/i });
+    expect(await aboutHeading.isVisible()).toBeTruthy();
+    
+    // Check version info is displayed
+    const versionText = await firstWindow.getByText(/Version/i);
+    expect(await versionText.isVisible()).toBeTruthy();
+  });
+
+  test('Can toggle between light and dark themes', async () => {
+    // Get initial theme
+    const initialTheme = await firstWindow.evaluate(() => {
+      return document.body.classList.contains('dark-theme') ? 'dark' : 'light';
+    });
+    
+    // Click theme toggle button
+    await firstWindow.getByRole('button', { name: /Toggle theme/i }).click();
+    
+    // Check theme changed
+    const newTheme = await firstWindow.evaluate(() => {
+      return document.body.classList.contains('dark-theme') ? 'dark' : 'light';
+    });
+    
+    expect(newTheme).not.toBe(initialTheme);
+  });
+});
+*/

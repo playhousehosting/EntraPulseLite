@@ -225,6 +225,9 @@ npm run make
 - macOS (x64, arm64)
 - Linux (x64, arm64)
 
+### Local LLM Install Instructions
+[See these instructions to install Ollama locally in Docker](./Install%20Local%20LLM.MD)
+
 ## 🎯 Freemium Model
 
 ### Free Features
