@@ -10,6 +10,7 @@ A freemium desktop application that provides natural language querying of Micros
 - **Local LLM Integration**: Works with Ollama and LM Studio for privacy-focused AI
 - **Built-in MCP Servers**: 
   - Lokka MCP for Microsoft Graph API access
+  - External Lokka MCP using the official @merill/lokka package
   - Fetch MCP for Microsoft Learn documentation and Permissions Explorer
 - **Chat Interface**: Modern UI with trace visualization and permission management
 - **Freemium Model**: No App Registration required for basic usage
@@ -227,6 +228,9 @@ npm run make
 
 ### Local LLM Install Instructions
 [See these instructions to install Ollama locally in Docker](./Install%20Local%20LLM.MD)
+
+### External Lokka MCP Server
+[See the documentation for External Lokka MCP Server](./docs/EXTERNAL-LOKKA-MCP.md)
 
 ## 🎯 Freemium Model
 

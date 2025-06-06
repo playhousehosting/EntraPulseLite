@@ -39,12 +39,12 @@ export class MCPAuthService {
    * @param serverType Type of MCP server
    * @returns Authentication headers
    * @throws Error if authentication fails
-   */
-  async getAuthHeaders(serverType: string): Promise<Record<string, string>> {
+   */  async getAuthHeaders(serverType: string): Promise<Record<string, string>> {
     // Different servers may require different authentication headers
     try {
       switch (serverType) {
         case 'lokka':
+        case 'external-lokka':
           const token = await this.authService.getToken();
           if (!token) {
             throw new Error('No authentication token available');

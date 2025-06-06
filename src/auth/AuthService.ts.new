@@ -1,0 +1,380 @@
+// Authentication service using MSAL for Electron
+import { PublicClientApplication, Configuration, AuthenticationResult, LogLevel, ConfidentialClientApplication, ClientCredentialRequest } from '@azure/msal-node';
+import { Client } from '@microsoft/microsoft-graph-client';
+import { AuthToken, User } from '../types';
+
+export class AuthService {
+  private msalClient: PublicClientApplication | ConfidentialClientApplication;
+  private config: Configuration;
+  private useClientCredentials: boolean;
+  
+  constructor() {
+    // Use Microsoft Graph PowerShell public client ID for interactive login
+    // This allows users to authenticate without requiring their own App Registration
+    const clientId = process.env.MSAL_CLIENT_ID && process.env.MSAL_CLIENT_ID.trim() !== '' 
+      ? process.env.MSAL_CLIENT_ID 
+      : '14d82eec-204b-4c2f-b7e8-296a70dab67e'; // Microsoft Graph PowerShell
+    
+    const authority = process.env.MSAL_TENANT_ID && process.env.MSAL_TENANT_ID.trim() !== ''
+      ? `https://login.microsoftonline.com/${process.env.MSAL_TENANT_ID}`
+      : 'https://login.microsoftonline.com/common';
+
+    const clientSecret = process.env.MSAL_CLIENT_SECRET;
+
+    // Check if we have credentials for client credential flow
+    this.useClientCredentials = process.env.MSAL_CLIENT_ID && process.env.MSAL_TENANT_ID && process.env.MSAL_CLIENT_SECRET ? true : false;
+
+    console.log(`Using MSAL Client ID: ${clientId}`);
+    console.log(`Using Authority: ${authority}`);
+    console.log(`Using Client Credentials Flow: ${this.useClientCredentials ? 'Yes' : 'No'}`);
+
+    this.config = {
+      auth: {
+        clientId,
+        authority,
+        clientSecret: this.useClientCredentials ? clientSecret : undefined,
+      },
+      system: {
+        loggerOptions: {
+          loggerCallback: (level: LogLevel, message: string, containsPii: boolean) => {
+            if (containsPii) return;
+            console.log(`[MSAL ${level}]: ${message}`);
+          },
+          piiLoggingEnabled: false,
+          logLevel: LogLevel.Info,
+        },
+      },
+    };
+
+    // Create the appropriate client based on credential availability
+    if (this.useClientCredentials) {
+      this.msalClient = new ConfidentialClientApplication(this.config);
+    } else {
+      this.msalClient = new PublicClientApplication(this.config);
+    }
+  }
+
+  async login(useRedirectFlow = false): Promise<AuthToken> {
+    try {
+      // If using client credentials, we don't need interactive login
+      if (this.useClientCredentials) {
+        return await this.getClientCredentialToken(['https://graph.microsoft.com/.default']);
+      }
+      
+      // For interactive login with a PublicClientApplication
+      if (!(this.msalClient instanceof PublicClientApplication)) {
+        throw new Error('Interactive login is not available in client credential mode');
+      }
+
+      // Start with minimal permissions that most users should have
+      const authRequest = {
+        scopes: [
+          'User.Read', // Read current user's profile - basic permission
+        ],
+        openBrowser: async (url: string) => {
+          // In Electron, we can use shell.openExternal to open the browser
+          const { shell } = await import('electron');
+          await shell.openExternal(url);
+        },
+        // Use system browser for redirect flow
+        // This is more compatible with mobile authentication flows
+        redirectUri: useRedirectFlow ? 'https://login.microsoftonline.com/common/oauth2/nativeclient' : undefined,
+        successTemplate: `
+          <html>
+            <head><title>Authentication Successful</title></head>
+            <body>
+              <h1>Authentication Successful!</h1>
+              <p>You can now close this window and return to EntraPulse Lite.</p>
+              <script>window.close();</script>
+            </body>
+          </html>
+        `,
+        errorTemplate: `
+          <html>
+            <head><title>Authentication Failed</title></head>
+            <body>
+              <h1>Authentication Failed</h1>
+              <p>Please try again. You can close this window and return to EntraPulse Lite.</p>
+              <script>window.close();</script>
+            </body>
+          </html>
+        `
+      };
+
+      console.log('Starting authentication with minimal permissions...');
+      const response = await this.msalClient.acquireTokenInteractive(authRequest);
+      console.log('Authentication successful with basic permissions!');
+      
+      return this.mapToAuthToken(response);
+    } catch (error) {
+      console.error('Authentication failed:', error);
+      throw new Error(`Authentication failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Get a token using client credentials flow (app-only access)
+   * @param scopes The scopes to request
+   * @returns AuthToken
+   */
+  private async getClientCredentialToken(scopes: string[] = ['https://graph.microsoft.com/.default']): Promise<AuthToken> {
+    try {
+      if (!(this.msalClient instanceof ConfidentialClientApplication)) {
+        throw new Error('Client credential flow requires a confidential client application');
+      }
+      
+      console.log(`Acquiring token using client credentials flow for scopes: ${scopes.join(', ')}`);
+      
+      const clientCredentialRequest: ClientCredentialRequest = {
+        scopes,
+        skipCache: false
+      };
+      
+      const response = await this.msalClient.acquireTokenByClientCredential(clientCredentialRequest);
+      
+      if (!response) {
+        throw new Error('Failed to acquire token using client credentials');
+      }
+      
+      console.log('Successfully acquired token using client credentials flow');
+      
+      // Create a default user for client credential flow - app-only access
+      const appOnlyUser: User = {
+        id: 'app-only-access',
+        displayName: 'App-Only Access (Client Credentials)',
+        mail: '',
+        userPrincipalName: 'app-only@entrapulselite',
+      };
+      
+      // Store the app-only user for future reference
+      this._currentUser = appOnlyUser;
+      
+      return this.mapToAuthToken(response);
+    } catch (error) {
+      console.error('Client credential authentication failed:', error);
+      throw new Error(`Client credential authentication failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  async requestAdditionalPermissions(permissions: string[]): Promise<AuthToken | null> {
+    try {
+      // If using client credentials, we don't need to request additional permissions
+      if (this.useClientCredentials) {
+        return await this.getClientCredentialToken(['https://graph.microsoft.com/.default']);
+      }
+      
+      // For interactive login with a PublicClientApplication
+      if (!(this.msalClient instanceof PublicClientApplication)) {
+        throw new Error('Interactive permission requests are not available in client credential mode');
+      }
+      
+      const accounts = await this.msalClient.getTokenCache().getAllAccounts();
+      if (accounts.length === 0) {
+        throw new Error('No authenticated account found. Please log in first.');
+      }
+
+      const authRequest = {
+        scopes: permissions,
+        account: accounts[0],
+        forceRefresh: false,
+      };
+
+      console.log(`Requesting additional permissions: ${permissions.join(', ')}`);
+      
+      // Try silent request first
+      try {
+        const response = await this.msalClient.acquireTokenSilent(authRequest);
+        console.log('Additional permissions granted silently');
+        return this.mapToAuthToken(response);
+      } catch (silentError) {
+        console.log('Silent request failed, requiring interactive consent');
+        
+        // If silent fails, request interactively
+        const interactiveRequest = {
+          ...authRequest,
+          openBrowser: async (url: string) => {
+            const { shell } = await import('electron');
+            await shell.openExternal(url);
+          },
+        };
+
+        const response = await this.msalClient.acquireTokenInteractive(interactiveRequest);
+        console.log('Additional permissions granted through interactive consent');
+        return this.mapToAuthToken(response);
+      }
+    } catch (error) {
+      console.error('Failed to request additional permissions:', error);
+      return null;
+    }
+  }
+
+  async logout(): Promise<void> {
+    try {
+      // If using client credentials, there's nothing to log out
+      if (this.useClientCredentials) {
+        console.log('Client credential mode does not require logout');
+        this._currentUser = null;
+        return;
+      }
+      
+      // For interactive login
+      if (!(this.msalClient instanceof PublicClientApplication)) {
+        throw new Error('Logout is not available in client credential mode');
+      }
+      
+      const accounts = await this.msalClient.getTokenCache().getAllAccounts();
+      if (accounts.length > 0) {
+        for (const account of accounts) {
+          await this.msalClient.getTokenCache().removeAccount(account);
+        }
+      }
+      this._currentUser = null;
+      console.log('Successfully logged out');
+    } catch (error) {
+      console.error('Failed to log out:', error);
+      throw new Error(`Logout failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  private _currentUser: User | null = null;
+
+  async getCurrentUser(): Promise<User | null> {
+    try {
+      // If we already have a current user, return it
+      if (this._currentUser) {
+        return this._currentUser;
+      }
+      
+      // If using client credentials, return the app-only user
+      if (this.useClientCredentials) {
+        this._currentUser = {
+          id: 'app-only-access',
+          displayName: 'App-Only Access (Client Credentials)',
+          mail: '',
+          userPrincipalName: 'app-only@entrapulselite',
+        };
+        return this._currentUser;
+      }
+      
+      // Get the token first to ensure authentication
+      const token = await this.getToken();
+      if (!token) {
+        return null;
+      }
+
+      // Make a request to Microsoft Graph API to get user info
+      const graphClient = Client.init({
+        authProvider: async (done) => {
+          try {
+            const token = await this.getToken();
+            done(null, token?.accessToken);
+          } catch (error) {
+            done(error as Error, null);
+          }
+        },
+      });
+
+      const userResponse = await graphClient.api('/me').get();
+      
+      this._currentUser = {
+        id: userResponse.id,
+        displayName: userResponse.displayName,
+        mail: userResponse.mail || userResponse.userPrincipalName,
+        userPrincipalName: userResponse.userPrincipalName,
+        jobTitle: userResponse.jobTitle,
+        department: userResponse.department,
+      };
+
+      return this._currentUser;
+    } catch (error) {
+      console.error('Failed to get current user:', error);
+      return null;
+    }
+  }
+
+  async getToken(): Promise<AuthToken | null> {
+    try {
+      // If using client credentials, use client credential flow
+      if (this.useClientCredentials) {
+        return await this.getClientCredentialToken(['https://graph.microsoft.com/.default']);
+      }
+      
+      // For interactive login
+      if (!(this.msalClient instanceof PublicClientApplication)) {
+        throw new Error('Interactive token acquisition is not available in client credential mode');
+      }
+      
+      const accounts = await this.msalClient.getTokenCache().getAllAccounts();
+      if (accounts.length === 0) {
+        // No accounts in cache, user needs to login
+        return null;
+      }
+
+      // Use the first account (should be the only one for most users)
+      const authRequest = {
+        scopes: ['User.Read'],
+        account: accounts[0],
+      };
+
+      // Try to get token silently
+      const response = await this.msalClient.acquireTokenSilent(authRequest);
+      return this.mapToAuthToken(response);
+    } catch (error) {
+      console.error('Failed to get token silently:', error);
+      return null;
+    }
+  }
+
+  async getTokenWithPermissions(permissions: string[]): Promise<AuthToken | null> {
+    try {
+      // If using client credentials, use client credential flow
+      if (this.useClientCredentials) {
+        // In client credential flow, we always request .default scope which includes all app permissions
+        return await this.getClientCredentialToken(['https://graph.microsoft.com/.default']);
+      }
+      
+      // For interactive login
+      if (!(this.msalClient instanceof PublicClientApplication)) {
+        throw new Error('Interactive token acquisition with permissions is not available in client credential mode');
+      }
+      
+      const accounts = await this.msalClient.getTokenCache().getAllAccounts();
+      if (accounts.length === 0) {
+        // No accounts in cache, user needs to login
+        return null;
+      }
+
+      // Use the first account (should be the only one for most users)
+      const authRequest = {
+        scopes: permissions,
+        account: accounts[0],
+      };
+
+      // Try to get token silently first
+      try {
+        const response = await this.msalClient.acquireTokenSilent(authRequest);
+        return this.mapToAuthToken(response);
+      } catch (error) {
+        // If there's an error, the user might need to consent to these permissions
+        console.warn('Failed to get token silently for permissions, requesting additional permissions');
+        return await this.requestAdditionalPermissions(permissions);
+      }
+    } catch (error) {
+      console.error('Failed to get token with permissions:', error);
+      return null;
+    }
+  }
+
+  private mapToAuthToken(authResult: AuthenticationResult | null): AuthToken {
+    if (!authResult) {
+      throw new Error('Authentication failed: No auth result returned');
+    }
+    
+    return {
+      accessToken: authResult.accessToken,
+      idToken: authResult.idToken,
+      expiresOn: authResult.expiresOn,
+      scopes: authResult.scopes,
+    };
+  }
+}

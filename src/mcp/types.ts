@@ -9,7 +9,7 @@ export interface MCPAuthConfig {
 
 export interface MCPServerConfig {
   name: string;
-  type: 'lokka' | 'fetch' | string;
+  type: 'lokka' | 'fetch' | 'external-lokka' | string;
   port: number;
   enabled: boolean;
   url?: string;

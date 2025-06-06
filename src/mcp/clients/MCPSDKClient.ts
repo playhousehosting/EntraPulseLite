@@ -117,4 +117,27 @@ export class MCPClient {
       throw new Error(`Failed to call tool ${toolName}: ${(error as Error).message}`);
     }
   }
+
+  /**
+   * Stop all MCP servers that have a stop method
+   */
+  async stopAllServers(): Promise<void> {
+    try {
+      // Import MCPServerManager dynamically to avoid circular dependencies
+      const { MCPServerManager } = await import('../servers/MCPServerManager');
+      
+      // Get the MCPServerManager instance
+      const serverManagerModule = require('../servers/MCPServerManager');
+      const instance = serverManagerModule.default._instance;
+      
+      if (instance && instance instanceof MCPServerManager) {
+        await instance.stopAllServers();
+      } else {
+        console.warn('Could not find MCPServerManager instance to stop servers');
+      }
+    } catch (error) {
+      console.error('Error stopping MCP servers:', error);
+      throw error;
+    }
+  }
 }

@@ -29,9 +29,11 @@ class EntraPulseLiteApp {
   constructor() {
     this.initializeServices();
     this.setupEventHandlers();
-  }
-  private initializeServices(): void {
-    // Initialize configuration
+  }  private initializeServices(): void {    // Initialize configuration
+    // Check if we have Lokka credentials configured for non-interactive authentication
+    const hasLokkaCreds = process.env.LOKKA_CLIENT_ID && process.env.LOKKA_TENANT_ID && process.env.LOKKA_CLIENT_SECRET;
+    const useExternalLokka = process.env.USE_EXTERNAL_LOKKA === 'true' || hasLokkaCreds;
+    
     this.config = {
       auth: {
         clientId: process.env.MSAL_CLIENT_ID && process.env.MSAL_CLIENT_ID.trim() !== '' 
@@ -41,6 +43,8 @@ class EntraPulseLiteApp {
           ? process.env.MSAL_TENANT_ID 
           : 'common',
         scopes: ['User.Read', 'User.ReadBasic.All', 'Directory.Read.All', 'Group.Read.All'],
+        clientSecret: process.env.MSAL_CLIENT_SECRET, // Only needed for confidential client applications
+        useClientCredentials: hasLokkaCreds, // Use client credentials flow if Lokka creds are configured
       },
       llm: {
         provider: (process.env.LLM_PROVIDER as 'ollama' | 'lmstudio') || 'ollama',
@@ -48,13 +52,24 @@ class EntraPulseLiteApp {
           ? process.env.LMSTUDIO_BASE_URL || 'http://localhost:1234'
           : process.env.OLLAMA_BASE_URL || 'http://localhost:11434',
         model: 'llama2', // Default model
-      },
-      mcpServers: [
+      },      mcpServers: [
         {
           name: 'lokka',
           type: 'lokka',
           port: parseInt(process.env.MCP_LOKKA_PORT || '3001'),
-          enabled: true,
+          enabled: process.env.USE_EXTERNAL_LOKKA !== 'true' && !hasLokkaCreds, // Disable if using external Lokka
+        },        {
+          name: 'external-lokka',
+          type: 'external-lokka',
+          port: parseInt(process.env.EXTERNAL_MCP_LOKKA_PORT || '3003'),
+          enabled: (process.env.USE_EXTERNAL_LOKKA === 'true' || Boolean(hasLokkaCreds)), // Enable if explicitly set or if creds exist
+          options: {
+            env: {
+              TENANT_ID: process.env.LOKKA_TENANT_ID || process.env.MSAL_TENANT_ID,
+              CLIENT_ID: process.env.LOKKA_CLIENT_ID || process.env.MSAL_CLIENT_ID,
+              CLIENT_SECRET: process.env.LOKKA_CLIENT_SECRET
+            }
+          }
         },
         {
           name: 'fetch',
@@ -67,7 +82,7 @@ class EntraPulseLiteApp {
         enablePremiumFeatures: process.env.ENABLE_PREMIUM_FEATURES === 'true',
         enableTelemetry: process.env.ENABLE_TELEMETRY === 'true',
       },
-    };    // Update MCP server configs with auth configuration
+    };// Update MCP server configs with auth configuration
     this.config.mcpServers.forEach(server => {
       if (server.type === 'lokka') {
         // Add authentication config for Graph API
@@ -103,10 +118,32 @@ class EntraPulseLiteApp {
       app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) this.createWindow();
       });
-    });
-
-    app.on('window-all-closed', () => {
+    });    app.on('window-all-closed', () => {
       if (process.platform !== 'darwin') app.quit();
+    });
+    
+    app.on('will-quit', async (event) => {
+      // Stop all MCP servers gracefully before quitting
+      event.preventDefault();
+      try {
+        await this.mcpClient.stopAllServers();
+        app.quit();
+      } catch (error) {
+        console.error('Error stopping MCP servers:', error);
+        app.quit();
+      }
+    });
+    
+    app.on('will-quit', async (event) => {
+      // Stop all MCP servers gracefully before quitting
+      event.preventDefault();
+      try {
+        await this.mcpClient.stopAllServers();
+        app.quit();
+      } catch (error) {
+        console.error('Error stopping MCP servers:', error);
+        app.quit();
+      }
     });
   }
   private createWindow(): void {

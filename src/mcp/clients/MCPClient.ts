@@ -80,7 +80,18 @@ export class MCPClient {
 
   getAvailableServers(): MCPServerConfig[] {
     return Array.from(this.servers.values()).filter(server => server.enabled);
-  }  private async sendRequest(server: MCPServerConfig, request: MCPRequest): Promise<MCPResponse> {
+  }  
+  
+  async stopAllServers(): Promise<void> {
+    try {
+      await this.serverManager.stopAllServers();
+    } catch (error) {
+      console.error('Error stopping MCP servers:', error);
+      throw error;
+    }
+  }
+
+  private async sendRequest(server: MCPServerConfig, request: MCPRequest): Promise<MCPResponse> {
     try {
       // Convert the request format if needed
       const mcpRequest = {

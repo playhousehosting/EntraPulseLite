@@ -58,7 +58,7 @@ export interface MCPAuthConfig {
 
 export interface MCPServerConfig {
   name: string;
-  type: 'lokka' | 'fetch';
+  type: 'lokka' | 'fetch' | 'external-lokka';
   port: number;
   enabled: boolean;
   url?: string;
@@ -72,6 +72,8 @@ export interface AppConfig {
     clientId: string;
     tenantId: string;
     scopes: string[];
+    clientSecret?: string;
+    useClientCredentials?: boolean;
   };
   llm: LLMConfig;
   mcpServers: MCPServerConfig[];
