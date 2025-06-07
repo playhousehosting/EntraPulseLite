@@ -10,27 +10,8 @@ import { spawn } from 'child_process';
 
 // Mock dependencies
 jest.mock('child_process', () => {
-  const mockProcess = {
-    stdout: {
-      on: jest.fn((event, callback) => {
-        if (event === 'data') {
-          // Simulate server started message
-          callback('Server listening on port 3003');
-        }
-      })
-    },
-    stderr: { on: jest.fn() },
-    on: jest.fn((event, callback) => {
-      if (event === 'close') {
-        callback(0);
-      }
-    }),
-    kill: jest.fn(),
-    killed: false
-  };
-  
   return {
-    spawn: jest.fn().mockReturnValue(mockProcess)
+    spawn: jest.fn()
   };
 });
 
@@ -63,9 +44,37 @@ describe('ExternalLokkaMCPServer', () => {
       CLIENT_SECRET: 'mock-client-secret'
     }
   };
-
   beforeEach(() => {
     jest.clearAllMocks();
+    
+    // Setup default mock process that simulates successful startup
+    const createMockProcess = () => ({
+      stdout: {
+        on: jest.fn((event, callback) => {
+          if (event === 'data') {
+            // Simulate server ready with JSON-RPC capabilities
+            setTimeout(() => {
+              callback(Buffer.from('{"jsonrpc":"2.0","id":1,"result":{"capabilities":{}}}'));
+            }, 0);
+          }
+        })
+      },
+      stderr: { on: jest.fn() },
+      on: jest.fn((event, callback) => {
+        if (event === 'close') {
+          callback(0);
+        }
+      }),
+      kill: jest.fn(),
+      killed: false,
+      stdin: {
+        write: jest.fn(),
+        on: jest.fn()
+      }
+    });
+    
+    mockedSpawn.mockReturnValue(createMockProcess() as any);
+    
     server = new ExternalLokkaMCPServer(mockConfig, mockAuthService);
     
     // Setup default axios mock responses
@@ -78,27 +87,37 @@ describe('ExternalLokkaMCPServer', () => {
       status: 200,
       data: { status: 'ok' }
     });
-  });
-  describe('Server lifecycle', () => {
+  });  describe('Server lifecycle', () => {
     it('should start the server successfully', async () => {
       await expect(server.startServer()).resolves.not.toThrow();
-      expect(mockedSpawn).toHaveBeenCalled();
-    });
-
-    it('should stop the server successfully', async () => {
+      expect(mockedSpawn).toHaveBeenCalledWith(
+        'npx',
+        ['-y', '@merill/lokka'],
+        expect.objectContaining({
+          env: expect.objectContaining({
+            TENANT_ID: 'mock-tenant-id',
+            CLIENT_ID: 'mock-client-id',
+            CLIENT_SECRET: 'mock-client-secret'
+          }),
+          shell: true,
+          stdio: ['pipe', 'pipe', 'pipe']
+        })
+      );
+    });    it('should stop the server successfully', async () => {
       // First start the server
       await server.startServer();
       
-      // Manually set the serverProcess property for testing
-      // In the actual implementation, this would be set by startServer()
-      (server as any).isServerRunning = true;
-      (server as any).serverProcess = {
-        kill: jest.fn()
-      };
+      // Get the mock process instance from the last spawn call
+      const lastCall = mockedSpawn.mock.calls[mockedSpawn.mock.calls.length - 1];
+      const mockProcess = mockedSpawn.mock.results[mockedSpawn.mock.results.length - 1].value;
+      
+      // Ensure the process exists and has the kill method
+      expect(mockProcess).toBeDefined();
+      expect(mockProcess.kill).toBeDefined();
       
       // Then stop it
       await expect(server.stopServer()).resolves.not.toThrow();
-      expect((server as any).serverProcess.kill).toHaveBeenCalled();
+      expect(mockProcess.kill).toHaveBeenCalled();
     });
   });
 
@@ -119,9 +138,59 @@ describe('ExternalLokkaMCPServer', () => {
       expect(response.result).toContainEqual(expect.objectContaining({
         name: 'd94_Lokka-Microsoft'
       }));
-    });
+    });    it('should handle microsoft_graph_query tool call', async () => {
+      // Setup custom mock process for this test
+      const mockProcess = {
+        stdout: {
+          on: jest.fn((event, callback) => {
+            if (event === 'data') {
+              // First emit server ready signal
+              setTimeout(() => {
+                callback(Buffer.from('{"jsonrpc":"2.0","id":1,"result":{"capabilities":{}}}'));
+              }, 0);
+            }
+          }),
+          off: jest.fn()
+        },
+        stderr: { on: jest.fn() },
+        on: jest.fn(),
+        kill: jest.fn(),
+        killed: false,
+        stdin: {
+          write: jest.fn((data) => {
+            // Simulate response when we receive a request
+            try {
+              const request = JSON.parse(data);
+              if (request.method === 'tools/call' && request.params.name === 'Lokka-Microsoft') {
+                setTimeout(() => {
+                  const response = {
+                    jsonrpc: '2.0',
+                    id: request.id,
+                    result: {
+                      displayName: 'Test User',
+                      userPrincipalName: 'test@example.com'
+                    }
+                  };
+                  // Trigger the response handler
+                  mockProcess.stdout.on.mock.calls.forEach(([event, callback]) => {
+                    if (event === 'data') {
+                      callback(Buffer.from(JSON.stringify(response)));
+                    }
+                  });
+                }, 0);
+              }
+            } catch (e) {
+              // Ignore JSON parse errors
+            }
+          })
+        }
+      };
+      
+      mockedSpawn.mockReturnValueOnce(mockProcess as any);
+      
+      const testServer = new ExternalLokkaMCPServer(mockConfig, mockAuthService);
+      await testServer.startServer();
 
-    it('should handle microsoft_graph_query tool call', async () => {
       const mockRequest: MCPRequest = {
         id: '123',
         method: 'tools/call',
@@ -134,23 +203,64 @@ describe('ExternalLokkaMCPServer', () => {
         }
       };
 
-      mockedAxios.post.mockResolvedValueOnce({
-        data: {
-          result: {
-            displayName: 'Test User',
-            userPrincipalName: 'test@example.com'
-          }
-        }
-      });
-
-      const response = await server.handleRequest(mockRequest);
+      const response = await testServer.handleRequest(mockRequest);
       
       expect(response).toHaveProperty('id', '123');
       expect(response.result).toHaveProperty('content');
       expect(response.result.content[0].type).toBe('json');
-    });
+    });    it('should handle d94_Lokka-Microsoft tool call', async () => {
+      // Setup custom mock process for this test
+      const mockProcess = {
+        stdout: {
+          on: jest.fn((event, callback) => {
+            if (event === 'data') {
+              // First emit server ready signal
+              setTimeout(() => {
+                callback(Buffer.from('{"jsonrpc":"2.0","id":1,"result":{"capabilities":{}}}'));
+              }, 0);
+            }
+          }),
+          off: jest.fn()
+        },
+        stderr: { on: jest.fn() },
+        on: jest.fn(),
+        kill: jest.fn(),
+        killed: false,
+        stdin: {
+          write: jest.fn((data) => {
+            // Simulate response when we receive a request
+            try {
+              const request = JSON.parse(data);
+              if (request.method === 'tools/call' && request.params.name === 'Lokka-Microsoft') {
+                setTimeout(() => {
+                  const response = {
+                    jsonrpc: '2.0',
+                    id: request.id,
+                    result: {
+                      displayName: 'Test User',
+                      userPrincipalName: 'test@example.com'
+                    }
+                  };
+                  // Trigger the response handler
+                  mockProcess.stdout.on.mock.calls.forEach(([event, callback]) => {
+                    if (event === 'data') {
+                      callback(Buffer.from(JSON.stringify(response)));
+                    }
+                  });
+                }, 0);
+              }
+            } catch (e) {
+              // Ignore JSON parse errors
+            }
+          })
+        }
+      };
+      
+      mockedSpawn.mockReturnValueOnce(mockProcess as any);
+      
+      const testServer = new ExternalLokkaMCPServer(mockConfig, mockAuthService);
+      await testServer.startServer();
 
-    it('should handle d94_Lokka-Microsoft tool call', async () => {
       const mockRequest: MCPRequest = {
         id: '124',
         method: 'tools/call',
@@ -164,16 +274,7 @@ describe('ExternalLokkaMCPServer', () => {
         }
       };
 
-      mockedAxios.post.mockResolvedValueOnce({
-        data: {
-          result: {
-            displayName: 'Test User',
-            userPrincipalName: 'test@example.com'
-          }
-        }
-      });
-
-      const response = await server.handleRequest(mockRequest);
+      const response = await testServer.handleRequest(mockRequest);
       
       expect(response).toHaveProperty('id', '124');
       expect(response.result).toHaveProperty('content');
@@ -207,8 +308,7 @@ describe('ExternalLokkaMCPServer', () => {
       expect(response).toHaveProperty('error');
       expect(response.error?.code).toBe(ErrorCode.NOT_FOUND);
     });  });
-  
-  describe('Client credentials flow', () => {
+    describe('Client credentials flow', () => {
     it('should use client credentials if provided', async () => {
       // Set up the config with client credentials
       const clientCredsConfig = {
@@ -220,19 +320,43 @@ describe('ExternalLokkaMCPServer', () => {
         }
       };
       
+      // Setup mock process for this test
+      const mockProcess = {
+        stdout: {
+          on: jest.fn((event, callback) => {
+            if (event === 'data') {
+              setTimeout(() => {
+                callback(Buffer.from('{"jsonrpc":"2.0","id":1,"result":{"capabilities":{}}}'));
+              }, 0);
+            }
+          })
+        },
+        stderr: { on: jest.fn() },
+        on: jest.fn(),
+        kill: jest.fn(),
+        killed: false,
+        stdin: {
+          write: jest.fn()
+        }
+      };
+      
+      mockedSpawn.mockReturnValueOnce(mockProcess as any);
+      
       const clientCredsServer = new ExternalLokkaMCPServer(clientCredsConfig, mockAuthService);
       await clientCredsServer.startServer();
       
       // Check that the server was started with the correct env variables
       expect(mockedSpawn).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.anything(),
+        'npx',
+        ['-y', '@merill/lokka'],
         expect.objectContaining({
           env: expect.objectContaining({
             TENANT_ID: 'tenant-id',
             CLIENT_ID: 'client-id',
             CLIENT_SECRET: 'client-secret'
-          })
+          }),
+          shell: true,
+          stdio: ['pipe', 'pipe', 'pipe']
         })
       );
     });

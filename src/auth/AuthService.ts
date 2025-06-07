@@ -51,6 +51,14 @@ export class AuthService {
       this.pca = new PublicClientApplication(publicConfig);
     }
   }
+  /**
+   * Sign in the user (alias for login)
+   * @param useRedirectFlow Whether to use redirect flow for authentication
+   * @returns Authentication token
+   */
+  async login(useRedirectFlow: boolean = false): Promise<AuthToken | null> {
+    return this.signIn();
+  }
 
   /**
    * Sign in the user
@@ -70,14 +78,10 @@ export class AuthService {
         
         if (!result) {
           throw new Error('Failed to acquire token using client credentials');
-        }
-
-        return {
+        }        return {
           accessToken: result.accessToken,
           idToken: result.idToken || '',
           expiresOn: result.expiresOn || new Date(Date.now() + 3600 * 1000), // Default 1 hour
-          clientId: this.config.auth.clientId,
-          tenantId: this.config.auth.tenantId,
           scopes: this.config.auth.scopes
         };
       } else {
@@ -91,10 +95,65 @@ export class AuthService {
   }
 
   /**
+   * Sign out the user (alias for logout)
+   */
+  async logout(): Promise<void> {
+    return this.signOut();
+  }
+
+  /**
    * Sign out the user
    */
   async signOut(): Promise<void> {
     this.account = null;
+  }
+
+  /**
+   * Get the current user information
+   * @returns User account information
+   */
+  async getCurrentUser(): Promise<AccountInfo | null> {
+    return this.account;
+  }
+
+  /**
+   * Request additional permissions from the user
+   * @param permissions Array of permission scopes to request
+   * @returns Authentication token with new permissions
+   */
+  async requestAdditionalPermissions(permissions: string[]): Promise<AuthToken | null> {
+    if (!this.config) {
+      throw new Error('Authentication service not initialized');
+    }
+
+    // Update config with new permissions
+    const updatedScopes = [...new Set([...this.config.auth.scopes, ...permissions])];
+    this.config.auth.scopes = updatedScopes;
+
+    // Re-authenticate with new permissions
+    return this.signIn();
+  }
+
+  /**
+   * Get token with specific permissions
+   * @param permissions Array of permission scopes required
+   * @returns Authentication token
+   */
+  async getTokenWithPermissions(permissions: string[]): Promise<AuthToken | null> {
+    if (!this.config) {
+      throw new Error('Authentication service not initialized');
+    }
+
+    // Check if we have all required permissions
+    const hasAllPermissions = permissions.every(p => this.config!.auth.scopes.includes(p));
+    
+    if (!hasAllPermissions) {
+      // Request additional permissions if needed
+      return this.requestAdditionalPermissions(permissions);
+    }
+
+    // Return existing token if we have all permissions
+    return this.getToken();
   }
 
   /**

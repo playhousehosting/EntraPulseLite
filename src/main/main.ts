@@ -3,7 +3,7 @@ import { app, BrowserWindow, ipcMain, Menu } from 'electron';
 import * as path from 'path';
 import { AuthService } from '../auth/AuthService';
 import { GraphService } from '../shared/GraphService';
-import { LLMService } from '../llm/LLMService';
+import { EnhancedLLMService } from '../llm/EnhancedLLMService';
 import { MCPClient } from '../mcp/clients/MCPSDKClient';
 import { MCPAuthService } from '../mcp/auth/MCPAuthService';
 import { GraphMCPClient } from '../mcp/clients/GraphMCPClient';
@@ -15,14 +15,13 @@ if (process.platform === 'win32') {
   app.setAppUserModelId('com.increment.entrapulselite');
 }
 
-// Load environment variables
-require('dotenv').config();
+// Load environment variables from .env.local
+require('dotenv').config({ path: path.join(__dirname, '../../.env.local') });
 
-class EntraPulseLiteApp {
-  private mainWindow: BrowserWindow | null = null;
+class EntraPulseLiteApp {  private mainWindow: BrowserWindow | null = null;
   private authService!: AuthService;
   private graphService!: GraphService;
-  private llmService!: LLMService;
+  private llmService!: EnhancedLLMService;
   private mcpClient!: MCPClient;
   private config!: AppConfig;
 
@@ -42,17 +41,18 @@ class EntraPulseLiteApp {
         tenantId: process.env.MSAL_TENANT_ID && process.env.MSAL_TENANT_ID.trim() !== '' 
           ? process.env.MSAL_TENANT_ID 
           : 'common',
-        scopes: ['User.Read', 'User.ReadBasic.All', 'Directory.Read.All', 'Group.Read.All'],
-        clientSecret: process.env.MSAL_CLIENT_SECRET, // Only needed for confidential client applications
-        useClientCredentials: hasLokkaCreds, // Use client credentials flow if Lokka creds are configured
-      },
-      llm: {
+        scopes: hasLokkaCreds 
+          ? ['https://graph.microsoft.com/.default'] // Client credentials flow requires .default scope
+          : ['User.Read', 'User.ReadBasic.All', 'Directory.Read.All', 'Group.Read.All'], // Interactive flow can use specific scopes
+        clientSecret: process.env.MSAL_CLIENT_SECRET || process.env.LOKKA_CLIENT_SECRET, // Only needed for confidential client applications
+        useClientCredentials: Boolean(hasLokkaCreds), // Use client credentials flow if Lokka creds are configured
+      },      llm: {
         provider: (process.env.LLM_PROVIDER as 'ollama' | 'lmstudio') || 'ollama',
         baseUrl: process.env.LLM_PROVIDER === 'lmstudio' 
           ? process.env.LMSTUDIO_BASE_URL || 'http://localhost:1234'
           : process.env.OLLAMA_BASE_URL || 'http://localhost:11434',
-        model: 'llama2', // Default model
-      },      mcpServers: [
+        model: 'codellama:7b', // Default model
+      },mcpServers: [
         {
           name: 'lokka',
           type: 'lokka',
@@ -63,6 +63,8 @@ class EntraPulseLiteApp {
           type: 'external-lokka',
           port: parseInt(process.env.EXTERNAL_MCP_LOKKA_PORT || '3003'),
           enabled: (process.env.USE_EXTERNAL_LOKKA === 'true' || Boolean(hasLokkaCreds)), // Enable if explicitly set or if creds exist
+          command: 'npx',
+          args: ['-y', '@merill/lokka'],
           options: {
             env: {
               TENANT_ID: process.env.LOKKA_TENANT_ID || process.env.MSAL_TENANT_ID,
@@ -93,13 +95,11 @@ class EntraPulseLiteApp {
           tenantId: this.config.auth.tenantId
         };
       }
-    });
-
-    // Initialize services
-    this.authService = new AuthService();
+    });    // Initialize services
+    this.authService = new AuthService(this.config);
     this.graphService = new GraphService(this.authService);
-    this.llmService = new LLMService(this.config.llm);
-    
+    this.llmService = new EnhancedLLMService(this.config.llm, this.authService);
+
     // Initialize MCP services
     const mcpAuthService = new MCPAuthService(this.authService);
     this.mcpClient = new MCPClient(this.config.mcpServers, mcpAuthService);
@@ -318,12 +318,10 @@ class EntraPulseLiteApp {
         console.error('Get user photo failed:', error);
         return null;
       }
-    });
-
-    // LLM handlers
+    });    // LLM handlers
     ipcMain.handle('llm:chat', async (event, messages) => {
       try {
-        return await this.llmService.chat(messages);
+        return await this.llmService.enhancedChat(messages);
       } catch (error) {
         console.error('LLM chat failed:', error);
         throw error;
@@ -337,7 +335,7 @@ class EntraPulseLiteApp {
         console.error('LLM availability check failed:', error);
         return false;
       }
-    });    // MCP handlers
+    });// MCP handlers
     ipcMain.handle('mcp:call', async (event, server: string, toolName: string, arguments_: any) => {
       try {
         return await this.mcpClient.callTool(server, toolName, arguments_);

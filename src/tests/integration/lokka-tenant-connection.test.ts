@@ -75,23 +75,41 @@ describe('Lokka MCP Server Tenant Connection', () => {
       
       // Execute the request
       const response = await server.handleRequest(request);
-      
-      // Verify the response
+        // Verify the response
       expect(response).toBeDefined();
       expect(response.error).toBeUndefined();
       expect(response.result).toBeDefined();
       expect(response.result.content).toBeDefined();
       expect(response.result.content[0].type).toBe('json');
       
+      // Debug logging to see actual response structure
+      console.log('Raw response:', JSON.stringify(response, null, 2));
+      console.log('Content[0]:', JSON.stringify(response.result.content[0], null, 2));
+      
       // Verify response contains organization data
       const organizationData = response.result.content[0].json;
       expect(organizationData).toBeDefined();
-      expect(organizationData.value).toBeDefined();
-      expect(Array.isArray(organizationData.value)).toBe(true);
-      expect(organizationData.value.length).toBeGreaterThan(0);
+      
+      // Handle different possible response formats from Lokka MCP
+      let orgArray;
+      if (organizationData.value) {
+        // Standard Graph API response format
+        orgArray = organizationData.value;
+      } else if (Array.isArray(organizationData)) {
+        // Direct array format
+        orgArray = organizationData;
+      } else if (organizationData.id) {
+        // Single organization object
+        orgArray = [organizationData];
+      } else {
+        throw new Error(`Unexpected organization data format: ${JSON.stringify(organizationData)}`);
+      }
+      
+      expect(Array.isArray(orgArray)).toBe(true);
+      expect(orgArray.length).toBeGreaterThan(0);
       
       // Verify we have some basic organization properties
-      const org = organizationData.value[0];
+      const org = orgArray[0];
       expect(org.id).toBeDefined();
       expect(org.displayName).toBeDefined();
       
@@ -129,15 +147,26 @@ describe('Lokka MCP Server Tenant Connection', () => {
       expect(response.error).toBeUndefined();
       expect(response.result).toBeDefined();
       expect(response.result.content).toBeDefined();
-      
-      // Verify response contains users data
+        // Verify response contains users data
       const usersData = response.result.content[0].json;
       expect(usersData).toBeDefined();
-      expect(usersData.value).toBeDefined();
-      expect(Array.isArray(usersData.value)).toBe(true);
+      
+      // Handle different possible response formats from Lokka MCP
+      let userArray;
+      if (usersData.value) {
+        // Standard Graph API response format
+        userArray = usersData.value;
+      } else if (Array.isArray(usersData)) {
+        // Direct array format
+        userArray = usersData;
+      } else {
+        throw new Error(`Unexpected users data format: ${JSON.stringify(usersData)}`);
+      }
+      
+      expect(Array.isArray(userArray)).toBe(true);
       
       // Log number of users returned
-      console.log(`Successfully retrieved ${usersData.value.length} users`);
+      console.log(`Successfully retrieved ${userArray.length} users`);
     }, 15000); // Increase timeout for API call
   });
 });

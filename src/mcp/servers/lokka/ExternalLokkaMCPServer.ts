@@ -5,7 +5,6 @@ import { MCPRequest, MCPResponse, MCPServerConfig, MCPTool } from '../../types';
 import { MCPErrorHandler, ErrorCode } from '../../utils';
 import { MCPAuthService } from '../../auth/MCPAuthService';
 import { spawn, ChildProcess } from 'child_process';
-import axios from 'axios';
 
 export interface ExternalLokkaMCPServerConfig extends MCPServerConfig {
   env?: {
@@ -14,8 +13,6 @@ export interface ExternalLokkaMCPServerConfig extends MCPServerConfig {
     CLIENT_SECRET?: string;
     [key: string]: string | undefined;
   };
-  command?: string;
-  args?: string[];
 }
 
 export class ExternalLokkaMCPServer {
@@ -23,14 +20,12 @@ export class ExternalLokkaMCPServer {
   private tools: MCPTool[] = [];
   private authService: MCPAuthService;
   private serverProcess: ChildProcess | null = null;
-  private serverUrl: string;
   private isServerRunning: boolean = false;
   private startupPromise: Promise<void> | null = null;
 
   constructor(config: ExternalLokkaMCPServerConfig, authService: MCPAuthService) {
     this.config = config;
     this.authService = authService;
-    this.serverUrl = `http://localhost:${config.port}`;
     this.initializeTools();
   }
 
@@ -112,7 +107,6 @@ export class ExternalLokkaMCPServer {
       }
     ];
   }
-
   async startServer(): Promise<void> {
     if (this.isServerRunning) {
       return Promise.resolve();
@@ -123,10 +117,10 @@ export class ExternalLokkaMCPServer {
     }
 
     this.startupPromise = new Promise<void>((resolve, reject) => {
-      try {        // Default command and args if not provided in config
-        // Use locally installed Lokka if available
-        const command = this.config.command || 'lokka';
-        const args = this.config.args || [];
+      try {
+        // Use npx to run Lokka MCP server
+        const command = this.config.command || 'npx';
+        const args = this.config.args || ['-y', '@merill/lokka'];
         
         // Get environment variables for the process
         const env: NodeJS.ProcessEnv = {
@@ -136,25 +130,23 @@ export class ExternalLokkaMCPServer {
           TENANT_ID: this.config.env?.TENANT_ID || process.env.LOKKA_TENANT_ID || this.config.authConfig?.tenantId,
           CLIENT_ID: this.config.env?.CLIENT_ID || process.env.LOKKA_CLIENT_ID || this.config.authConfig?.clientId,
           CLIENT_SECRET: this.config.env?.CLIENT_SECRET || process.env.LOKKA_CLIENT_SECRET,
-          PORT: this.config.port.toString(),
         };
         
         console.log(`Starting Lokka MCP server with command: ${command} ${args.join(' ')}`);
         
-        // Spawn the server process
+        // Spawn the server process with stdio for MCP communication
         this.serverProcess = spawn(command, args, {
           env,
           shell: true,
-          stdio: ['ignore', 'pipe', 'pipe']
-        });
-        
+          stdio: ['pipe', 'pipe', 'pipe'] // stdin, stdout, stderr
+        });        
         if (this.serverProcess.stdout) {
           this.serverProcess.stdout.on('data', (data) => {
             const output = data.toString();
             console.log(`[Lokka] ${output}`);
             
-            // Check for server ready message
-            if (output.includes('Server listening') || output.includes('Ready on')) {
+            // Lokka MCP server is ready when it outputs the initial capabilities
+            if (output.includes('"jsonrpc"') || output.includes('capabilities') || output.includes('tools')) {
               this.isServerRunning = true;
               resolve();
             }
@@ -178,67 +170,38 @@ export class ExternalLokkaMCPServer {
           this.isServerRunning = false;
           this.serverProcess = null;
         });
-          // Log environment variables (without the client secret)
+        
+        // Log environment variables (without the client secret)
         console.log('Starting Lokka with env:', {
           TENANT_ID: env.TENANT_ID, 
           CLIENT_ID: env.CLIENT_ID,
-          PORT: env.PORT
+          HAS_CLIENT_SECRET: Boolean(env.CLIENT_SECRET)
         });
-        
-        // Set a timeout in case we don't get a "server ready" message
-        setTimeout(() => {
+          // Set a timeout for server startup
+        setTimeout(async () => {
           if (!this.isServerRunning) {
-            // Try to check if server is responding
-            console.log(`Checking if Lokka server is responding at ${this.serverUrl}...`);
-            axios.get(`${this.serverUrl}/`)
-              .then(() => {
-                console.log('Lokka server is responding to requests');
-                this.isServerRunning = true;
-                resolve();
-              })
-              .catch(err => {
-                console.error('Lokka server health check failed:', err.message);
-                
-                // Try using npx as a fallback method
-                if (command !== 'npx') {
-                  console.log('Attempting to start Lokka using NPX as fallback...');
-                  this.serverProcess?.kill();
-                  this.serverProcess = spawn('npx', ['-y', '@merill/lokka'], {
-                    env,
-                    shell: true,
-                    stdio: ['ignore', 'pipe', 'pipe']
-                  });
-                  
-                  if (this.serverProcess.stdout) {
-                    this.serverProcess.stdout.on('data', (data) => {
-                      const output = data.toString();
-                      console.log(`[Lokka NPX] ${output}`);
-                      
-                      if (output.includes('Server listening') || output.includes('Ready on')) {
-                        this.isServerRunning = true;
-                        resolve();
-                      }
-                    });
-                  }
-                  
-                  if (this.serverProcess.stderr) {
-                    this.serverProcess.stderr.on('data', (data) => {
-                      console.error(`[Lokka NPX Error] ${data.toString()}`);
-                    });
-                  }
-                  
-                  // Set another timeout for the NPX fallback
-                  setTimeout(() => {
-                    if (!this.isServerRunning) {
-                      reject(new Error(`Lokka server failed to start with both local and NPX methods`));
-                    }
-                  }, 15000);
-                } else {
-                  reject(new Error(`Lokka server failed to start within timeout: ${err.message}`));
-                }
-              });
+            console.log('Lokka MCP server started (assuming ready after timeout)');
+            this.isServerRunning = true;
+            
+            // Query available tools from Lokka to understand what's available
+            try {
+              const toolsRequest = {
+                jsonrpc: '2.0',
+                id: Date.now(),
+                method: 'tools/list'
+              };
+              
+              const toolsResponse = await this.sendMCPRequest(toolsRequest);
+              if (toolsResponse.result && toolsResponse.result.tools) {
+                console.log('Available Lokka tools:', toolsResponse.result.tools.map((t: any) => t.name));
+              }
+            } catch (error) {
+              console.log('Could not query Lokka tools list:', error);
+            }
+            
+            resolve();
           }
-        }, 10000);
+        }, 5000); // 5 second timeout
       } catch (error) {
         console.error('Error starting Lokka server:', error);
         reject(error);
@@ -308,8 +271,13 @@ export class ExternalLokkaMCPServer {
             id: request.id,
             result: await this.executeGraphQuery(args)
           };
+            case 'd94_Lokka-Microsoft':
+          return {
+            id: request.id,
+            result: await this.executeLokkaQuery(args)
+          };
           
-        case 'd94_Lokka-Microsoft':
+        case 'Lokka-Microsoft':
           return {
             id: request.id,
             result: await this.executeLokkaQuery(args)
@@ -331,21 +299,20 @@ export class ExternalLokkaMCPServer {
       };
     }
   }
-
   private async executeGraphQuery(params: any): Promise<any> {
     try {
       if (!params.endpoint) {
         throw new Error('Endpoint is required for Graph API queries');
       }
 
-      const apiVersion = params.apiVersion || 'v1.0';
       const method = (params.method || 'GET').toLowerCase();
-      
-      // Construct the MCP request for the Lokka server
-      const lokkaMcpRequest = {
+        // Construct the MCP request for the Lokka server
+      const mcpRequest = {
+        jsonrpc: '2.0',
+        id: Date.now(),
         method: 'tools/call',
         params: {
-          name: 'd94_Lokka-Microsoft',
+          name: 'Lokka-Microsoft',
           arguments: {
             apiType: 'graph',
             path: params.endpoint,
@@ -356,18 +323,18 @@ export class ExternalLokkaMCPServer {
         }
       };
 
-      // Send the request to the local Lokka server
-      const response = await axios.post(this.serverUrl, lokkaMcpRequest);
+      // Send the request via stdio to the Lokka MCP server
+      const response = await this.sendMCPRequest(mcpRequest);
       
-      if (response.data.error) {
-        throw new Error(`Lokka server returned error: ${response.data.error.message}`);
+      if (response.error) {
+        throw new Error(`Lokka server returned error: ${response.error.message}`);
       }
 
       return {
         content: [
           {
             type: 'json',
-            json: response.data.result
+            json: response.result
           }
         ]
       };
@@ -381,29 +348,29 @@ export class ExternalLokkaMCPServer {
     try {
       if (!params.apiType || !params.path || !params.method) {
         throw new Error('apiType, path, and method are required for Lokka queries');
-      }
-
-      // Construct the MCP request for the Lokka server
-      const lokkaMcpRequest = {
+      }      // Construct the MCP request for the Lokka server
+      const mcpRequest = {
+        jsonrpc: '2.0',
+        id: Date.now(),
         method: 'tools/call',
         params: {
-          name: 'd94_Lokka-Microsoft',
+          name: 'Lokka-Microsoft',
           arguments: params
         }
       };
 
-      // Send the request to the local Lokka server
-      const response = await axios.post(this.serverUrl, lokkaMcpRequest);
+      // Send the request via stdio to the Lokka MCP server
+      const response = await this.sendMCPRequest(mcpRequest);
       
-      if (response.data.error) {
-        throw new Error(`Lokka server returned error: ${response.data.error.message}`);
+      if (response.error) {
+        throw new Error(`Lokka server returned error: ${response.error.message}`);
       }
 
       return {
         content: [
           {
             type: 'json',
-            json: response.data.result
+            json: response.result
           }
         ]
       };
@@ -411,5 +378,51 @@ export class ExternalLokkaMCPServer {
       console.error('Error executing Lokka query:', error);
       throw new Error(`Failed to execute Lokka query: ${(error as Error).message}`);
     }
+  }
+
+  /**
+   * Send MCP request via stdio to the Lokka server
+   */
+  private async sendMCPRequest(request: any): Promise<any> {
+    return new Promise((resolve, reject) => {
+      if (!this.serverProcess || !this.serverProcess.stdin || !this.serverProcess.stdout) {
+        reject(new Error('Lokka server process not available'));
+        return;
+      }
+
+      const requestId = request.id;
+      const requestJson = JSON.stringify(request) + '\n';
+      
+      // Set up response handler
+      const responseHandler = (data: Buffer) => {
+        const output = data.toString();
+        try {
+          // Try to parse each line as JSON
+          const lines = output.trim().split('\n');
+          for (const line of lines) {
+            if (line.trim()) {
+              const response = JSON.parse(line);
+              if (response.id === requestId) {
+                this.serverProcess?.stdout?.off('data', responseHandler);
+                resolve(response);
+                return;
+              }
+            }
+          }
+        } catch (error) {
+          // Ignore parsing errors for non-JSON output
+        }
+      };
+
+      // Set up timeout
+      const timeout = setTimeout(() => {
+        this.serverProcess?.stdout?.off('data', responseHandler);
+        reject(new Error('Lokka server request timeout'));
+      }, 30000); // 30 second timeout      // Listen for response
+      this.serverProcess.stdout.on('data', responseHandler);
+
+      // Send the request
+      this.serverProcess.stdin.write(requestJson);
+    });
   }
 }

@@ -1,1 +1,64 @@
-const{contextBridge,ipcRenderer}=require("electron");contextBridge.exposeInMainWorld("electron",{getAssetPath:e=>ipcRenderer.invoke("app:getAssetPath",e)}),contextBridge.exposeInMainWorld("electronAPI",{auth:{login:(e=!1)=>ipcRenderer.invoke("auth:login",e),logout:()=>ipcRenderer.invoke("auth:logout"),getToken:()=>ipcRenderer.invoke("auth:getToken"),getCurrentUser:()=>ipcRenderer.invoke("auth:getCurrentUser"),requestPermissions:e=>ipcRenderer.invoke("auth:requestPermissions",e),getTokenWithPermissions:e=>ipcRenderer.invoke("auth:getTokenWithPermissions",e)},graph:{query:(e,r,i)=>ipcRenderer.invoke("graph:query",e,r,i),getUserPhoto:e=>ipcRenderer.invoke("graph:getUserPhoto",e)},llm:{chat:e=>ipcRenderer.invoke("llm:chat",e),isAvailable:()=>ipcRenderer.invoke("llm:isAvailable")},mcp:{call:(e,r,i)=>ipcRenderer.invoke("mcp:call",e,r,i),listServers:()=>ipcRenderer.invoke("mcp:listServers"),listTools:e=>ipcRenderer.invoke("mcp:listTools",e)},config:{get:()=>ipcRenderer.invoke("config:get"),update:e=>ipcRenderer.invoke("config:update",e)},on:(e,r)=>{["auth-status-changed","chat-message","graph-api-call"].includes(e)&&ipcRenderer.on(e,r)},removeAllListeners:e=>{["auth-status-changed","chat-message","graph-api-call"].includes(e)&&ipcRenderer.removeAllListeners(e)}});
+// Preload script for EntraPulse Lite - Electron security bridge
+const { contextBridge, ipcRenderer } = require('electron');
+
+// Expose protected methods that allow the renderer process to use
+// the ipcRenderer without exposing the entire object
+contextBridge.exposeInMainWorld('electron', {
+  // Asset handling
+  getAssetPath: (assetName) => {
+    return ipcRenderer.invoke('app:getAssetPath', assetName);
+  }
+});
+
+contextBridge.exposeInMainWorld('electronAPI', {
+  // Authentication methods
+  auth: {
+    login: (useRedirectFlow = false) => ipcRenderer.invoke('auth:login', useRedirectFlow),
+    logout: () => ipcRenderer.invoke('auth:logout'),
+    getToken: () => ipcRenderer.invoke('auth:getToken'),
+    getCurrentUser: () => ipcRenderer.invoke('auth:getCurrentUser'),
+    requestPermissions: (permissions) => ipcRenderer.invoke('auth:requestPermissions', permissions),
+    getTokenWithPermissions: (permissions) => ipcRenderer.invoke('auth:getTokenWithPermissions', permissions),
+  },
+
+  // Microsoft Graph methods
+  graph: {
+    query: (endpoint, method, data) => ipcRenderer.invoke('graph:query', endpoint, method, data),
+    getUserPhoto: (userId) => ipcRenderer.invoke('graph:getUserPhoto', userId),
+  },
+
+  // Local LLM methods
+  llm: {
+    chat: (messages) => ipcRenderer.invoke('llm:chat', messages),
+    isAvailable: () => ipcRenderer.invoke('llm:isAvailable'),
+  },
+
+  // MCP methods
+  mcp: {
+    call: (server, toolName, arguments_) => ipcRenderer.invoke('mcp:call', server, toolName, arguments_),
+    listServers: () => ipcRenderer.invoke('mcp:listServers'),
+    listTools: (server) => ipcRenderer.invoke('mcp:listTools', server),
+  },
+
+  // Configuration methods
+  config: {
+    get: () => ipcRenderer.invoke('config:get'),
+    update: (config) => ipcRenderer.invoke('config:update', config),
+  },
+
+  // Event listeners for real-time updates
+  on: (channel, callback) => {
+    const validChannels = ['auth-status-changed', 'chat-message', 'graph-api-call'];
+    if (validChannels.includes(channel)) {
+      ipcRenderer.on(channel, callback);
+    }
+  },
+
+  // Remove event listeners
+  removeAllListeners: (channel) => {
+    const validChannels = ['auth-status-changed', 'chat-message', 'graph-api-call'];
+    if (validChannels.includes(channel)) {
+      ipcRenderer.removeAllListeners(channel);
+    }
+  },
+});

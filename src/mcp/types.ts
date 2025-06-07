@@ -14,6 +14,8 @@ export interface MCPServerConfig {
   enabled: boolean;
   url?: string;
   apiKey?: string;
+  command?: string;
+  args?: string[];
   options?: Record<string, any>;
   authConfig?: MCPAuthConfig;
 }

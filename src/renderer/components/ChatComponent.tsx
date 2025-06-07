@@ -14,8 +14,7 @@ import {
   Avatar,
   Chip,
   CircularProgress,
-  Alert,
-  Divider,
+  Alert,  Divider,
   IconButton,
   Tooltip,
   FormControlLabel,
@@ -30,9 +29,13 @@ import {
   Settings as SettingsIcon,
   Timeline as TraceIcon,
   Shield as ShieldIcon,
+  ExpandMore as ExpandMoreIcon,
+  ExpandLess as ExpandLessIcon,
+  Api as ApiIcon,
+  Psychology as PsychologyIcon,
 } from '@mui/icons-material';
 import { getAssetPath } from '../utils/assetUtils';
-import { ChatMessage, User, AuthToken } from '../../types';
+import { ChatMessage, User, AuthToken, EnhancedLLMResponse, QueryAnalysis } from '../../types';
 import { AppIcon } from './AppIcon';
 import { UserProfileAvatar } from './UserProfileAvatar';
 
@@ -46,10 +49,10 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
   const [authToken, setAuthToken] = useState<AuthToken | null>(null);
   const [llmAvailable, setLlmAvailable] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [currentPermissions, setCurrentPermissions] = useState<string[]>(['User.Read']);
-  const [permissionRequests, setPermissionRequests] = useState<string[]>([]);
+  const [currentPermissions, setCurrentPermissions] = useState<string[]>(['User.Read']);  const [permissionRequests, setPermissionRequests] = useState<string[]>([]);
   const [useRedirectFlow, setUseRedirectFlow] = useState(false);
   const [userPhotoUrl, setUserPhotoUrl] = useState<string | null>(null);
+  const [expandedTraces, setExpandedTraces] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     initializeApp();
@@ -142,21 +145,41 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
     setMessages(prev => [...prev, userMessage]);
     setInputMessage('');
     setIsLoading(true);
-    setError(null);
+    setError(null);    try {
+      // Send message to enhanced LLM service
+      const enhancedResponse = await window.electronAPI.llm.chat([...messages, userMessage]);
+      
+      // Handle both enhanced response format and backward compatibility
+      let content: string;
+      let metadata: any = {
+        llmProvider: 'ollama', // This would come from config
+        model: 'codellama:7b', // This would come from config
+      };
 
-    try {
-      // Send message to LLM
-      const response = await window.electronAPI.llm.chat([...messages, userMessage]);
+      if (typeof enhancedResponse === 'string') {
+        // Fallback for basic string response
+        content = enhancedResponse;
+      } else if (enhancedResponse && typeof enhancedResponse === 'object' && 'finalResponse' in enhancedResponse) {
+        // Enhanced response format
+        const typedResponse = enhancedResponse as EnhancedLLMResponse;
+        content = typedResponse.finalResponse;
+        metadata = {
+          ...metadata,
+          queryAnalysis: typedResponse.analysis,
+          mcpResults: typedResponse.mcpResults,
+          traceData: typedResponse.traceData,
+        };
+      } else {
+        // Fallback
+        content = 'Sorry, I received an unexpected response format.';
+      }
       
       const assistantMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: response,
+        content,
         timestamp: new Date(),
-        metadata: {
-          llmProvider: 'ollama', // This would come from config
-          model: 'llama2', // This would come from config
-        },
+        metadata,
       };
 
       setMessages(prev => [...prev, assistantMessage]);
@@ -243,6 +266,18 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
       setIsLoading(false);
     }
   };
+  const toggleTraceExpansion = (messageId: string) => {
+    setExpandedTraces(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(messageId)) {
+        newSet.delete(messageId);
+      } else {
+        newSet.add(messageId);
+      }
+      return newSet;
+    });
+  };
+
   if (!authToken) {
     return (
       <Box 
@@ -416,8 +451,7 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
                       </Typography>
                       <Typography variant="caption" color="textSecondary">
                         {message.timestamp.toLocaleTimeString()}
-                      </Typography>
-                      {message.metadata?.graphApiCalls && (
+                      </Typography>                      {message.metadata?.graphApiCalls && (
                         <Tooltip title="Graph API calls made">
                           <Chip
                             icon={<TraceIcon />}
@@ -427,16 +461,142 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
                           />
                         </Tooltip>
                       )}
+                      {message.metadata?.traceData && (
+                        <Tooltip title="Show MCP trace data">
+                          <Chip
+                            icon={<ApiIcon />}
+                            label="MCP Trace"
+                            size="small"
+                            variant="outlined"
+                            onClick={() => toggleTraceExpansion(message.id)}
+                            sx={{ cursor: 'pointer' }}
+                          />
+                        </Tooltip>
+                      )}
+                      {message.metadata?.queryAnalysis && (
+                        <Tooltip title="Query analysis">
+                          <Chip
+                            icon={<PsychologyIcon />}
+                            label={`${Math.round(message.metadata.queryAnalysis.confidence * 100)}%`}
+                            size="small"
+                            variant="outlined"
+                            color="secondary"
+                          />
+                        </Tooltip>
+                      )}
                     </Box>
-                  }
-                  secondary={
-                    <Typography
-                      variant="body1"
-                      component="div"
-                      sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
-                    >
-                      {message.content}
-                    </Typography>
+                  }                  secondary={
+                    <>
+                      <Typography
+                        variant="body1"
+                        component="div"
+                        sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
+                      >
+                        {message.content}
+                      </Typography>
+                      
+                      {/* Enhanced trace data display */}
+                      {message.metadata?.traceData && expandedTraces.has(message.id) && (
+                        <Box sx={{ mt: 2, p: 2, bgcolor: 'background.default', borderRadius: 1 }}>
+                          <Box display="flex" alignItems="center" gap={1} mb={1}>
+                            <ApiIcon fontSize="small" />
+                            <Typography variant="subtitle2">MCP Integration Trace</Typography>
+                            <IconButton 
+                              size="small" 
+                              onClick={() => toggleTraceExpansion(message.id)}
+                            >
+                              <ExpandLessIcon />
+                            </IconButton>
+                          </Box>
+                          
+                          {/* Query Analysis */}
+                          {message.metadata.queryAnalysis && (
+                            <Box sx={{ mb: 2 }}>
+                              <Typography variant="caption" color="primary" gutterBottom>
+                                Query Analysis (Confidence: {Math.round(message.metadata.queryAnalysis.confidence * 100)}%)
+                              </Typography>
+                              <Typography variant="body2" sx={{ mb: 1 }}>
+                                {message.metadata.queryAnalysis.reasoning}
+                              </Typography>
+                              <Box display="flex" gap={1} flexWrap="wrap">
+                                {message.metadata.queryAnalysis.needsFetchMcp && (
+                                  <Chip label="Fetch MCP" size="small" color="info" />
+                                )}
+                                {message.metadata.queryAnalysis.needsLokkaMcp && (
+                                  <Chip label="Lokka MCP" size="small" color="success" />
+                                )}
+                              </Box>
+                            </Box>
+                          )}
+                          
+                          {/* Execution Steps */}
+                          <Box sx={{ mb: 2 }}>
+                            <Typography variant="caption" color="primary" gutterBottom>
+                              Execution Steps
+                            </Typography>
+                            {message.metadata.traceData.steps.map((step, index) => (
+                              <Typography key={index} variant="body2" sx={{ fontSize: '0.85rem', mb: 0.5 }}>
+                                {index + 1}. {step}
+                              </Typography>
+                            ))}
+                          </Box>
+                          
+                          {/* Timing Information */}
+                          <Box sx={{ mb: 2 }}>
+                            <Typography variant="caption" color="primary" gutterBottom>
+                              Performance
+                            </Typography>
+                            <Box display="flex" gap={2} flexWrap="wrap">
+                              {Object.entries(message.metadata.traceData.timing).map(([key, value]) => (
+                                <Chip 
+                                  key={key} 
+                                  label={`${key}: ${value}ms`} 
+                                  size="small" 
+                                  variant="outlined" 
+                                />
+                              ))}
+                            </Box>
+                          </Box>
+                          
+                          {/* MCP Results */}
+                          {message.metadata.mcpResults && (
+                            <Box>
+                              <Typography variant="caption" color="primary" gutterBottom>
+                                MCP Results
+                              </Typography>
+                              {message.metadata.mcpResults.fetchResult && (
+                                <Box sx={{ mb: 1 }}>
+                                  <Typography variant="body2" sx={{ fontSize: '0.85rem' }}>
+                                    Fetch MCP: {JSON.stringify(message.metadata.mcpResults.fetchResult, null, 2).substring(0, 200)}...
+                                  </Typography>
+                                </Box>
+                              )}
+                              {message.metadata.mcpResults.lokkaResult && (
+                                <Box>
+                                  <Typography variant="body2" sx={{ fontSize: '0.85rem' }}>
+                                    Lokka MCP: {JSON.stringify(message.metadata.mcpResults.lokkaResult, null, 2).substring(0, 200)}...
+                                  </Typography>
+                                </Box>
+                              )}
+                            </Box>
+                          )}
+                          
+                          {/* Errors */}
+                          {message.metadata.traceData.errors && message.metadata.traceData.errors.length > 0 && (
+                            <Box sx={{ mt: 2 }}>
+                              <Typography variant="caption" color="error" gutterBottom>
+                                Errors
+                              </Typography>
+                              {message.metadata.traceData.errors.map((error, index) => (
+                                <Alert key={index} severity="warning" sx={{ mt: 1 }}>
+                                  {error}
+                                </Alert>
+                              ))}
+                            </Box>
+                          )}
+                        </Box>
+                      )}
+                    </>
                   }
                 />
               </Box>

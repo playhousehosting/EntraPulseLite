@@ -1,25 +1,32 @@
 // Integration tests for AuthService with MSAL
 import { AuthService } from '../../auth/AuthService';
 import { PublicClientApplication } from '@azure/msal-node';
+import { AppConfig } from '../../types';
 
 // Make sure our mocks are properly typed
-jest.mock('@azure/msal-node', () => ({
-  PublicClientApplication: jest.fn().mockImplementation(() => ({
+jest.mock('@azure/msal-node', () => {
+  const mockMsalInstance = {
     acquireTokenInteractive: jest.fn(),
     acquireTokenSilent: jest.fn(),
+    acquireTokenByClientCredential: jest.fn(),
     getTokenCache: jest.fn().mockReturnValue({
       getAllAccounts: jest.fn(),
       removeAccount: jest.fn()
     }),
     clearCache: jest.fn()
-  })),
-  LogLevel: {
-    Error: 0,
-    Warning: 1,
-    Info: 2,
-    Verbose: 3,
-  },
-}));
+  };
+
+  return {
+    PublicClientApplication: jest.fn().mockImplementation(() => mockMsalInstance),
+    ConfidentialClientApplication: jest.fn().mockImplementation(() => mockMsalInstance),
+    LogLevel: {
+      Error: 0,
+      Warning: 1,
+      Info: 2,
+      Verbose: 3,
+    },
+  };
+});
 
 // Mock electron shell
 jest.mock('electron', () => ({
@@ -31,14 +38,36 @@ jest.mock('electron', () => ({
 describe('AuthService Integration', () => {
   let authService: AuthService;
   let mockMsal: any;
-
   beforeEach(() => {
     // Mock environment variables
     process.env.MSAL_CLIENT_ID = 'test-client-id';
     process.env.MSAL_TENANT_ID = 'test-tenant-id';
     
-    authService = new AuthService();
-    mockMsal = (PublicClientApplication as jest.MockedClass<typeof PublicClientApplication>).mock.results[0].value;
+    // Clear any existing mocks
+    jest.clearAllMocks();
+      // Create AuthService with proper config
+    const config: AppConfig = {
+      auth: {
+        clientId: 'test-client-id',
+        tenantId: 'test-tenant-id',
+        scopes: ['https://graph.microsoft.com/.default']
+      },      llm: {
+        provider: 'ollama',
+        baseUrl: 'http://localhost:11434',
+        model: 'llama2'
+      },
+      mcpServers: [],
+      features: {
+        enablePremiumFeatures: false,
+        enableTelemetry: false
+      }
+    };
+    
+    authService = new AuthService(config);
+    
+    // Get the mock instance directly from the constructor call
+    const MockedPublicClientApplication = PublicClientApplication as jest.MockedClass<typeof PublicClientApplication>;
+    mockMsal = MockedPublicClientApplication.mock.instances[MockedPublicClientApplication.mock.instances.length - 1];
   });
 
   afterEach(() => {

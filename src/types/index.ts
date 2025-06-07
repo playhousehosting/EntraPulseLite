@@ -28,6 +28,16 @@ export interface ChatMessage {
     graphApiCalls?: GraphApiCall[];
     llmProvider?: string;
     model?: string;
+    queryAnalysis?: QueryAnalysis;
+    mcpResults?: {
+      fetchResult?: any;
+      lokkaResult?: any;
+    };
+    traceData?: {
+      steps: string[];
+      timing: Record<string, number>;
+      errors?: string[];
+    };
   };
 }
 
@@ -105,6 +115,32 @@ export interface ElectronAPI {
   config: {
     get: () => Promise<AppConfig>;
     update: (config: Partial<AppConfig>) => Promise<void>;
+  };
+}
+
+export interface QueryAnalysis {
+  needsFetchMcp: boolean;
+  needsLokkaMcp: boolean;
+  graphEndpoint?: string;
+  graphMethod?: string;
+  graphParams?: any;
+  documentationQuery?: string;
+  permissionQuery?: string;
+  confidence: number;
+  reasoning: string;
+}
+
+export interface EnhancedLLMResponse {
+  analysis: QueryAnalysis;
+  mcpResults: {
+    fetchResult?: any;
+    lokkaResult?: any;
+  };
+  finalResponse: string;
+  traceData: {
+    steps: string[];
+    timing: Record<string, number>;
+    errors?: string[];
   };
 }
 
