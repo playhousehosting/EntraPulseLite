@@ -1,12 +1,13 @@
 // Enhanced LLM Service that orchestrates MCP tool usage
-// Integrates LLM, Fetch MCP, and Lokka MCP components for intelligent query handling
+// Integrates unified LLM (local/cloud), Fetch MCP, and Lokka MCP components for intelligent query handling
 
 import axios from 'axios';
 import { LLMConfig, ChatMessage } from '../types';
-import { MCPClient } from '../mcp/clients/MCPClient';
+import { MCPClient } from '../mcp/clients';
 import { MCPAuthService } from '../mcp/auth/MCPAuthService';
 import { MCPServerConfig } from '../mcp/types';
 import { AuthService } from '../auth/AuthService';
+import { UnifiedLLMService } from './UnifiedLLMService';
 
 export interface QueryAnalysis {
   needsFetchMcp: boolean;
@@ -39,32 +40,42 @@ export class EnhancedLLMService {
   private mcpClient: MCPClient;
   private authService: AuthService;
   private mcpAuthService: MCPAuthService;
-
-  constructor(config: LLMConfig, authService: AuthService) {
+  private unifiedLLM: UnifiedLLMService;  constructor(config: LLMConfig, authService: AuthService, mcpClient?: MCPClient) {
     this.config = config;
     this.authService = authService;
     this.mcpAuthService = new MCPAuthService(authService);
-      // Initialize MCP client with both servers
-    const serverConfigs: MCPServerConfig[] = [
-      {
-        name: 'fetch',
-        type: 'fetch',
-        port: 3001,
-        enabled: true,
-        url: 'http://localhost:3001'
-      },
-      {
-        name: 'lokka',
-        type: 'lokka',
-        port: 3002,
-        enabled: true,
-        url: 'http://localhost:3002',
-        command: 'npx',
-        args: ['@merill/lokka', '--stdio']
-      }
-    ];
     
-    this.mcpClient = new MCPClient(serverConfigs, this.mcpAuthService);
+    // Use provided MCPClient or create a fallback one
+    if (mcpClient) {
+      this.mcpClient = mcpClient;
+      console.log('EnhancedLLMService: Using provided MCPClient');
+    } else {
+      console.log('EnhancedLLMService: Creating fallback MCPClient with basic servers');
+      // Initialize MCP client with fallback servers (for backward compatibility)
+      const serverConfigs: MCPServerConfig[] = [
+        {
+          name: 'fetch',
+          type: 'fetch',
+          port: 3001,
+          enabled: true,
+          url: 'http://localhost:3001'
+        },
+        {
+          name: 'lokka',
+          type: 'lokka',
+          port: 3002,
+          enabled: true,
+          url: 'http://localhost:3002',
+          command: 'npx',
+          args: ['@merill/lokka', '--stdio']
+        }
+      ];
+      
+      this.mcpClient = new MCPClient(serverConfigs, this.mcpAuthService);
+    }
+    
+    // Initialize UnifiedLLMService with MCP client for enhanced model discovery
+    this.unifiedLLM = new UnifiedLLMService(config, this.mcpClient);
   }
 
   /**
@@ -296,7 +307,6 @@ Respond ONLY with a JSON object in this exact format:
       reasoning: 'Used heuristic analysis as fallback'
     };
   }
-
   /**
    * Generate the final response using LLM with MCP results
    */
@@ -346,7 +356,21 @@ Respond ONLY with a JSON object in this exact format:
           dataKeys: lokkaData && typeof lokkaData === 'object' ? Object.keys(lokkaData) : 'N/A'
         });
         
-        contextData += `Microsoft Graph Data:\n${JSON.stringify(lokkaData, null, 2)}\n\n`;
+        // Extract result from various possible response structures
+        let finalLokkaData = lokkaData;
+        if (lokkaData.value && Array.isArray(lokkaData.value)) {
+          // Common Graph API response format with 'value' array
+          finalLokkaData = lokkaData.value;
+        } else if (lokkaData.result && typeof lokkaData.result === 'object') {
+          // Nested result format
+          finalLokkaData = lokkaData.result;
+          // Check for further nesting in another 'value' property
+          if (finalLokkaData.value && Array.isArray(finalLokkaData.value)) {
+            finalLokkaData = finalLokkaData.value;
+          }
+        }
+        
+        contextData += `Microsoft Graph Data:\n${JSON.stringify(finalLokkaData, null, 2)}\n\n`;
       }
     }
     
@@ -388,9 +412,7 @@ Be concise but thorough in your response.`;
       console.error('Failed to generate final response:', error);
       return `I encountered an error while processing your request: ${error}. However, I was able to retrieve some data that might be helpful:\n\n${contextData}`;
     }
-  }
-
-  /**
+  }  /**
    * Basic chat method for fallback and internal use
    */
   async basicChat(messages: ChatMessage[]): Promise<string> {
@@ -398,143 +420,29 @@ Be concise but thorough in your response.`;
       console.log('basicChat called with provider:', this.config.provider);
       console.log('basicChat messages:', messages.length);
       
-      let response: string;
-      
-      if (this.config.provider === 'ollama') {
-        response = await this.chatWithOllama(messages);
-      } else if (this.config.provider === 'lmstudio') {
-        response = await this.chatWithLMStudio(messages);
-      } else {
-        throw new Error(`Unsupported LLM provider: ${this.config.provider}`);
-      }
+      // We're using the unified LLM service, which now automatically handles query extraction
+      // for both local and cloud LLM services
+      const response = await this.unifiedLLM.chat(messages);
       
       console.log('basicChat response:', {
         length: response.length,
-        hasContent: !!response && response.trim().length > 0
+        hasContent: !!response && response.trim().length > 0,
+        hasExecuteQueryTags: response.includes('<execute_query>')
       });
       
       return response;
     } catch (error) {
       console.error('Basic chat failed:', error);
-      throw new Error(`Failed to communicate with local LLM: ${(error as Error).message}`);
+      throw new Error(`Failed to communicate with LLM: ${(error as Error).message}`);
     }
   }
 
   async isAvailable(): Promise<boolean> {
-    try {
-      if (this.config.provider === 'ollama') {
-        const response = await axios.get(`${this.config.baseUrl}/api/tags`, {
-          timeout: 5000,
-        });
-        return response.status === 200;
-      } else if (this.config.provider === 'lmstudio') {
-        const response = await axios.get(`${this.config.baseUrl}/v1/models`, {
-          timeout: 5000,
-        });
-        return response.status === 200;
-      } else {
-        return false;
-      }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.log(`${this.config.provider} is not running at ${this.config.baseUrl}`);
-      return false;
-    }
-  }
-
-  private async chatWithOllama(messages: ChatMessage[]): Promise<string> {
-    const ollamaMessages = messages.map(msg => ({
-      role: msg.role,
-      content: msg.content,
-    }));
-
-    console.log('Sending request to Ollama:', {
-      model: this.config.model,
-      messageCount: ollamaMessages.length
-    });
-
-    try {
-      const response = await axios.post(`${this.config.baseUrl}/api/chat`, {
-        model: this.config.model,
-        messages: ollamaMessages,
-        stream: false,
-        options: {
-          temperature: this.config.temperature || 0.7,
-        },
-      });
-
-      console.log('Ollama response:', {
-        hasData: !!response.data,
-        hasMessage: !!response.data?.message,
-        hasContent: !!response.data?.message?.content
-      });
-
-      if (!response.data?.message?.content) {
-        throw new Error('Invalid response format from Ollama');
-      }
-
-      return response.data.message.content;
-    } catch (error) {
-      if (axios.isAxiosError(error)) {
-        throw new Error(`Ollama request failed: ${error.message}`);
-      }
-      throw error;
-    }
-  }
-
-  private async chatWithLMStudio(messages: ChatMessage[]): Promise<string> {
-    const openaiMessages = messages.map(msg => ({
-      role: msg.role,
-      content: msg.content,
-    }));
-
-    console.log('Sending request to LM Studio:', {
-      model: this.config.model,
-      messageCount: openaiMessages.length
-    });
-
-    try {
-      const response = await axios.post(`${this.config.baseUrl}/v1/chat/completions`, {
-        model: this.config.model,
-        messages: openaiMessages,
-        temperature: this.config.temperature || 0.7,
-        max_tokens: this.config.maxTokens || 2048,
-      });
-
-      console.log('LM Studio response:', {
-        hasData: !!response.data,
-        hasChoices: !!response.data?.choices,
-        choiceCount: response.data?.choices?.length || 0,
-        hasContent: !!response.data?.choices?.[0]?.message?.content
-      });
-
-      if (!response.data?.choices?.[0]?.message?.content) {
-        throw new Error('Invalid response format from LM Studio');
-      }
-
-      return response.data.choices[0].message.content;
-    } catch (error) {
-      if (axios.isAxiosError(error)) {
-        throw new Error(`LM Studio request failed: ${error.message}`);
-      }
-      throw error;
-    }
+    return this.unifiedLLM.isAvailable();
   }
 
   async getAvailableModels(): Promise<string[]> {
-    try {
-      if (this.config.provider === 'ollama') {
-        const response = await axios.get(`${this.config.baseUrl}/api/tags`);
-        return response.data.models?.map((model: any) => model.name) || [];
-      } else if (this.config.provider === 'lmstudio') {
-        const response = await axios.get(`${this.config.baseUrl}/v1/models`);
-        return response.data.data?.map((model: any) => model.id) || [];
-      }
-      return [];
-    } catch (error) {
-      console.error('Failed to get available models:', error);
-      return [];
-    }
+    return this.unifiedLLM.getAvailableModels();
   }
 
   /**

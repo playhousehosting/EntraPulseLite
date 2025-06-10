@@ -17,6 +17,8 @@ export interface AuthToken {
   idToken: string;
   expiresOn: Date;
   scopes: string[];
+  clientId?: string;
+  tenantId?: string;
 }
 
 export interface ChatMessage {
@@ -52,11 +54,14 @@ export interface GraphApiCall {
 }
 
 export interface LLMConfig {
-  provider: 'ollama' | 'lmstudio';
-  baseUrl: string;
+  provider: 'ollama' | 'lmstudio' | 'openai' | 'anthropic';
+  baseUrl?: string; // Not required for cloud providers
   model: string;
   temperature?: number;
   maxTokens?: number;
+  apiKey?: string; // For cloud providers
+  organization?: string; // For OpenAI
+  preferLocal?: boolean; // Whether to prefer local over cloud when both are available
 }
 
 export interface MCPAuthConfig {
@@ -73,11 +78,16 @@ export interface MCPServerConfig {
   enabled: boolean;
   url?: string;
   apiKey?: string;
+  command?: string; // For external MCP servers
+  args?: string[]; // For external MCP servers
   options?: Record<string, any>;
   authConfig?: MCPAuthConfig;
 }
 
 export interface AppConfig {
+  app?: {
+    name: string;
+  };
   auth: {
     clientId: string;
     tenantId: string;
@@ -104,17 +114,19 @@ export interface ElectronAPI {
   };  graph: {
     query: (endpoint: string, method?: string, data?: any) => Promise<any>;
     getUserPhoto: (userId?: string) => Promise<string | null>;
-  };
-  llm: {
+  };  llm: {
     chat: (messages: ChatMessage[]) => Promise<string>;
     isAvailable: () => Promise<boolean>;
-  };  mcp: {
+    testConnection: (config: LLMConfig) => Promise<boolean>;
+    getAvailableModels: (config: LLMConfig) => Promise<string[]>;
+  };mcp: {
     call: (server: string, toolName: string, arguments_: any) => Promise<any>;
     listServers: () => Promise<MCPServerConfig[]>;
-  };
-  config: {
+  };  config: {
     get: () => Promise<AppConfig>;
     update: (config: Partial<AppConfig>) => Promise<void>;
+    getLLMConfig: () => Promise<LLMConfig>;
+    saveLLMConfig: (config: LLMConfig) => Promise<void>;
   };
 }
 

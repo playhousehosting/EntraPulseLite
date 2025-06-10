@@ -106,16 +106,18 @@ export class ExternalLokkaMCPServer {
         }
       }
     ];
-  }
-  async startServer(): Promise<void> {
+  }  async startServer(): Promise<void> {
     if (this.isServerRunning) {
+      console.log('Lokka server already running');
       return Promise.resolve();
     }
 
     if (this.startupPromise) {
+      console.log('Lokka server already starting up');
       return this.startupPromise;
     }
 
+    console.log('Starting Lokka MCP server...');
     this.startupPromise = new Promise<void>((resolve, reject) => {
       try {
         // Use npx to run Lokka MCP server

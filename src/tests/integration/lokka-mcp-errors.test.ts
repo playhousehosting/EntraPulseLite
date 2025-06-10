@@ -27,8 +27,7 @@ const invalidConfig: any = {
 describe('Lokka MCP Server Error Handling', () => {
   let server: ExternalLokkaMCPServer;
   let authService: MCPAuthService;
-  
-  beforeAll(async () => {
+    beforeAll(async () => {
     // Initialize auth service with invalid credentials
     const msalAuthService = new AuthService({
       app: { name: 'EntraPulseLite-Test' },
@@ -38,6 +37,16 @@ describe('Lokka MCP Server Error Handling', () => {
         clientSecret: 'invalid-client-secret',
         useClientCredentials: true,
         scopes: ['https://graph.microsoft.com/.default']
+      },
+      llm: {
+        provider: 'ollama',
+        model: 'test-model',
+        baseUrl: 'http://localhost:11434'
+      },
+      mcpServers: [],
+      features: {
+        enablePremiumFeatures: false,
+        enableTelemetry: false
       }
     });
     

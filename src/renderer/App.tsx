@@ -5,10 +5,21 @@ import { Settings as SettingsIcon, Brightness4, Brightness7 } from '@mui/icons-m
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { ChatComponent } from './components/ChatComponent';
 import { AppIcon } from './components/AppIcon';
+import { SettingsDialog } from './components/SettingsDialog';
+import { LLMConfig } from '../types';
 
 export const App: React.FC = () => {
   const [darkMode, setDarkMode] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [llmConfig, setLlmConfig] = useState<LLMConfig>({
+    provider: 'openai', // Default to cloud for better initial experience
+    model: 'gpt-4o-mini',
+    temperature: 0.7,
+    maxTokens: 2048,
+    apiKey: '',
+    preferLocal: false
+  });
 
   // Create dynamic theme based on mode
   const theme = createTheme({
@@ -29,10 +40,11 @@ export const App: React.FC = () => {
       fontFamily: 'Segoe UI, system-ui, sans-serif',
     },
   });
-
   useEffect(() => {
     // Check authentication status on app load
     checkAuthStatus();
+    // Load saved LLM configuration
+    loadLLMConfig();
   }, []);
 
   const checkAuthStatus = async () => {
@@ -45,13 +57,33 @@ export const App: React.FC = () => {
     }
   };
 
+  const loadLLMConfig = async () => {
+    try {
+      const savedConfig = await window.electronAPI?.config?.getLLMConfig();
+      if (savedConfig) {
+        setLlmConfig(savedConfig);
+      }
+    } catch (error) {
+      console.log('No saved LLM config, using defaults:', error);
+    }
+  };
+
   const handleThemeToggle = () => {
     setDarkMode(!darkMode);
   };
 
   const handleSettings = () => {
-    // TODO: Open settings dialog
-    console.log('Settings clicked');
+    setSettingsOpen(true);
+  };
+
+  const handleSaveSettings = async (newConfig: LLMConfig) => {
+    try {
+      await window.electronAPI?.config?.saveLLMConfig(newConfig);
+      setLlmConfig(newConfig);
+      console.log('LLM configuration saved:', newConfig.provider);
+    } catch (error) {
+      console.error('Failed to save LLM configuration:', error);
+    }
   };
 
   return (
@@ -94,12 +126,18 @@ export const App: React.FC = () => {
               <SettingsIcon />
             </IconButton>
           </Toolbar>
-        </AppBar>
-
-        {/* Main Content */}
+        </AppBar>        {/* Main Content */}
         <Box sx={{ flex: 1, overflow: 'hidden' }}>
           <ChatComponent />
         </Box>
+
+        {/* Settings Dialog */}
+        <SettingsDialog
+          open={settingsOpen}
+          onClose={() => setSettingsOpen(false)}
+          currentConfig={llmConfig}
+          onSave={handleSaveSettings}
+        />
       </Box>
     </ThemeProvider>
   );

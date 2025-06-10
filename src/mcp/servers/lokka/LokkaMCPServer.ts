@@ -136,7 +136,9 @@ export class LokkaMCPServer {
       const version = params.version || 'v1.0';
       const method = (params.method || 'GET').toUpperCase();
 
-      let request = client.api(params.endpoint).version(version);      // Add query parameters if provided
+      let request = client.api(params.endpoint).version(version);
+
+      // Add query parameters if provided
       if (params.queryParams) {
         request = request.query(params.queryParams);
       }
@@ -160,20 +162,18 @@ export class LokkaMCPServer {
           result = await request.delete();
           break;
         default:
-          throw new Error(`Unsupported HTTP method: ${params.method}`);
+          throw new Error(`Unsupported HTTP method: ${method}`);
       }
 
+      // Ensure the result is returned in a structured format
       return {
         content: [
-          {
-            type: 'json',
-            json: result
-          }
-        ]
+          { type: 'json', json: result },
+        ],
       };
     } catch (error) {
-      console.error('Error executing Graph query:', error);
-      throw new Error(`Failed to execute Graph query: ${(error as Error).message}`);
+      console.error('Error executing Graph API query:', error);
+      throw error;
     }
   }
 

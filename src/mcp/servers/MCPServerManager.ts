@@ -10,9 +10,13 @@ export class MCPServerManager {
   private servers: Map<string, MCPServerHandlers> = new Map();
   private configs: MCPServerConfig[] = [];
   private authService?: MCPAuthService;
+    // Static instance for singleton access
+  private static _instance: MCPServerManager | null = null;
   
-  // Static instance for singleton access
-  static _instance: MCPServerManager | null = null;
+  // Static getter to access the instance
+  public static get instance(): MCPServerManager | null {
+    return MCPServerManager._instance;
+  }
 
   constructor(serverConfigs: MCPServerConfig[], authService?: MCPAuthService) {
     this.configs = serverConfigs;
@@ -21,16 +25,20 @@ export class MCPServerManager {
     
     // Store instance reference for singleton access
     MCPServerManager._instance = this;
-  }
-  private initializeServers(): void {
+    console.log('MCPServerManager instance created and stored');
+  }  private initializeServers(): void {
+    console.log(`Initializing ${this.configs.length} MCP servers...`);
+    
     this.configs.forEach(config => {
       if (config.enabled) {
         try {
+          console.log(`Creating MCP server: ${config.name} (${config.type})`);
           const serverInstance = MCPServerFactory.createServer(config, this.authService);
           this.servers.set(config.name, serverInstance);
           
-          // Start server if it has a startServer method (like ExternalLokkaMCPServer)
+          // Start server if it has a startServer method
           if (serverInstance.startServer) {
+            console.log(`Starting MCP server: ${config.name}`);
             serverInstance.startServer()
               .then(() => console.log(`MCP server '${config.name}' started successfully`))
               .catch(err => console.error(`Failed to start MCP server '${config.name}':`, err));
@@ -40,8 +48,12 @@ export class MCPServerManager {
         } catch (error) {
           console.error(`Failed to initialize MCP server '${config.name}':`, error);
         }
+      } else {
+        console.log(`Skipping disabled MCP server: ${config.name}`);
       }
     });
+    
+    console.log(`MCP servers initialization complete. ${this.servers.size} servers initialized.`);
   }
 
   getServerInstance(name: string): MCPServerHandlers {
@@ -60,22 +72,31 @@ export class MCPServerManager {
     const server = this.getServerInstance(serverName);
     return server.handleRequest(request);
   }
-  
-  async stopAllServers(): Promise<void> {
-    const stopPromises: Promise<void>[] = [];
+    async stopAllServers(): Promise<void> {
+    console.log('Stopping all MCP servers...');
     
-    for (const [name, server] of this.servers.entries()) {
+    const stopPromises = Array.from(this.servers.entries()).map(async ([name, server]) => {
       if (server.stopServer) {
-        console.log(`Stopping MCP server: ${name}`);
-        stopPromises.push(
-          server.stopServer()
-            .catch(err => console.error(`Error stopping MCP server ${name}:`, err))
-        );
+        try {
+          await server.stopServer();
+          console.log(`Successfully stopped MCP server: ${name}`);
+        } catch (error) {
+          console.error(`Error stopping MCP server ${name}:`, error);
+        }
       }
-    }
-    
+    });
+
     await Promise.all(stopPromises);
+    this.servers.clear();
     console.log('All MCP servers stopped');
+  }
+
+  public getServer(name: string): MCPServerHandlers | undefined {
+    return this.servers.get(name);
+  }
+
+  public getAllServers(): Map<string, MCPServerHandlers> {
+    return this.servers;
   }
 }
 

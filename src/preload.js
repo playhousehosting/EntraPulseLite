@@ -31,6 +31,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   llm: {
     chat: (messages) => ipcRenderer.invoke('llm:chat', messages),
     isAvailable: () => ipcRenderer.invoke('llm:isAvailable'),
+    testConnection: (config) => ipcRenderer.invoke('llm:testConnection', config),
+    getAvailableModels: (config) => ipcRenderer.invoke('llm:getAvailableModels', config),
+    testProviderConnection: (provider, config) => ipcRenderer.invoke('llm:testProviderConnection', provider, config),
+    getProviderModels: (provider, config) => ipcRenderer.invoke('llm:getProviderModels', provider, config),
   },
 
   // MCP methods
@@ -44,6 +48,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   config: {
     get: () => ipcRenderer.invoke('config:get'),
     update: (config) => ipcRenderer.invoke('config:update', config),
+    getLLMConfig: () => ipcRenderer.invoke('config:getLLMConfig'),
+    saveLLMConfig: (config) => ipcRenderer.invoke('config:saveLLMConfig', config),
   },
 
   // Event listeners for real-time updates

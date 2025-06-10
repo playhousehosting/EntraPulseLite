@@ -3,7 +3,8 @@
 
 import { MCPServerConfig } from '../types';
 import { FetchMCPServer } from './fetch';
-import { LokkaMCPServer, ExternalLokkaMCPServer } from './lokka';
+import { LokkaMCPServer } from './lokka';
+import { ExternalLokkaMCPStdioServer } from './lokka/ExternalLokkaMCPStdioServer';
 import { MCPAuthService } from '../auth/MCPAuthService';
 
 export interface MCPServerHandlers {
@@ -21,12 +22,11 @@ export class MCPServerFactory {
         if (!authService) {
           throw new Error('Auth service is required for lokka MCP server');
         }
-        return new LokkaMCPServer(config, authService);
-      case 'external-lokka':
+        return new LokkaMCPServer(config, authService);      case 'external-lokka':
         if (!authService) {
           throw new Error('Auth service is required for external lokka MCP server');
         }
-        return new ExternalLokkaMCPServer(config, authService);
+        return new ExternalLokkaMCPStdioServer(config, authService);
       default:
         throw new Error(`Unsupported MCP server type: ${config.type}`);
     }

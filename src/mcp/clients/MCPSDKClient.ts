@@ -99,7 +99,6 @@ export class MCPClient {
       throw error;
     }
   }
-
   /**
    * Call a tool on an MCP server
    * @param serverName Name of the MCP server
@@ -109,6 +108,37 @@ export class MCPClient {
    */
   async callTool(serverName: string, toolName: string, arguments_: any): Promise<MCPResponse> {
     try {
+      // For external-lokka server, try to get it from MCPServerManager first
+      if (serverName === 'external-lokka') {
+        try {
+          const { MCPServerManager } = await import('../servers/MCPServerManager');
+          const serverManager = MCPServerManager.instance;
+          
+          if (serverManager) {
+            const server = serverManager.getServer('external-lokka');
+            if (server && 'callTool' in server) {
+              console.log(`Using MCPServerManager for ${serverName} tool call`);
+              const result = await (server as any).callTool(toolName, arguments_);
+              
+              // Wrap result in MCP response format if it's not already
+              if (result && typeof result === 'object' && result.content) {
+                return result;
+              } else {
+                return {
+                  content: [{
+                    type: 'json',
+                    json: result
+                  }]
+                };
+              }
+            }
+          }
+        } catch (error) {
+          console.warn(`Failed to use MCPServerManager for ${serverName}:`, error);
+        }
+      }
+      
+      // Fallback to SDK client
       const client = await this.initializeClient(serverName);
       const response = await client.callTool(toolName, arguments_);
       return response;
@@ -116,9 +146,7 @@ export class MCPClient {
       console.error(`Failed to call tool ${toolName} on server ${serverName}:`, error);
       throw new Error(`Failed to call tool ${toolName}: ${(error as Error).message}`);
     }
-  }
-
-  /**
+  }/**
    * Stop all MCP servers that have a stop method
    */
   async stopAllServers(): Promise<void> {
@@ -126,11 +154,11 @@ export class MCPClient {
       // Import MCPServerManager dynamically to avoid circular dependencies
       const { MCPServerManager } = await import('../servers/MCPServerManager');
       
-      // Get the MCPServerManager instance
-      const serverManagerModule = require('../servers/MCPServerManager');
-      const instance = serverManagerModule.default._instance;
+      // Get the MCPServerManager instance using the static getter
+      const instance = MCPServerManager.instance;
       
-      if (instance && instance instanceof MCPServerManager) {
+      if (instance) {
+        console.log('Found MCPServerManager instance, stopping servers...');
         await instance.stopAllServers();
       } else {
         console.warn('Could not find MCPServerManager instance to stop servers');

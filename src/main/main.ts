@@ -6,8 +6,10 @@ import { GraphService } from '../shared/GraphService';
 import { EnhancedLLMService } from '../llm/EnhancedLLMService';
 import { MCPClient } from '../mcp/clients/MCPSDKClient';
 import { MCPAuthService } from '../mcp/auth/MCPAuthService';
+import { MCPServerManager } from '../mcp/servers/MCPServerManager';
 import { GraphMCPClient } from '../mcp/clients/GraphMCPClient';
 import { MCPErrorHandler, ErrorCode } from '../mcp/utils';
+import { debugMCP, checkMCPServerHealth } from '../mcp/mcp-debug';
 import { AppConfig } from '../types';
 
 // Set app ID for Windows taskbar integration
@@ -23,12 +25,26 @@ class EntraPulseLiteApp {  private mainWindow: BrowserWindow | null = null;
   private graphService!: GraphService;
   private llmService!: EnhancedLLMService;
   private mcpClient!: MCPClient;
+  private mcpServerManager!: MCPServerManager;
   private config!: AppConfig;
-
   constructor() {
     this.initializeServices();
     this.setupEventHandlers();
-  }  private initializeServices(): void {    // Initialize configuration
+  }
+
+  private getDefaultModelForProvider(provider: 'ollama' | 'lmstudio' | 'openai' | 'anthropic'): string {
+    switch (provider) {
+      case 'ollama':
+        return 'codellama:7b';
+      case 'lmstudio':
+        return 'gpt-4';
+      case 'openai':
+        return 'gpt-4o-mini';      case 'anthropic':
+        return 'claude-3-haiku-20240307';
+      default:
+        return 'gpt-4o-mini';
+    }
+  }private initializeServices(): void {    // Initialize configuration
     // Check if we have Lokka credentials configured for non-interactive authentication
     const hasLokkaCreds = process.env.LOKKA_CLIENT_ID && process.env.LOKKA_TENANT_ID && process.env.LOKKA_CLIENT_SECRET;
     const useExternalLokka = process.env.USE_EXTERNAL_LOKKA === 'true' || hasLokkaCreds;
@@ -47,12 +63,19 @@ class EntraPulseLiteApp {  private mainWindow: BrowserWindow | null = null;
         clientSecret: process.env.MSAL_CLIENT_SECRET || process.env.LOKKA_CLIENT_SECRET, // Only needed for confidential client applications
         useClientCredentials: Boolean(hasLokkaCreds), // Use client credentials flow if Lokka creds are configured
       },      llm: {
-        provider: (process.env.LLM_PROVIDER as 'ollama' | 'lmstudio') || 'ollama',
+        provider: (process.env.LLM_PROVIDER as 'ollama' | 'lmstudio' | 'openai' | 'anthropic') || 'openai',
         baseUrl: process.env.LLM_PROVIDER === 'lmstudio' 
-          ? process.env.LMSTUDIO_BASE_URL || 'http://localhost:1234'
-          : process.env.OLLAMA_BASE_URL || 'http://localhost:11434',
-        model: 'codellama:7b', // Default model
-      },mcpServers: [
+          ? process.env.LLM_BASE_URL || 'http://localhost:1234'
+          : process.env.LLM_PROVIDER === 'ollama'
+          ? process.env.LLM_BASE_URL || 'http://localhost:11434'
+          : undefined,
+        model: process.env.LLM_MODEL || this.getDefaultModelForProvider(process.env.LLM_PROVIDER as 'ollama' | 'lmstudio' | 'openai' | 'anthropic' || 'openai'),
+        temperature: parseFloat(process.env.LLM_TEMPERATURE || '0.7'),
+        maxTokens: parseInt(process.env.LLM_MAX_TOKENS || '2048'),
+        apiKey: process.env.LLM_API_KEY || process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY,
+        organization: process.env.OPENAI_ORGANIZATION,
+        preferLocal: process.env.LLM_PREFER_LOCAL === 'true',      },
+      mcpServers: [
         {
           name: 'lokka',
           type: 'lokka',
@@ -98,11 +121,22 @@ class EntraPulseLiteApp {  private mainWindow: BrowserWindow | null = null;
     });    // Initialize services
     this.authService = new AuthService(this.config);
     this.graphService = new GraphService(this.authService);
-    this.llmService = new EnhancedLLMService(this.config.llm, this.authService);
 
-    // Initialize MCP services
+    // Initialize MCP services first
     const mcpAuthService = new MCPAuthService(this.authService);
+    
+    // Create MCPServerManager with auth service
+    console.log('Initializing MCP client with server configs:', this.config.mcpServers);
+    this.mcpServerManager = new MCPServerManager(this.config.mcpServers, mcpAuthService);
+    
+    // Initialize MCP client with auth service
     this.mcpClient = new MCPClient(this.config.mcpServers, mcpAuthService);
+    
+    // Initialize LLM service with MCP client
+    this.llmService = new EnhancedLLMService(this.config.llm, this.authService, this.mcpClient);
+    
+    // Log successful initialization
+    console.log('Services initialized successfully');
   }
   private setupEventHandlers(): void {
     // Set application ID for Windows taskbar
@@ -373,6 +407,26 @@ class EntraPulseLiteApp {  private mainWindow: BrowserWindow | null = null;
       }
     });
 
+    // MCP Debug handlers
+    ipcMain.handle('mcp:debug', async () => {
+      try {
+        await debugMCP(this.config);
+        return 'Debug information logged to console';
+      } catch (error) {
+        console.error('MCP debug failed:', error);
+        return `Debug failed: ${error}`;
+      }
+    });
+
+    ipcMain.handle('mcp:checkHealth', async () => {
+      try {
+        return await checkMCPServerHealth();
+      } catch (error) {
+        console.error('MCP health check failed:', error);
+        return {};
+      }
+    });
+
     // Configuration handlers
     ipcMain.handle('config:get', async () => {
       return this.config;
@@ -386,6 +440,83 @@ class EntraPulseLiteApp {  private mainWindow: BrowserWindow | null = null;
       } catch (error) {
         console.error('Config update failed:', error);
         throw error;
+      }
+    });
+
+    // LLM Configuration handlers
+    ipcMain.handle('config:getLLMConfig', async () => {
+      return this.config.llm;
+    });
+
+    ipcMain.handle('config:saveLLMConfig', async (event, newLLMConfig) => {      try {
+        this.config.llm = newLLMConfig;
+        // Reinitialize LLM service with new config
+        this.llmService = new EnhancedLLMService(this.config.llm, this.authService, this.mcpClient);
+        // In a real implementation, save to file
+        return this.config.llm;
+      } catch (error) {
+        console.error('LLM config update failed:', error);
+        throw error;
+      }
+    });    // LLM testing handlers
+    ipcMain.handle('llm:testConnection', async (event, testConfig) => {
+      try {
+        const { UnifiedLLMService } = require('../llm/UnifiedLLMService');
+        const testService = new UnifiedLLMService(testConfig, this.mcpClient);
+        return await testService.isAvailable();
+      } catch (error) {
+        console.error('LLM connection test failed:', error);
+        return false;
+      }
+    });    ipcMain.handle('llm:getAvailableModels', async (event, config?: any) => {
+      try {
+        // If config is provided, use the appropriate service
+        if (config && (config.provider === 'openai' || config.provider === 'anthropic') && config.apiKey) {
+          const { CloudLLMService } = require('../llm/CloudLLMService');
+          const cloudService = new CloudLLMService(config, this.mcpClient);
+          return await cloudService.getAvailableModels();
+        }
+        
+        // Otherwise use the default service
+        return await this.llmService.getAvailableModels();
+      } catch (error) {
+        console.error('Get available models failed:', error);
+        return [];
+      }
+    });
+
+    // Enhanced LLM testing for specific providers
+    ipcMain.handle('llm:testProviderConnection', async (event, provider: string, config: any) => {
+      try {
+        let testService;
+        if (provider === 'openai' || provider === 'anthropic') {
+          const { CloudLLMService } = require('../llm/CloudLLMService');
+          testService = new CloudLLMService(config, this.mcpClient);
+        } else {
+          const { LLMService } = require('../llm/LLMService');
+          testService = new LLMService(config);
+        }
+        return await testService.isAvailable();
+      } catch (error) {
+        console.error(`${provider} connection test failed:`, error);
+        return false;
+      }
+    });
+
+    ipcMain.handle('llm:getProviderModels', async (event, provider: string, config: any) => {
+      try {
+        let service;
+        if (provider === 'openai' || provider === 'anthropic') {
+          const { CloudLLMService } = require('../llm/CloudLLMService');
+          service = new CloudLLMService(config, this.mcpClient);
+        } else {
+          const { LLMService } = require('../llm/LLMService');
+          service = new LLMService(config);
+        }
+        return await service.getAvailableModels();
+      } catch (error) {
+        console.error(`Get ${provider} models failed:`, error);
+        return [];
       }
     });
   }

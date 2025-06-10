@@ -47,7 +47,6 @@ export class LLMService {
       return false;
     }
   }
-
   private async chatWithOllama(messages: ChatMessage[]): Promise<string> {
     const ollamaMessages = messages.map(msg => ({
       role: msg.role,
@@ -62,11 +61,43 @@ You have access to Microsoft Graph APIs through built-in MCP servers and can hel
 - Analyze permissions and security configurations
 - Provide natural language explanations of complex directory structures
 
-When users ask questions, you can:
-1. Query Microsoft Graph APIs directly using the available MCP tools
+When users ask questions that require Microsoft Graph API data:
+1. ALWAYS create proper Graph query in the following <execute_query> format:
+   <execute_query>
+   {
+     "endpoint": "/users",  // Microsoft Graph API endpoint - REQUIRED
+     "method": "get",       // HTTP method (get, post, put, delete, patch) - REQUIRED
+     "params": {            // Optional parameters as needed
+       "$select": "displayName,mail,userPrincipalName",
+       "$filter": "startsWith(displayName, 'A')"
+     }
+   }
+   </execute_query>
+
 2. Explain Microsoft Entra concepts clearly
 3. Provide actionable insights about identity and access management
 4. Help with troubleshooting and security analysis
+
+Examples of valid queries:
+<execute_query>
+{
+  "endpoint": "/users",
+  "method": "get",
+  "params": {
+    "$filter": "userType eq 'Guest'"
+  }
+}
+</execute_query>
+
+<execute_query>
+{
+  "endpoint": "/groups",
+  "method": "get",
+  "params": {
+    "$select": "displayName,description"
+  }
+}
+</execute_query>
 
 Always be helpful, accurate, and security-conscious in your responses.`;
 
@@ -87,7 +118,6 @@ Always be helpful, accurate, and security-conscious in your responses.`;
 
     return response.data.message.content;
   }
-
   private async chatWithLMStudio(messages: ChatMessage[]): Promise<string> {
     const openaiMessages = messages.map(msg => ({
       role: msg.role,
@@ -102,11 +132,43 @@ You have access to Microsoft Graph APIs through built-in MCP servers and can hel
 - Analyze permissions and security configurations
 - Provide natural language explanations of complex directory structures
 
-When users ask questions, you can:
-1. Query Microsoft Graph APIs directly using the available MCP tools
+When users ask questions that require Microsoft Graph API data:
+1. ALWAYS create proper Graph query in the following <execute_query> format:
+   <execute_query>
+   {
+     "endpoint": "/users",  // Microsoft Graph API endpoint - REQUIRED
+     "method": "get",       // HTTP method (get, post, put, delete, patch) - REQUIRED
+     "params": {            // Optional parameters as needed
+       "$select": "displayName,mail,userPrincipalName",
+       "$filter": "startsWith(displayName, 'A')"
+     }
+   }
+   </execute_query>
+
 2. Explain Microsoft Entra concepts clearly
 3. Provide actionable insights about identity and access management
 4. Help with troubleshooting and security analysis
+
+Examples of valid queries:
+<execute_query>
+{
+  "endpoint": "/users",
+  "method": "get",
+  "params": {
+    "$filter": "userType eq 'Guest'"
+  }
+}
+</execute_query>
+
+<execute_query>
+{
+  "endpoint": "/groups",
+  "method": "get",
+  "params": {
+    "$select": "displayName,description"
+  }
+}
+</execute_query>
 
 Always be helpful, accurate, and security-conscious in your responses.`;
 

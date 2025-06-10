@@ -22,8 +22,7 @@ describe('External Lokka MCP Server End-to-End Tests', () => {
   (shouldRunTests ? describe : describe.skip)('LLM to Graph API Flow', () => {
     let server: ExternalLokkaMCPServer;
     let authService: MCPAuthService;
-    
-    beforeAll(async () => {
+      beforeAll(async () => {
       // Initialize auth service with tenant credentials
       const msalAuthService = new AuthService({
         app: { name: 'EntraPulseLite-Test' },
@@ -33,6 +32,16 @@ describe('External Lokka MCP Server End-to-End Tests', () => {
           clientSecret: process.env.LOKKA_CLIENT_SECRET || '',
           useClientCredentials: true,
           scopes: ['https://graph.microsoft.com/.default']
+        },
+        llm: {
+          provider: 'ollama',
+          model: 'test-model',
+          baseUrl: 'http://localhost:11434'
+        },
+        mcpServers: [],
+        features: {
+          enablePremiumFeatures: false,
+          enableTelemetry: false
         }
       });
       
