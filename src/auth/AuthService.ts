@@ -178,4 +178,92 @@ export class AuthService {
       throw error;
     }
   }
+
+  /**
+   * Decode JWT token and extract permissions from roles claim
+   * @param token Access token to decode
+   * @returns Array of permission roles from the token
+   */
+  private decodeTokenPermissions(token: string): string[] {
+    try {
+      // JWT tokens have 3 parts separated by dots: header.payload.signature
+      const parts = token.split('.');
+      if (parts.length !== 3) {
+        console.warn('Invalid JWT token format');
+        return [];
+      }
+
+      // Decode the payload (second part)
+      const payload = parts[1];
+      // Add padding if needed for base64 decoding
+      const paddedPayload = payload + '='.repeat((4 - payload.length % 4) % 4);
+      const decodedPayload = JSON.parse(atob(paddedPayload));
+
+      console.log('Decoded token payload:', decodedPayload);
+
+      // Extract roles claim which contains the application permissions
+      const roles = decodedPayload.roles || [];
+      return Array.isArray(roles) ? roles : [];
+    } catch (error) {
+      console.error('Failed to decode token:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get the current authentication mode and actual permissions from token
+   * @returns Authentication mode information with actual permissions
+   */
+  getAuthenticationInfo(): { 
+    mode: 'client-credentials' | 'interactive'; 
+    permissions: string[];
+    isAuthenticated: boolean;
+    clientId: string;
+    tenantId: string;
+  } {
+    if (!this.config?.auth) {
+      throw new Error('Authentication service not initialized');
+    }
+
+    return {
+      mode: this.useClientCredentials ? 'client-credentials' : 'interactive',
+      permissions: this.config.auth.scopes || [],
+      isAuthenticated: this.useClientCredentials ? true : false, // For client credentials, we're always "authenticated"
+      clientId: this.config.auth.clientId,
+      tenantId: this.config.auth.tenantId
+    };
+  }
+
+  /**
+   * Get authentication information including actual permissions from current token
+   * @returns Authentication info with actual permissions from token
+   */
+  async getAuthenticationInfoWithToken(): Promise<{ 
+    mode: 'client-credentials' | 'interactive'; 
+    permissions: string[];
+    actualPermissions?: string[];
+    isAuthenticated: boolean;
+    clientId: string;
+    tenantId: string;
+  }> {
+    const basicInfo = this.getAuthenticationInfo();
+
+    if (this.useClientCredentials) {
+      try {
+        // Get current token to extract actual permissions
+        const token = await this.getToken();
+        if (token?.accessToken) {
+          const actualPermissions = this.decodeTokenPermissions(token.accessToken);
+          return {
+            ...basicInfo,
+            actualPermissions
+          };
+        }
+      } catch (error) {
+        console.error('Failed to get token for permission extraction:', error);
+      }
+    }
+
+    return basicInfo;
+  }
 }

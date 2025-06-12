@@ -335,7 +335,16 @@ class EntraPulseLiteApp {  private mainWindow: BrowserWindow | null = null;
         console.error('Get token with permissions failed:', error);
         return null;
       }
-    });    // Microsoft Graph handlers
+    });    ipcMain.handle('auth:getAuthenticationInfo', async () => {
+      try {
+        return await this.authService.getAuthenticationInfoWithToken();
+      } catch (error) {
+        console.error('Get authentication info failed:', error);
+        return null;
+      }
+    });
+
+    // Microsoft Graph handlers
     ipcMain.handle('graph:query', async (event, endpoint: string, method?: string, data?: any) => {
       try {
         return await this.graphService.query(endpoint, method, data);

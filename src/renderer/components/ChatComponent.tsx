@@ -48,8 +48,10 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
   const [user, setUser] = useState<User | null>(null);
   const [authToken, setAuthToken] = useState<AuthToken | null>(null);
   const [llmAvailable, setLlmAvailable] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [currentPermissions, setCurrentPermissions] = useState<string[]>(['User.Read']);  const [permissionRequests, setPermissionRequests] = useState<string[]>([]);
+  const [error, setError] = useState<string | null>(null);  const [currentPermissions, setCurrentPermissions] = useState<string[]>(['User.Read']);
+  const [authMode, setAuthMode] = useState<'client-credentials' | 'interactive' | null>(null);
+  const [permissionSource, setPermissionSource] = useState<'actual' | 'configured' | 'default'>('default');
+  const [permissionRequests, setPermissionRequests] = useState<string[]>([]);
   const [useRedirectFlow, setUseRedirectFlow] = useState(false);
   const [userPhotoUrl, setUserPhotoUrl] = useState<string | null>(null);
   const [expandedTraces, setExpandedTraces] = useState<Set<string>>(new Set());
@@ -70,7 +72,29 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
     }
   };
   const initializeApp = async () => {
-    try {
+    try {      // Get authentication information first
+      const authInfo = await window.electronAPI.auth.getAuthenticationInfo();
+      if (authInfo) {
+        console.log('Authentication Info:', authInfo);
+        setAuthMode(authInfo.mode);        // Set permissions based on authentication mode
+        if (authInfo.mode === 'client-credentials') {
+          // For client credentials flow, prefer actual permissions from token if available
+          if (authInfo.actualPermissions && authInfo.actualPermissions.length > 0) {
+            setCurrentPermissions(authInfo.actualPermissions);
+            setPermissionSource('actual');
+            console.log('Using actual permissions from token:', authInfo.actualPermissions);
+          } else {
+            setCurrentPermissions(authInfo.permissions);
+            setPermissionSource('configured');
+            console.log('Using configured permissions:', authInfo.permissions);
+          }
+        } else {
+          // For interactive flow, keep the default User.Read
+          setCurrentPermissions(['User.Read']);
+          setPermissionSource('default');
+        }
+      }
+
       // Check authentication status
       const token = await window.electronAPI.auth.getToken();
       if (token) {
@@ -117,15 +141,24 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
     } finally {
       setIsLoading(false);
     }
-  };
-  const handleLogout = async () => {
+  };  const handleLogout = async () => {
     try {
-      await window.electronAPI.auth.logout();
-      setAuthToken(null);
-      setUser(null);
-      setUserPhotoUrl(null);
-      setMessages([]);
-      setCurrentPermissions(['User.Read']); // Reset to basic permissions
+      if (authMode === 'client-credentials') {
+        // For client credentials, just clear the UI state
+        setAuthToken(null);
+        setUser(null);
+        setUserPhotoUrl(null);
+        setMessages([]);
+        setError('Application is configured for automatic authentication with client credentials. Restart the application to re-authenticate.');
+      } else {
+        // For interactive mode, perform actual logout
+        await window.electronAPI.auth.logout();
+        setAuthToken(null);
+        setUser(null);
+        setUserPhotoUrl(null);
+        setMessages([]);
+        setCurrentPermissions(['User.Read']); // Reset to basic permissions
+      }
     } catch (error) {
       console.error('Logout failed:', error);
       setError('Logout failed');
@@ -406,10 +439,9 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
               }} 
             />
             <Typography variant="h6">EntraPulse Lite</Typography>
-          </Box>
-          {!llmAvailable && (
+          </Box>          {!llmAvailable && (
             <Chip 
-              label="LLM Offline" 
+              label="Local LLM Offline" 
               color="warning" 
               size="small" 
             />
@@ -650,11 +682,39 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
             <SendIcon />
           </Button>
         </Box>
-      </Box>
-
-      {/* Permissions Status Panel */}
+      </Box>      {/* Permissions Status Panel */}
       <Box sx={{ p: 2, backgroundColor: 'background.paper', borderBottom: 1, borderColor: 'divider' }}>
-        <Typography variant="subtitle2" gutterBottom>Current Permissions:</Typography>
+        {/* Authentication Mode Display */}
+        {authMode && (
+          <Box display="flex" alignItems="center" gap={1} mb={2}>
+            <Typography variant="subtitle2">Authentication Mode:</Typography>
+            <Chip 
+              label={authMode === 'client-credentials' ? 'Application (Client Credentials)' : 'Interactive (User Login)'}
+              size="small"
+              color={authMode === 'client-credentials' ? 'success' : 'info'}
+              variant="filled"
+            />
+          </Box>
+        )}
+          <Box display="flex" alignItems="center" gap={1} mb={1}>
+          <Typography variant="subtitle2" gutterBottom>Current Permissions:</Typography>
+          {permissionSource === 'actual' && (
+            <Chip 
+              label="From Token" 
+              size="small" 
+              color="success" 
+              variant="outlined"
+            />
+          )}
+          {permissionSource === 'configured' && (
+            <Chip 
+              label="Configured" 
+              size="small" 
+              color="warning" 
+              variant="outlined"
+            />
+          )}
+        </Box>
         <Box display="flex" flexWrap="wrap" gap={1} mb={2}>
           {currentPermissions.map((permission) => (
             <Chip 
