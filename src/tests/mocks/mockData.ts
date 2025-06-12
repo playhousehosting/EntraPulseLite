@@ -88,7 +88,7 @@ export const mockLLMConfig = {
   provider: 'ollama' as const,
   baseUrl: 'http://localhost:11434',
   model: 'llama2',
-  temperature: 0.7,
+  temperature: 0.2,
   maxTokens: 2048,
 };
 

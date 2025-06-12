@@ -108,10 +108,9 @@ Always be helpful, accurate, and security-conscious in your responses.`;
 
     const response = await axios.post(`${this.config.baseUrl}/api/chat`, {
       model: this.config.model,
-      messages: fullMessages,
-      stream: false,
+      messages: fullMessages,      stream: false,
       options: {
-        temperature: this.config.temperature || 0.7,
+        temperature: this.config.temperature || 0.2,
         num_predict: this.config.maxTokens || 2048,
       },
     });
@@ -178,9 +177,8 @@ Always be helpful, accurate, and security-conscious in your responses.`;
     ];
 
     const response = await axios.post(`${this.config.baseUrl}/v1/chat/completions`, {
-      model: this.config.model,
-      messages: fullMessages,
-      temperature: this.config.temperature || 0.7,
+      model: this.config.model,      messages: fullMessages,
+      temperature: this.config.temperature || 0.2,
       max_tokens: this.config.maxTokens || 2048,
     });
 

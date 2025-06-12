@@ -31,12 +31,10 @@ interface AppConfigSchema {
 }
 
 export class ConfigService {
-  private store: Store<AppConfigSchema>;
+  private store: any; // Use any to avoid type conflicts with electron-store
   private currentAuthMode: 'client-credentials' | 'interactive' = 'client-credentials';
-  private currentUserKey?: string;
-
-  constructor() {
-    this.store = new Store<AppConfigSchema>({
+  private currentUserKey?: string;  constructor() {
+    this.store = new Store({
       name: 'entrapulse-lite-config',
       encryptionKey: 'entrapulse-lite-secret-key-2025', // In production, this should be generated or from env
       defaults: {
@@ -46,7 +44,7 @@ export class ConfigService {
             model: 'claude-3-5-sonnet-20241022',
             apiKey: '',
             baseUrl: '',
-            temperature: 0.7,
+            temperature: 0.2,
             maxTokens: 2048,
             organization: ''
           },
@@ -86,7 +84,7 @@ export class ConfigService {
             model: 'claude-3-5-sonnet-20241022',
             apiKey: '',
             baseUrl: '',
-            temperature: 0.7,
+            temperature: 0.2,
             maxTokens: 2048,
             organization: ''
           },
@@ -226,12 +224,17 @@ export class ConfigService {
       userKey: this.currentUserKey
     };
   }
-
   /**
    * Backup configuration to file (for debugging) - sanitized
    */
   exportConfig(): any {
-    const appConfig = this.store.store;
+    // Get the current store data
+    const appConfig = {
+      application: this.store.get('application'),
+      users: this.store.get('users'),
+      currentAuthMode: this.store.get('currentAuthMode'),
+      currentUserKey: this.store.get('currentUserKey')
+    };
     
     // Sanitize API keys for export
     const sanitized = JSON.parse(JSON.stringify(appConfig));
@@ -261,7 +264,6 @@ export class ConfigService {
     this.currentAuthMode = 'client-credentials';
     this.currentUserKey = undefined;
   }
-
   /**
    * Clear configuration for current user only
    */
@@ -271,9 +273,21 @@ export class ConfigService {
       delete users[this.currentUserKey];
       this.store.set('users', users);
     } else {
-      // Reset application config
-      const defaults = (this.store as any).defaults;
-      this.store.set('application', defaults.application);
+      // Reset application config to defaults
+      const defaultAppConfig: UserConfigSchema = {
+        llm: {
+          provider: 'anthropic',
+          model: 'claude-3-5-sonnet-20241022',
+          apiKey: '',
+          baseUrl: '',
+          temperature: 0.2,
+          maxTokens: 2048,
+          organization: ''
+        },
+        lastUsedProvider: 'anthropic',
+        modelCache: {}
+      };
+      this.store.set('application', defaultAppConfig);
     }
   }
 }

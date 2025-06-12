@@ -18,6 +18,9 @@ export interface MCPServerConfig {
   args?: string[];
   options?: Record<string, any>;
   authConfig?: MCPAuthConfig;
+  env?: {
+    [key: string]: string | undefined;
+  };
 }
 
 export interface MCPMessage {

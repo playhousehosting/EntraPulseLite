@@ -82,18 +82,17 @@ export class UnifiedLLMService {
         // Try external-lokka first (if available), then fall back to lokka
         let serverName = 'external-lokka';
         let toolName = 'Lokka-Microsoft';
-        
-        // Check if external-lokka server is available
+          // Check if external-lokka server is available
         const availableServers = this.mcpClient!.getAvailableServers();
-        console.log('Available MCP servers:', availableServers);
+        console.log('🔧 UnifiedLLMService: Available MCP servers:', availableServers);
         
         if (!availableServers.includes('external-lokka')) {
-          console.log('External-lokka not available, trying lokka server');
+          console.log('🔧 UnifiedLLMService: External-lokka not available, trying lokka server');
           serverName = 'lokka';
           toolName = 'microsoft_graph_query';
         }
         
-        console.log(`Using MCP server: ${serverName}, tool: ${toolName}`);
+        console.log(`🔧 UnifiedLLMService: Using MCP server: ${serverName}, tool: ${toolName}`);
           // Convert query parameters to strings as required by Lokka MCP
         const queryParams = query.params || query.queryParams;
         const stringifiedQueryParams = queryParams ? 

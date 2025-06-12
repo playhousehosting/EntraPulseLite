@@ -85,12 +85,10 @@ class EntraPulseLiteApp {
           enabled: (process.env.USE_EXTERNAL_LOKKA === 'true' || Boolean(hasLokkaCreds)), // Enable if explicitly set or if creds exist
           command: 'npx',
           args: ['-y', '@merill/lokka'],
-          options: {
-            env: {
-              TENANT_ID: process.env.LOKKA_TENANT_ID || process.env.MSAL_TENANT_ID,
-              CLIENT_ID: process.env.LOKKA_CLIENT_ID || process.env.MSAL_CLIENT_ID,
-              CLIENT_SECRET: process.env.LOKKA_CLIENT_SECRET
-            }
+          env: {
+            TENANT_ID: process.env.LOKKA_TENANT_ID || process.env.MSAL_TENANT_ID,
+            CLIENT_ID: process.env.LOKKA_CLIENT_ID || process.env.MSAL_CLIENT_ID,
+            CLIENT_SECRET: process.env.LOKKA_CLIENT_SECRET
           }
         },
         {
@@ -115,7 +113,7 @@ class EntraPulseLiteApp {
           tenantId: this.config.auth.tenantId
         };
       }    });    // Initialize services
-    this.authService = new AuthService(this.config, this.configService);
+    this.authService = new AuthService(this.config);
     this.graphService = new GraphService(this.authService);
 
     // Initialize MCP services first

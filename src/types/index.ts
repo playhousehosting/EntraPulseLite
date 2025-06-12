@@ -82,6 +82,9 @@ export interface MCPServerConfig {
   args?: string[]; // For external MCP servers
   options?: Record<string, any>;
   authConfig?: MCPAuthConfig;
+  env?: {
+    [key: string]: string | undefined;
+  };
 }
 
 export interface AppConfig {
@@ -156,8 +159,4 @@ export interface EnhancedLLMResponse {
   };
 }
 
-declare global {
-  interface Window {
-    electronAPI: ElectronAPI;
-  }
-}
+// Window interface is defined in assets.d.ts to avoid conflicts

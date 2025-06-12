@@ -36,7 +36,7 @@ describe('Cloud LLM Query Execution Tests', () => {
       provider: 'anthropic',
       apiKey: process.env.ANTHROPIC_API_KEY,
       model: 'claude-3-haiku-20240307',
-      temperature: 0.7,
+      temperature: 0.2,
       maxTokens: 2048
     };
     

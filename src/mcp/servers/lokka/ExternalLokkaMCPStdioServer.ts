@@ -184,21 +184,41 @@ export class ExternalLokkaMCPStdioServer {
       };
     }
   }
-
   // Compatibility method for the existing interface
   async callTool(toolName: string, arguments_: any): Promise<any> {
     if (!this.mcpClient?.isInitialized()) {
       throw new Error('Lokka MCP server not initialized');
     }
 
-    console.log(`Calling Lokka MCP tool: ${toolName}`, arguments_);
+    console.log(`🔧 ExternalLokkaMCPStdioServer: Calling tool: ${toolName}`, arguments_);
+    
+    // Map tool names for compatibility
+    let actualToolName = toolName;
+    let mappedArguments = arguments_;
+    
+    if (toolName === 'microsoft_graph_query') {
+      // Map to the actual Lokka tool name
+      actualToolName = 'Lokka-Microsoft';
+      
+      // Map the arguments to match Lokka's expected format
+      mappedArguments = {
+        apiType: arguments_.apiType || 'graph',
+        method: arguments_.method || 'get',
+        path: arguments_.endpoint || arguments_.path, // Support both 'endpoint' and 'path'
+        queryParams: arguments_.queryParams,
+        body: arguments_.body
+      };
+      
+      console.log(`🔧 ExternalLokkaMCPStdioServer: Mapped tool '${toolName}' to '${actualToolName}'`);
+      console.log(`🔧 ExternalLokkaMCPStdioServer: Mapped arguments:`, mappedArguments);
+    }
     
     try {
-      const result = await this.mcpClient.callTool(toolName, arguments_);
-      console.log(`Lokka MCP tool result:`, result);
+      const result = await this.mcpClient.callTool(actualToolName, mappedArguments);
+      console.log(`🔧 ExternalLokkaMCPStdioServer: Tool result:`, result);
       return result;
     } catch (error) {
-      console.error(`Lokka MCP tool call failed:`, error);
+      console.error(`🔧 ExternalLokkaMCPStdioServer: Tool call failed:`, error);
       throw error;
     }
   }

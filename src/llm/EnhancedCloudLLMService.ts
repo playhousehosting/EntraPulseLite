@@ -84,12 +84,10 @@ Always be helpful, accurate, and security-conscious in your responses.`;
     const fullMessages = [
       { role: 'system', content: systemPrompt },
       ...openaiMessages
-    ];
-
-    const response = await axios.post('https://api.openai.com/v1/chat/completions', {
+    ];    const response = await axios.post('https://api.openai.com/v1/chat/completions', {
       model: this.config.model || 'gpt-4o-mini',
       messages: fullMessages,
-      temperature: this.config.temperature || 0.7,
+      temperature: this.config.temperature || 0.2,
       max_tokens: this.config.maxTokens || 2048,
     }, {
       headers: {
@@ -122,12 +120,10 @@ When users ask questions, you can:
 3. Provide actionable insights about identity and access management
 4. Help with troubleshooting and security analysis
 
-Always be helpful, accurate, and security-conscious in your responses.`;
-
-    const response = await axios.post('https://api.anthropic.com/v1/messages', {
+Always be helpful, accurate, and security-conscious in your responses.`;    const response = await axios.post('https://api.anthropic.com/v1/messages', {
       model: this.config.model || 'claude-3-5-sonnet-20241022',
       max_tokens: this.config.maxTokens || 2048,
-      temperature: this.config.temperature || 0.7,
+      temperature: this.config.temperature || 0.2,
       system: systemPrompt,
       messages: anthropicMessages
     }, {

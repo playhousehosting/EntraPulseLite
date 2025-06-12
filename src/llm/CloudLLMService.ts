@@ -55,7 +55,7 @@ export class CloudLLMService {
         return response.status === 200;      } else if (this.config.provider === 'anthropic') {
         // Test with a simple messages endpoint call
         const response = await axios.post('https://api.anthropic.com/v1/messages', {
-          model: 'claude-3-haiku-20240307', // Use a known stable model for testing
+          model: 'claude-3-5-haiku-20241022', // Use the latest available model for testing
           max_tokens: 1,
           messages: [{ role: 'user', content: 'Hi' }]
         }, {
@@ -143,12 +143,10 @@ Always be helpful, accurate, and security-conscious in your responses.`;
     const fullMessages = [
       { role: 'system', content: systemPrompt },
       ...openaiMessages
-    ];
-
-    const response = await axios.post('https://api.openai.com/v1/chat/completions', {
+    ];    const response = await axios.post('https://api.openai.com/v1/chat/completions', {
       model: this.config.model || 'gpt-4o-mini',
       messages: fullMessages,
-      temperature: this.config.temperature || 0.7,
+      temperature: this.config.temperature || 0.1,
       max_tokens: this.config.maxTokens || 2048,
     }, {
       headers: {
@@ -212,11 +210,11 @@ Examples of valid queries:
 </execute_query>
 
 Always be helpful, accurate, and security-conscious in your responses.`;    const response = await axios.post('https://api.anthropic.com/v1/messages', {
-      model: this.config.model || 'claude-3-haiku-20240307', // Use same stable model as connection test
+      model: this.config.model || 'claude-3-5-sonnet-20241022', // Use latest stable model as default
       max_tokens: this.config.maxTokens || 2048,
-      temperature: this.config.temperature || 0.7,
+      temperature: this.config.temperature || 0.1,
       system: systemPrompt,
-      messages: anthropicMessages    }, {
+      messages: anthropicMessages}, {
       headers: {
         'x-api-key': this.config.apiKey,
         'Content-Type': 'application/json',

@@ -126,10 +126,23 @@ export class EnhancedLLMService {
                 key, 
                 typeof value === 'string' ? value : String(value)
               ])
-            ) : undefined;
-
-          // Ensure method is lowercase as required by Lokka MCP
-          const method = (analysis.graphMethod || 'get').toLowerCase();          mcpResults.lokkaResult = await this.mcpClient.callTool('lokka', 'microsoft_graph_query', {
+            ) : undefined;          // Ensure method is lowercase as required by Lokka MCP
+          const method = (analysis.graphMethod || 'get').toLowerCase();
+          
+          // Check if external-lokka server is available, fallback to lokka if not
+          const availableServers = this.mcpClient.getAvailableServers();
+          let serverName = 'external-lokka';
+          let toolName = 'microsoft_graph_query';
+          
+          if (!availableServers.includes('external-lokka')) {
+            console.log('External-lokka not available, trying lokka server');
+            serverName = 'lokka';
+            toolName = 'microsoft_graph_query';
+          }
+          
+          console.log(`🔧 EnhancedLLMService: Using MCP server: ${serverName}, tool: ${toolName}`);
+          
+          mcpResults.lokkaResult = await this.mcpClient.callTool(serverName, toolName, {
             apiType: 'graph',
             method: method,
             endpoint: analysis.graphEndpoint,
@@ -189,8 +202,7 @@ export class EnhancedLLMService {
   /**
    * Analyze the user query to determine what MCP tools are needed
    */
-  private async analyzeQuery(query: string): Promise<QueryAnalysis> {
-    const systemPrompt = `You are an expert analyzer for Microsoft Graph API queries. Analyze the user's query and determine:
+  private async analyzeQuery(query: string): Promise<QueryAnalysis> {    const systemPrompt = `You are an expert analyzer for Microsoft Graph API queries. Analyze the user's query and determine:
 
 1. Does the query need documentation or permission information? (Fetch MCP)
 2. Does the query need to access Microsoft Graph data? (Lokka MCP) 
@@ -198,12 +210,17 @@ export class EnhancedLLMService {
 4. What parameters should be used?
 
 Examples:
-- "List all users" -> needs Lokka MCP, endpoint: /users, method: "get"
+- "List all users" -> needs Lokka MCP, endpoint: "/users", method: "get"
+- "How many users do we have?" -> needs Lokka MCP, endpoint: "/users/$count", method: "get", params: {"ConsistencyLevel": "eventual"}
+- "Count of user accounts" -> needs Lokka MCP, endpoint: "/users/$count", method: "get", params: {"ConsistencyLevel": "eventual"}
 - "What permissions does User.Read give me?" -> needs Fetch MCP for permission info
-- "Show me guest accounts" -> needs Lokka MCP, endpoint: /users, method: "get", filter: userType eq 'Guest'
+- "Show me guest accounts" -> needs Lokka MCP, endpoint: "/users", method: "get", filter: userType eq 'Guest'
 - "How do I authenticate to Graph?" -> needs Fetch MCP for documentation
 
-IMPORTANT: Always use lowercase HTTP methods (get, post, put, delete, patch).
+IMPORTANT: 
+- Always use lowercase HTTP methods (get, post, put, delete, patch)
+- For count queries, use /$count endpoints with ConsistencyLevel parameter
+- Never use /me endpoint with client credentials authentication
 
 Respond ONLY with a JSON object in this exact format:
 {
@@ -266,7 +283,6 @@ Respond ONLY with a JSON object in this exact format:
     // Fallback to heuristic analysis
     return this.heuristicAnalysis(query);
   }
-
   /**
    * Fallback heuristic analysis when LLM analysis fails
    */
@@ -284,8 +300,16 @@ Respond ONLY with a JSON object in this exact format:
     let graphEndpoint = '/me'; // Default endpoint
     let graphParams: any = undefined;
     
-    // Determine specific endpoint based on query
-    if (lowerQuery.includes('users')) {
+    // Determine specific endpoint based on query content
+    if (lowerQuery.includes('how many') || lowerQuery.includes('count') || lowerQuery.includes('number of')) {
+      if (lowerQuery.includes('user')) {
+        graphEndpoint = '/users/$count';
+        graphParams = { 'ConsistencyLevel': 'eventual' };
+      } else if (lowerQuery.includes('group')) {
+        graphEndpoint = '/groups/$count';
+        graphParams = { 'ConsistencyLevel': 'eventual' };
+      }
+    } else if (lowerQuery.includes('users')) {
       graphEndpoint = '/users';
       if (lowerQuery.includes('guest')) {
         graphParams = { '$filter': "userType eq 'Guest'" };
@@ -325,63 +349,161 @@ Respond ONLY with a JSON object in this exact format:
         contextData += `Documentation Context:\n${textContent.text}\n\n`;
       }
     }
-    
-    // Prepare context from Lokka MCP results - handle multiple possible response formats
+      // Prepare context from Lokka MCP results - handle multiple possible response formats
     if (mcpResults.lokkaResult) {
       let lokkaData = null;
       
-      // Try different response formats
-      if (mcpResults.lokkaResult.content) {
-        // MCP protocol format with content array
-        const jsonContent = mcpResults.lokkaResult.content.find((item: any) => item.type === 'json' || item.type === 'text');
-        if (jsonContent) {
-          lokkaData = jsonContent.json || jsonContent.text;
-        }
-      } else if (mcpResults.lokkaResult.result) {
-        // Result property format
-        lokkaData = mcpResults.lokkaResult.result;
-      } else {
-        // Raw object format
+      // Debug logging to understand what data we're working with
+      console.log('🔍 Raw Lokka MCP result:', {
+        result: mcpResults.lokkaResult,
+        resultType: typeof mcpResults.lokkaResult,
+        isString: typeof mcpResults.lokkaResult === 'string',
+        isObject: typeof mcpResults.lokkaResult === 'object',
+        hasContent: mcpResults.lokkaResult && typeof mcpResults.lokkaResult === 'object' && 'content' in mcpResults.lokkaResult,
+        hasResult: mcpResults.lokkaResult && typeof mcpResults.lokkaResult === 'object' && 'result' in mcpResults.lokkaResult
+      });
+        // Try different response formats
+      if (typeof mcpResults.lokkaResult === 'string') {
+        // Direct string result (like "52")
         lokkaData = mcpResults.lokkaResult;
+      } else if (mcpResults.lokkaResult && typeof mcpResults.lokkaResult === 'object') {
+        if (mcpResults.lokkaResult.content) {
+          // MCP protocol format with content array
+          const textContent = mcpResults.lokkaResult.content.find((item: any) => item.type === 'text');
+          const jsonContent = mcpResults.lokkaResult.content.find((item: any) => item.type === 'json');
+          
+          if (textContent && textContent.text) {
+            // Handle text content - try to extract actual data
+            const text = textContent.text;
+            
+            // Check if it's a Lokka API result format
+            if (text.includes('Result for graph API')) {
+              // Extract the actual result after the header
+              const lines = text.split('\n');
+              const resultStartIndex = lines.findIndex((line: string) => line.trim() === '') + 1;
+              if (resultStartIndex > 0 && resultStartIndex < lines.length) {
+                const resultText = lines.slice(resultStartIndex).join('\n').trim();
+                
+                // Try to parse as JSON
+                try {
+                  lokkaData = JSON.parse(resultText);
+                } catch {
+                  // If not JSON, use as-is (like "52")
+                  lokkaData = resultText;
+                }
+              } else {
+                lokkaData = text;
+              }
+            } else {
+              // Regular text content
+              lokkaData = text;
+            }
+          } else if (jsonContent && jsonContent.json) {
+            lokkaData = jsonContent.json;
+          }
+        } else if (mcpResults.lokkaResult.result) {
+          // Result property format
+          lokkaData = mcpResults.lokkaResult.result;
+        } else {
+          // Raw object format
+          lokkaData = mcpResults.lokkaResult;
+        }
       }
       
-      if (lokkaData) {
-        // Debug logging to understand what data we're working with
-        console.log('Lokka MCP result structure:', {
-          hasResult: !!mcpResults.lokkaResult,
-          hasContent: !!mcpResults.lokkaResult.content,
-          isObject: typeof mcpResults.lokkaResult === 'object',
-          keys: Object.keys(mcpResults.lokkaResult || {}),
+      if (lokkaData !== null && lokkaData !== undefined) {
+        console.log('🔍 Processing Lokka data:', {
           dataType: typeof lokkaData,
-          dataKeys: lokkaData && typeof lokkaData === 'object' ? Object.keys(lokkaData) : 'N/A'
+          isString: typeof lokkaData === 'string',
+          isObject: typeof lokkaData === 'object',
+          data: lokkaData
         });
-        
-        // Extract result from various possible response structures
+          // Handle different data types
         let finalLokkaData = lokkaData;
-        if (lokkaData.value && Array.isArray(lokkaData.value)) {
-          // Common Graph API response format with 'value' array
-          finalLokkaData = lokkaData.value;
-        } else if (lokkaData.result && typeof lokkaData.result === 'object') {
-          // Nested result format
-          finalLokkaData = lokkaData.result;
-          // Check for further nesting in another 'value' property
-          if (finalLokkaData.value && Array.isArray(finalLokkaData.value)) {
-            finalLokkaData = finalLokkaData.value;
+          if (typeof lokkaData === 'string') {
+          // Try to parse string as JSON first
+          try {
+            const parsed = JSON.parse(lokkaData);
+            finalLokkaData = parsed;
+            console.log('🔍 Successfully parsed string data as JSON');
+          } catch {
+            // If not JSON, create a meaningful structure for simple values
+            if (/^\d+$/.test(lokkaData.trim())) {
+              // Numeric string like "52"
+              finalLokkaData = parseInt(lokkaData.trim());
+              console.log('🔍 Converted numeric string to number');
+            } else {
+              // Other string content - try to parse as JSON one more time with error handling
+              try {
+                // Sometimes JSON might have extra whitespace or formatting
+                const cleanedData = lokkaData.trim();
+                if (cleanedData.startsWith('{') || cleanedData.startsWith('[')) {
+                  finalLokkaData = JSON.parse(cleanedData);
+                  console.log('🔍 Successfully parsed cleaned JSON string');
+                } else {
+                  finalLokkaData = { result: lokkaData };
+                  console.log('🔍 Wrapped string in result object');
+                }
+              } catch {
+                finalLokkaData = { result: lokkaData };
+                console.log('🔍 Wrapped string in result object (fallback)');
+              }
+            }
+          }
+        } else if (lokkaData && typeof lokkaData === 'object') {
+          // Extract result from various possible response structures
+          if (lokkaData.value && Array.isArray(lokkaData.value)) {
+            // Common Graph API response format with 'value' array
+            finalLokkaData = lokkaData.value;
+            console.log('🔍 Extracted data from .value array');
+          } else if (lokkaData.result && typeof lokkaData.result === 'object') {
+            // Nested result format
+            finalLokkaData = lokkaData.result;
+            // Check for further nesting in another 'value' property
+            if (finalLokkaData.value && Array.isArray(finalLokkaData.value)) {
+              finalLokkaData = finalLokkaData.value;
+              console.log('🔍 Extracted data from nested .result.value');
+            }
+          } else {
+            console.log('🔍 Using object data as-is');
           }
         }
-        
-        contextData += `Microsoft Graph Data:\n${JSON.stringify(finalLokkaData, null, 2)}\n\n`;
+          contextData += `Microsoft Graph Data:\n${JSON.stringify(finalLokkaData, null, 2)}\n\n`;
+        console.log('🔍 Added context data:', {
+          finalLokkaData,
+          contextLength: contextData.length,
+          contextPreview: contextData.substring(0, 200)
+        });
+      } else {
+        console.log('🔍 No lokkaData extracted from result');
       }
-    }
-    
-    const systemPrompt = `You are an expert Microsoft Entra (Azure AD) and Microsoft Graph API assistant.
+    }    const systemPrompt = `You are an expert Microsoft Entra (Azure AD) and Microsoft Graph API assistant.
 
-${contextData ? `Here is the relevant data retrieved from Microsoft Graph and documentation:\n${contextData}` : ''}
+${contextData ? `Here is the relevant data retrieved from Microsoft Graph and documentation:
+${contextData}
 
-Please provide a helpful, accurate, and actionable response based on the data above.
-If you received Graph data, analyze it and provide insights.
-If you received documentation, summarize the key points.
-Be concise but thorough in your response.`;
+🚨 CRITICAL ANTI-HALLUCINATION INSTRUCTIONS - MUST FOLLOW EXACTLY 🚨:
+1. The data above shows: ${JSON.stringify(mcpResults.lokkaResult)}
+2. You MUST use ONLY the exact numbers from this data
+3. If the data shows "52", you MUST say "52" - NEVER any other number
+4. DO NOT perform ANY mathematical operations on the numbers
+5. DO NOT round, estimate, or approximate - use the EXACT number shown
+6. DO NOT say "5" when the data shows "52"
+7. DO NOT say "about" or "approximately" - state the precise number
+8. The number in the data is the FINAL ANSWER - do not change it
+9. If asked for a count and the data shows 52, your answer MUST contain "52"
+10. NEVER generate different numbers than what is provided in the data
+
+VERIFICATION CHECK: What number does the data show? You must use that exact number in your response.` : ''}
+
+You are responding to user queries about Microsoft Graph API and Entra ID.
+${contextData ? 'Base your response ENTIRELY on the data provided above. Use the exact numbers and information shown.' : ''}
+If you received Graph data:
+- State the exact count or information from the data
+- Do not generate different numbers or estimates  
+- Provide insights based on the actual data shown
+- For count queries, use the precise number from the results
+If you received documentation, summarize the key points accurately.
+Be helpful and informative while staying strictly accurate to the provided data.`;
 
     const responseMessages: ChatMessage[] = [
       { 
@@ -396,18 +518,80 @@ Be concise but thorough in your response.`;
         content: originalQuery,
         timestamp: new Date()
       }
-    ];
-
-    try {
+    ];    try {
+      console.log('🔍 About to call final LLM with context:', {
+        contextData,
+        systemPromptLength: systemPrompt.length,
+        originalQuery,
+        messagesLength: responseMessages.length
+      });
+      
       const response = await this.basicChat(responseMessages);
-      console.log('Final response generated:', {
+      
+      console.log('🔍 Final LLM response received:', {
         hasContext: !!contextData,
         contextLength: contextData.length,
         responseLength: response.length,
         type: typeof response,
-        preview: response.substring(0, 100)
+        preview: response.substring(0, 100),
+        containsFiftyTwo: response.includes('52'),
+        containsTwentyTwo: response.includes('22'),
+        fullResponse: response
       });
-      return response;
+      
+      // Post-process response to catch and fix hallucinations
+      let correctedResponse = response;
+      
+      // If we have Lokka data that's a simple number, validate the response mentions the correct number
+      if (mcpResults.lokkaResult && contextData.includes('Microsoft Graph Data:')) {
+        try {
+          // Extract the actual number from the context
+          const contextMatch = contextData.match(/Microsoft Graph Data:\s*(\d+)/);
+          if (contextMatch && contextMatch[1]) {
+            const actualNumber = contextMatch[1];
+            console.log('🔍 Validating response contains actual number:', actualNumber);
+            
+            // Check if response contains the correct number
+            if (!response.includes(actualNumber)) {
+              console.warn('🚨 HALLUCINATION DETECTED: Response does not contain correct number', actualNumber);
+              
+              // Try to fix the response by replacing incorrect numbers
+              const numberPattern = /\b(\d+)\s+user accounts?\b/gi;
+              const matches = [...response.matchAll(numberPattern)];
+              
+              if (matches.length > 0) {
+                console.log('🔧 Attempting to fix hallucinated numbers in response');
+                correctedResponse = response.replace(numberPattern, (match, number) => {
+                  if (number !== actualNumber) {
+                    console.log(`🔧 Replacing hallucinated number ${number} with correct number ${actualNumber}`);
+                    return match.replace(number, actualNumber);
+                  }
+                  return match;
+                });
+                
+                // Also ensure the response explicitly states the correct number
+                if (!correctedResponse.includes(`**${actualNumber}**`)) {
+                  correctedResponse = correctedResponse.replace(
+                    /Based on the query results,.*?\./,
+                    `Based on the query results, there are **${actualNumber}** user accounts in your Microsoft Entra tenant.`
+                  );
+                }
+              }
+            }
+          }
+        } catch (validationError) {
+          console.warn('Response validation error:', validationError);
+        }
+      }
+      
+      if (correctedResponse !== response) {
+        console.log('🔧 Response corrected to fix hallucination:', {
+          original: response,
+          corrected: correctedResponse
+        });
+      }
+      
+      return correctedResponse;
     } catch (error) {
       console.error('Failed to generate final response:', error);
       return `I encountered an error while processing your request: ${error}. However, I was able to retrieve some data that might be helpful:\n\n${contextData}`;
