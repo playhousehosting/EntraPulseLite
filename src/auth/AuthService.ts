@@ -5,6 +5,9 @@ import { PublicClientApplication, Configuration, AuthenticationResult, AccountIn
 import { ConfidentialClientApplication } from '@azure/msal-node';
 import { AppConfig, AuthToken } from '../types';
 import * as dotenv from 'dotenv';
+import { BrowserWindow } from 'electron';
+import { createHash, randomBytes } from 'crypto';
+import * as http from 'http';
 
 // Load environment variables
 dotenv.config({ path: '.env.local' });
@@ -83,10 +86,14 @@ export class AuthService {
           idToken: result.idToken || '',
           expiresOn: result.expiresOn || new Date(Date.now() + 3600 * 1000), // Default 1 hour
           scopes: this.config.auth.scopes
-        };
-      } else {
-        // Get token using interactive flow (not implemented in this version)
-        throw new Error('Interactive authentication not implemented');
+        };      } else {
+        // Get token using interactive browser window flow
+        if (!(this.pca instanceof PublicClientApplication)) {
+          throw new Error('Public client required for interactive authentication');
+        }
+
+        console.log('🔐 Starting interactive browser authentication...');
+        return await this.acquireTokenInteractively();
       }
     } catch (error) {
       console.error('Authentication error:', error);
@@ -100,7 +107,6 @@ export class AuthService {
   async logout(): Promise<void> {
     return this.signOut();
   }
-
   /**
    * Sign out the user
    */
@@ -109,11 +115,204 @@ export class AuthService {
   }
 
   /**
+   * Acquire token using interactive browser window (Electron-compatible)
+   */
+  private async acquireTokenInteractively(): Promise<AuthToken | null> {
+    if (!this.pca || !(this.pca instanceof PublicClientApplication) || !this.config?.auth?.scopes) {
+      throw new Error('Public client not properly initialized for interactive flow');
+    }
+
+    return new Promise((resolve, reject) => {
+      // Create a new browser window for authentication
+      const authWindow = new BrowserWindow({
+        width: 500,
+        height: 700,
+        show: true,
+        webPreferences: {
+          nodeIntegration: false,
+          contextIsolation: true,
+          sandbox: true
+        },
+        title: 'Sign in to Microsoft',
+        autoHideMenuBar: true,
+        resizable: false
+      });      // Generate PKCE parameters for secure authentication
+      const codeVerifier = this.generateCodeVerifier();
+      const codeChallenge = this.generateCodeChallenge(codeVerifier);      // Build the authorization URL with PKCE for Electron
+      const tenantId = this.config!.auth.tenantId;
+      const clientId = this.config!.auth.clientId;
+      const scopes = encodeURIComponent(this.config!.auth.scopes.join(' '));
+      // Use the correct redirect URI that matches Azure AD configuration
+      const redirectUri = encodeURIComponent('http://localhost');
+      const state = Date.now().toString();
+      
+      const authUrl = `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/authorize?` +
+        `client_id=${clientId}&` +
+        `response_type=code&` +
+        `redirect_uri=${redirectUri}&` +
+        `scope=${scopes}&` +
+        `response_mode=query&` +
+        `state=${state}&` +
+        `code_challenge=${codeChallenge}&` +
+        `code_challenge_method=S256&` +
+        `prompt=select_account`;
+
+      console.log('🌐 Loading Microsoft authentication page with PKCE...');
+      
+      // Load the authentication URL
+      authWindow.loadURL(authUrl);      // Handle URL navigation to catch the redirect with authorization code
+      authWindow.webContents.on('will-navigate', (event, navigationUrl) => {
+        this.handleAuthRedirect(navigationUrl, authWindow, resolve, reject, state, codeVerifier, () => { authCompleted = true; });
+      });
+
+      authWindow.webContents.on('will-redirect', (event, navigationUrl) => {
+        this.handleAuthRedirect(navigationUrl, authWindow, resolve, reject, state, codeVerifier, () => { authCompleted = true; });
+      });// Handle window closed by user
+      let authCompleted = false;
+      const handleWindowClosed = () => {
+        if (!authCompleted) {
+          reject(new Error('Authentication window was closed by user'));
+        }
+      };
+      authWindow.on('closed', handleWindowClosed);// Handle load failures
+      authWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {        // Check if this is the redirect to localhost (which will fail to load)
+        if (validatedURL.startsWith('http://localhost') && validatedURL.includes('code=')) {
+          this.handleAuthRedirect(validatedURL, authWindow, resolve, reject, state, codeVerifier, () => { authCompleted = true; });
+        } else {
+          console.error('Auth window failed to load:', errorCode, errorDescription);
+          authWindow.close();
+          reject(new Error(`Authentication failed to load: ${errorDescription}`));
+        }
+      });
+    });
+  }  /**
+   * Handle authentication redirect and extract authorization code
+   */
+  private async handleAuthRedirect(
+    url: string, 
+    authWindow: BrowserWindow, 
+    resolve: (value: AuthToken | null) => void, 
+    reject: (reason?: any) => void,
+    expectedState: string,
+    codeVerifier: string,
+    setAuthCompleted: () => void
+  ): Promise<void> {    try {      // Check if this is our redirect URL
+      if (url.startsWith('http://localhost')) {
+        // Mark authentication as completed to prevent "window closed" error
+        setAuthCompleted();
+        
+        const urlObj = new URL(url);
+        const code = urlObj.searchParams.get('code');
+        const error = urlObj.searchParams.get('error');
+        const state = urlObj.searchParams.get('state');
+        
+        authWindow.close();
+        
+        // Verify state to prevent CSRF attacks
+        if (state !== expectedState) {
+          reject(new Error('Invalid state parameter - possible CSRF attack'));
+          return;
+        }
+        
+        if (error) {
+          reject(new Error(`Authentication failed: ${error} - ${urlObj.searchParams.get('error_description')}`));
+          return;
+        }
+        
+        if (code) {          console.log('🔑 Authorization code received, exchanging for tokens...');
+          
+          try {            // Exchange the authorization code for tokens using MSAL with PKCE
+            const tokenRequest = {
+              scopes: this.config!.auth.scopes,
+              code: code,
+              redirectUri: 'http://localhost',
+              codeVerifier: codeVerifier
+            };
+            
+            const result = await (this.pca as PublicClientApplication).acquireTokenByCode(tokenRequest);
+            
+            if (!result) {
+              reject(new Error('Failed to acquire token from authorization code'));
+              return;
+            }
+
+            // Store account information for future silent token requests
+            this.account = result.account;
+            
+            console.log('✅ Interactive authentication successful!');
+            
+            const authToken: AuthToken = {
+              accessToken: result.accessToken,
+              idToken: result.idToken || '',
+              expiresOn: result.expiresOn || new Date(Date.now() + 3600 * 1000),
+              scopes: this.config!.auth.scopes
+            };
+
+            resolve(authToken);
+          } catch (tokenError) {
+            console.error('Token exchange failed:', tokenError);
+            reject(new Error(`Token exchange failed: ${tokenError}`));
+          }
+        } else {
+          reject(new Error('No authorization code received in redirect'));
+        }
+      }
+    } catch (error) {
+      console.error('Error handling auth redirect:', error);
+      authWindow.close();
+      reject(error);
+    }
+  }
+
+  /**
    * Get the current user information
    * @returns User account information
+   */  /**
+   * Get the current user's full profile from Microsoft Graph
+   * @returns Full user profile from Graph API or null if not authenticated
    */
-  async getCurrentUser(): Promise<AccountInfo | null> {
-    return this.account;
+  async getCurrentUser(): Promise<any | null> {
+    try {
+      // First check if we have an authenticated account
+      if (!this.account) {
+        return null;
+      }
+
+      // Get a valid token to make Graph API calls
+      const token = await this.getToken();
+      if (!token) {
+        return null;
+      }
+
+      // Create a simple Graph client for this call
+      const { Client } = require('@microsoft/microsoft-graph-client');
+      const graphClient = Client.init({
+        authProvider: async (done: any) => {
+          done(null, token.accessToken);
+        }
+      });
+
+      // Get full user profile from Graph API
+      const userProfile = await graphClient.api('/me').get();
+      console.log('Retrieved user profile:', userProfile);
+      
+      return userProfile;
+    } catch (error) {
+      console.error('Failed to get current user profile:', error);
+      
+      // Fallback to MSAL account info if Graph API fails
+      if (this.account) {
+        console.log('Falling back to MSAL account info:', this.account);
+        return {
+          id: this.account.localAccountId,
+          displayName: this.account.name || 'User',
+          mail: this.account.username,
+          userPrincipalName: this.account.username
+        };
+      }
+      
+      return null;
+    }
   }
 
   /**
@@ -164,15 +363,38 @@ export class AuthService {
     try {
       if (!this.pca || !this.config?.auth?.scopes) {
         throw new Error('Authentication service not initialized');
-      }
-
-      if (this.useClientCredentials && this.pca instanceof ConfidentialClientApplication) {
+      }      if (this.useClientCredentials && this.pca instanceof ConfidentialClientApplication) {
         // For client credentials flow, just get a new token each time
         return this.signIn();
+      } else if (this.pca instanceof PublicClientApplication) {
+        // For interactive flow, try to get cached token first
+        const accounts = await this.pca.getTokenCache().getAllAccounts();
+        
+        if (accounts.length > 0 && this.account) {
+          try {
+            // Try to acquire token silently
+            const result = await this.pca.acquireTokenSilent({
+              scopes: this.config.auth.scopes,
+              account: this.account
+            });
+            
+            return {
+              accessToken: result.accessToken,
+              idToken: result.idToken || '',
+              expiresOn: result.expiresOn || new Date(Date.now() + 3600 * 1000),
+              scopes: this.config.auth.scopes
+            };
+          } catch (error) {
+            console.log('Silent token acquisition failed, requiring sign-in');
+            // Fall through to require sign-in
+          }
+        }
+        
+        // No cached token available, user needs to sign in
+        throw new Error('User not signed in - please use the Sign In button');
       }
       
-      // For interactive flow (not implemented in this version)
-      throw new Error('Interactive authentication not implemented');
+      throw new Error('Authentication service not properly configured');
     } catch (error) {
       console.error('Error getting token:', error);
       throw error;
@@ -183,27 +405,73 @@ export class AuthService {
    * Decode JWT token and extract permissions from roles claim
    * @param token Access token to decode
    * @returns Array of permission roles from the token
-   */
-  private decodeTokenPermissions(token: string): string[] {
+   */  private decodeTokenPermissions(token: string): string[] {
     try {
+      console.log('🔍 Starting token decode process...');
+      console.log('📄 Token length:', token.length);
+      console.log('📄 Token preview (first 50 chars):', token.substring(0, 50) + '...');
+      
       // JWT tokens have 3 parts separated by dots: header.payload.signature
       const parts = token.split('.');
       if (parts.length !== 3) {
-        console.warn('Invalid JWT token format');
+        console.warn('⚠️ Invalid JWT token format - expected 3 parts, got:', parts.length);
         return [];
       }
+
+      console.log('📋 Token parts lengths:', parts.map(p => p.length));
 
       // Decode the payload (second part)
       const payload = parts[1];
       // Add padding if needed for base64 decoding
       const paddedPayload = payload + '='.repeat((4 - payload.length % 4) % 4);
-      const decodedPayload = JSON.parse(atob(paddedPayload));
+      
+      let decodedPayload;
+      try {
+        decodedPayload = JSON.parse(atob(paddedPayload));
+      } catch (decodeError) {
+        console.error('❌ Failed to decode JWT payload:', decodeError);
+        return [];
+      }console.log('🔍 Decoded token payload:', decodedPayload);
 
-      console.log('Decoded token payload:', decodedPayload);
-
-      // Extract roles claim which contains the application permissions
+      // Log all potential permission claims for debugging
+      console.log('📋 Available claims in token:');
+      console.log('- roles (app permissions):', decodedPayload.roles);
+      console.log('- scp (delegated scopes):', decodedPayload.scp);
+      console.log('- scope (space-separated):', decodedPayload.scope);
+      console.log('- scopes (array):', decodedPayload.scopes);
+      console.log('- aud (audience):', decodedPayload.aud);
+      console.log('- appid (app ID):', decodedPayload.appid);      // For client credentials flow: Extract roles claim (application permissions)
       const roles = decodedPayload.roles || [];
-      return Array.isArray(roles) ? roles : [];
+      if (Array.isArray(roles) && roles.length > 0) {
+        console.log('✅ Found application permissions (roles):', roles);
+        return roles;
+      }
+
+      // For interactive flow: Extract scp claim (delegated permissions/scopes)
+      let scopes = decodedPayload.scp || decodedPayload.scope || '';
+      
+      // Handle both string and array formats
+      let scopeArray: string[] = [];
+      if (typeof scopes === 'string' && scopes.length > 0) {
+        scopeArray = scopes.split(' ').filter(scope => scope.length > 0);
+      } else if (Array.isArray(scopes)) {
+        scopeArray = scopes;
+      }
+      
+      if (scopeArray.length > 0) {
+        console.log('✅ Found delegated permissions (scopes):', scopeArray);
+        return scopeArray;
+      }
+
+      // Fallback: look for any other scope-related claims
+      if (Array.isArray(decodedPayload.scopes)) {
+        console.log('✅ Found scopes array:', decodedPayload.scopes);
+        return decodedPayload.scopes;
+      }
+
+      console.warn('⚠️ No permission claims found in token - this may be normal for some auth flows');
+      console.log('🔍 Full token payload for debugging:', JSON.stringify(decodedPayload, null, 2));
+      return [];
     } catch (error) {
       console.error('Failed to decode token:', error);
       return [];
@@ -233,12 +501,10 @@ export class AuthService {
       tenantId: this.config.auth.tenantId
     };
   }
-
   /**
    * Get authentication information including actual permissions from current token
    * @returns Authentication info with actual permissions from token
-   */
-  async getAuthenticationInfoWithToken(): Promise<{ 
+   */  async getAuthenticationInfoWithToken(): Promise<{ 
     mode: 'client-credentials' | 'interactive'; 
     permissions: string[];
     actualPermissions?: string[];
@@ -248,22 +514,181 @@ export class AuthService {
   }> {
     const basicInfo = this.getAuthenticationInfo();
 
-    if (this.useClientCredentials) {
-      try {
-        // Get current token to extract actual permissions
-        const token = await this.getToken();
-        if (token?.accessToken) {
-          const actualPermissions = this.decodeTokenPermissions(token.accessToken);
+    try {
+      // Get current token to extract actual permissions for both auth modes
+      const token = await this.getToken();
+      if (token?.accessToken) {
+        console.log('🔍 Attempting to decode token for permission extraction...');
+        const actualPermissions = this.decodeTokenPermissions(token.accessToken);
+        console.log('🎯 Token decoding result:', actualPermissions);
+        
+        if (actualPermissions && actualPermissions.length > 0) {
+          console.log('✅ Found actual permissions in token:', actualPermissions);
           return {
             ...basicInfo,
-            actualPermissions
+            actualPermissions,
+            isAuthenticated: true
+          };
+        } else {
+          console.log('⚠️ No actual permissions found in token, using configured permissions');
+          return {
+            ...basicInfo,
+            isAuthenticated: true
           };
         }
-      } catch (error) {
-        console.error('Failed to get token for permission extraction:', error);
+      }
+    } catch (error) {
+      console.error('Failed to get token for permission extraction:', error);
+      // For interactive mode, if token retrieval fails, user is not authenticated
+      if (!this.useClientCredentials) {
+        return {
+          ...basicInfo,
+          isAuthenticated: false
+        };
       }
     }
 
     return basicInfo;
+  }
+
+  /**
+   * Generate a cryptographically random code verifier for PKCE
+   */
+  private generateCodeVerifier(): string {
+    return randomBytes(32).toString('base64url');
+  }
+  /**
+   * Generate code challenge from code verifier using SHA256
+   */
+  private generateCodeChallenge(codeVerifier: string): string {
+    return createHash('sha256').update(codeVerifier).digest('base64url');
+  }
+
+  /**
+   * Handle server callback for OAuth redirect
+   */
+  private async handleServerCallback(
+    url: URL,
+    authWindow: BrowserWindow | null,
+    server: http.Server | null,
+    resolve: (value: AuthToken | null) => void,
+    reject: (reason?: any) => void,
+    codeVerifier: string
+  ): Promise<void> {
+    try {
+      const code = url.searchParams.get('code');
+      const error = url.searchParams.get('error');
+      const state = url.searchParams.get('state');
+
+      // Close the auth window and server
+      if (authWindow) {
+        authWindow.close();
+      }
+      if (server) {
+        server.close();
+      }
+
+      if (error) {
+        reject(new Error(`Authentication failed: ${error} - ${url.searchParams.get('error_description')}`));
+        return;
+      }
+
+      if (code) {
+        console.log('🔑 Authorization code received via server callback, exchanging for tokens...');
+
+        try {          // Exchange the authorization code for tokens using MSAL with PKCE
+          const tokenRequest = {
+            scopes: this.config!.auth.scopes,
+            code: code,
+            redirectUri: 'http://localhost',
+            codeVerifier: codeVerifier
+          };
+
+          const result = await (this.pca as PublicClientApplication).acquireTokenByCode(tokenRequest);
+
+          if (!result) {
+            reject(new Error('Failed to acquire token from authorization code'));
+            return;
+          }
+
+          // Store account information for future silent token requests
+          this.account = result.account;
+
+          console.log('✅ Interactive authentication successful via server callback!');
+
+          const authToken: AuthToken = {
+            accessToken: result.accessToken,
+            idToken: result.idToken || '',
+            expiresOn: result.expiresOn || new Date(Date.now() + 3600 * 1000),
+            scopes: this.config!.auth.scopes
+          };
+
+          resolve(authToken);
+        } catch (tokenError) {
+          console.error('Token exchange failed:', tokenError);
+          reject(new Error(`Token exchange failed: ${tokenError}`));
+        }
+      } else {
+        reject(new Error('No authorization code received in server callback'));
+      }
+    } catch (error) {
+      console.error('Error handling server callback:', error);
+      if (authWindow) {
+        authWindow.close();
+      }
+      if (server) {
+        server.close();
+      }
+      reject(error);
+    }
+  }
+
+  /**
+   * Clear the MSAL token cache to force fresh token acquisition
+   * This is useful when scopes have changed and cached tokens have old permissions
+   */
+  async clearTokenCache(): Promise<void> {
+    try {
+      if (this.pca instanceof PublicClientApplication) {
+        // Get the token cache and clear all accounts
+        const tokenCache = this.pca.getTokenCache();
+        const accounts = await tokenCache.getAllAccounts();
+        
+        console.log(`🧹 Clearing ${accounts.length} cached accounts and tokens...`);
+        
+        // Remove all accounts from cache (this also removes their tokens)
+        for (const account of accounts) {
+          await tokenCache.removeAccount(account);
+          console.log(`Removed cached account: ${account.username}`);
+        }
+        
+        // Reset our stored account reference
+        this.account = null;
+        
+        console.log('✅ Token cache cleared successfully');
+      }
+    } catch (error) {
+      console.error('Failed to clear token cache:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Force a fresh interactive authentication (clears cache first)
+   * Use this when you need to get new tokens with updated scopes
+   */
+  async forceReauthentication(): Promise<AuthToken | null> {
+    try {
+      console.log('🔄 Forcing fresh authentication with updated scopes...');
+      
+      // Clear the token cache first
+      await this.clearTokenCache();
+      
+      // Then perform fresh interactive authentication
+      return await this.signIn();
+    } catch (error) {
+      console.error('Force reauthentication failed:', error);
+      throw error;
+    }
   }
 }

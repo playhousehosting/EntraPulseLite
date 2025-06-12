@@ -56,9 +56,9 @@ export class ProfilePhotoService {
         // Convert the array buffer to a base64 string
         const base64 = Buffer.from(photoResponse).toString('base64');
         console.log('Photo obtained via beta endpoint');
-        return `data:image/jpeg;base64,${base64}`;
-      } catch (betaError: any) {
+        return `data:image/jpeg;base64,${base64}`;      } catch (betaError: any) {
         console.log(`Beta endpoint photo fetch failed: ${betaError.message || 'Unknown error'}`);
+        console.log('Beta endpoint error details:', betaError);
       }
       
       // Attempt 2: Try v1.0 endpoint
@@ -72,9 +72,9 @@ export class ProfilePhotoService {
         // Convert the array buffer to a base64 string
         const base64 = Buffer.from(photoResponse).toString('base64');
         console.log('Photo obtained via v1.0 endpoint');
-        return `data:image/jpeg;base64,${base64}`;
-      } catch (standardError: any) {
+        return `data:image/jpeg;base64,${base64}`;      } catch (standardError: any) {
         console.log(`Standard endpoint photo fetch failed: ${standardError.message || 'Unknown error'}`);
+        console.log('Standard endpoint error details:', standardError);
       }
       
       // Attempt 3: Try direct profile photo from Exchange/Outlook

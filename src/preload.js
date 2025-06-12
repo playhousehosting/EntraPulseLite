@@ -20,6 +20,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     requestPermissions: (permissions) => ipcRenderer.invoke('auth:requestPermissions', permissions),
     getTokenWithPermissions: (permissions) => ipcRenderer.invoke('auth:getTokenWithPermissions', permissions),
     getAuthenticationInfo: () => ipcRenderer.invoke('auth:getAuthenticationInfo'),
+    clearTokenCache: () => ipcRenderer.invoke('auth:clearTokenCache'),
+    forceReauthentication: () => ipcRenderer.invoke('auth:forceReauthentication'),
   },
 
   // Microsoft Graph methods
@@ -51,6 +53,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     update: (config) => ipcRenderer.invoke('config:update', config),
     getLLMConfig: () => ipcRenderer.invoke('config:getLLMConfig'),
     saveLLMConfig: (config) => ipcRenderer.invoke('config:saveLLMConfig', config),
+    clearModelCache: (provider) => ipcRenderer.invoke('config:clearModelCache', provider),
+    getCachedModels: (provider) => ipcRenderer.invoke('config:getCachedModels', provider),
   },
 
   // Event listeners for real-time updates

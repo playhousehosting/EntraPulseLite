@@ -9,7 +9,7 @@ const EXECUTE_QUERY_REGEX = /<execute_query>([\s\S]*?)<\/execute_query>/g;
 
 export class UnifiedLLMService {
   private localService?: LLMService;
-  private cloudService?: CloudLLMService;
+  private cloudService?: CloudLLMService | null;
   private config: LLMConfig;
   private mcpClient?: MCPClient;
 
@@ -23,17 +23,23 @@ export class UnifiedLLMService {
         throw new Error(`baseUrl is required for ${config.provider}`);
       }
       this.localService = new LLMService(config);    } else if (config.provider === 'openai' || config.provider === 'anthropic') {
-      if (!config.apiKey) {
-        throw new Error(`apiKey is required for ${config.provider}`);
+      if (!config.apiKey || config.apiKey.trim() === '') {
+        console.warn(`⚠️  ${config.provider} provider selected but no API key configured. Service will be unavailable until API key is provided.`);
+        this.cloudService = null; // Will be initialized when API key is provided
+      } else {
+        // Pass MCP client to CloudLLMService for enhanced model discovery
+        this.cloudService = new CloudLLMService(config as any, this.mcpClient);
       }
-      // Pass MCP client to CloudLLMService for enhanced model discovery
-      this.cloudService = new CloudLLMService(config as any, this.mcpClient);
     } else {
       throw new Error(`Unsupported LLM provider: ${config.provider}`);
     }
   }
-
   async chat(messages: ChatMessage[]): Promise<string> {
+    if (!this.isServiceReady()) {
+      const status = this.getServiceStatus();
+      throw new Error(`LLM service not available: ${status.reason}`);
+    }
+    
     const service = this.getActiveService();
     const response = await service.chat(messages);
     
@@ -277,24 +283,70 @@ export class UnifiedLLMService {
     
     return modifiedResponse;
   }
-
   async isAvailable(): Promise<boolean> {
-    const service = this.getActiveService();
-    return service.isAvailable();
+    if (!this.isServiceReady()) {
+      return false;
+    }
+    
+    try {
+      const service = this.getActiveService();
+      return await service.isAvailable();
+    } catch (error) {
+      console.warn('Error checking service availability:', error);
+      return false;
+    }
   }
 
   async getAvailableModels(): Promise<string[]> {
-    const service = this.getActiveService();
-    return service.getAvailableModels();
+    if (!this.isServiceReady()) {
+      console.warn('LLM service not ready:', this.getServiceStatus().reason);
+      return [];
+    }
+    
+    try {
+      const service = this.getActiveService();
+      return await service.getAvailableModels();
+    } catch (error) {
+      console.warn('Error getting available models:', error);
+      return [];
+    }
   }
-
   private getActiveService(): LLMService | CloudLLMService {
     if (this.localService) {
       return this.localService;
     } else if (this.cloudService) {
       return this.cloudService;
     } else {
-      throw new Error('No LLM service available');
+      throw new Error(`No LLM service available. Provider '${this.config.provider}' is configured but ${this.isCloudProvider() ? 'API key is missing' : 'service failed to initialize'}.`);
+    }
+  }
+
+  /**
+   * Check if the service is properly initialized and ready to use
+   */
+  isServiceReady(): boolean {
+    if (this.localService) {
+      return true;
+    } else if (this.cloudService) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+
+  /**
+   * Get the reason why the service is not ready (if applicable)
+   */
+  getServiceStatus(): { ready: boolean; reason?: string } {
+    if (this.localService) {
+      return { ready: true };
+    } else if (this.cloudService) {
+      return { ready: true };
+    } else {
+      const reason = this.isCloudProvider() 
+        ? `${this.config.provider} API key is not configured` 
+        : `${this.config.provider} service failed to initialize`;
+      return { ready: false, reason };
     }
   }
 
@@ -305,8 +357,35 @@ export class UnifiedLLMService {
   isCloudProvider(): boolean {
     return this.config.provider === 'openai' || this.config.provider === 'anthropic';
   }
-
   getProviderType(): 'local' | 'cloud' {
     return this.isLocalProvider() ? 'local' : 'cloud';
+  }
+
+  /**
+   * Update the API key for cloud providers and reinitialize the service
+   */
+  updateApiKey(apiKey: string): void {
+    if (!this.isCloudProvider()) {
+      throw new Error('updateApiKey() is only available for cloud providers');
+    }
+
+    // Update the config
+    this.config.apiKey = apiKey;
+
+    // Reinitialize the cloud service
+    if (apiKey && apiKey.trim() !== '') {
+      this.cloudService = new CloudLLMService(this.config as any, this.mcpClient);
+      console.log(`✅ ${this.config.provider} service initialized with API key`);
+    } else {
+      this.cloudService = null;
+      console.warn(`⚠️  Empty API key provided for ${this.config.provider}`);
+    }
+  }
+
+  /**
+   * Get current configuration
+   */
+  getConfig(): LLMConfig {
+    return { ...this.config };
   }
 }

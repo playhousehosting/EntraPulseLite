@@ -45,7 +45,6 @@ export const SettingsDialog: React.FC<SettingsDialogProps> = ({
   useEffect(() => {
     setConfig(currentConfig);
   }, [currentConfig]);
-
   const fetchAvailableModels = async (provider: LLMConfig['provider'], apiKey?: string) => {
     if (provider !== 'openai' && provider !== 'anthropic') {
       setAvailableModels([]);
@@ -68,28 +67,22 @@ export const SettingsDialog: React.FC<SettingsDialogProps> = ({
         apiKey
       };
 
-      // Call main process to fetch available models
+      // Call main process to fetch available models (this now includes caching)
       const models = await window.electronAPI.llm.getAvailableModels?.(tempConfig) || [];
-      setAvailableModels(models);
       
-      if (models.length === 0) {
+      // Ensure no duplicates and proper sorting
+      const uniqueModels = [...new Set(models)].sort();
+      setAvailableModels(uniqueModels);
+      
+      if (uniqueModels.length === 0) {
         setModelFetchError('No models found. Please check your API key.');
+      } else {
+        console.log(`Loaded ${uniqueModels.length} unique models for ${provider}`);
       }
     } catch (error) {
       console.error('Failed to fetch models:', error);
-      setModelFetchError('Failed to fetch models. Using fallback options.');
-      // Set fallback models
-      if (provider === 'openai') {
-        setAvailableModels(['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-4', 'gpt-3.5-turbo']);
-      } else if (provider === 'anthropic') {
-        setAvailableModels([
-          'claude-3-5-sonnet-20241022',
-          'claude-3-5-haiku-20241022',
-          'claude-3-opus-20240229',
-          'claude-3-sonnet-20240229',
-          'claude-3-haiku-20240307'
-        ]);
-      }
+      setModelFetchError('Failed to fetch models. Please check your API key and try again.');
+      setAvailableModels([]);
     } finally {
       setIsLoadingModels(false);
     }
@@ -395,6 +388,54 @@ export const SettingsDialog: React.FC<SettingsDialogProps> = ({
               </Alert>
             )}
           </Box>
+
+          {/* Model Cache Management */}
+          {(config.provider === 'openai' || config.provider === 'anthropic') && (
+            <Box sx={{ mt: 2, p: 2, border: 1, borderColor: 'divider', borderRadius: 1 }}>
+              <Typography variant="subtitle2" gutterBottom>
+                Model Cache Management
+              </Typography>
+              <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+                Models are cached for 24 hours to improve performance. Clear cache to fetch fresh models.
+              </Typography>
+              <Box sx={{ display: 'flex', gap: 1 }}>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  onClick={async () => {
+                    try {
+                      await window.electronAPI.config.clearModelCache?.(config.provider);
+                      setAvailableModels([]);
+                      if (config.apiKey) {
+                        fetchAvailableModels(config.provider, config.apiKey);
+                      }
+                    } catch (error) {
+                      console.error('Failed to clear cache:', error);
+                    }
+                  }}
+                >
+                  Clear {config.provider === 'openai' ? 'OpenAI' : 'Anthropic'} Cache
+                </Button>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  onClick={async () => {
+                    try {
+                      await window.electronAPI.config.clearModelCache?.();
+                      setAvailableModels([]);
+                      if (config.apiKey) {
+                        fetchAvailableModels(config.provider, config.apiKey);
+                      }
+                    } catch (error) {
+                      console.error('Failed to clear all caches:', error);
+                    }
+                  }}
+                >
+                  Clear All Caches
+                </Button>
+              </Box>
+            </Box>
+          )}
 
           {/* Usage Guidelines */}
           <Alert severity="info" sx={{ mt: 2 }}>

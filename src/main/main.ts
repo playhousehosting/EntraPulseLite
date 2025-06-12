@@ -1,8 +1,9 @@
 // Main Electron process for EntraPulse Lite
-import { app, BrowserWindow, ipcMain, Menu } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, globalShortcut } from 'electron';
 import * as path from 'path';
 import { AuthService } from '../auth/AuthService';
 import { GraphService } from '../shared/GraphService';
+import { ConfigService } from '../shared/ConfigService';
 import { EnhancedLLMService } from '../llm/EnhancedLLMService';
 import { MCPClient } from '../mcp/clients/MCPSDKClient';
 import { MCPAuthService } from '../mcp/auth/MCPAuthService';
@@ -20,9 +21,11 @@ if (process.platform === 'win32') {
 // Load environment variables from .env.local
 require('dotenv').config({ path: path.join(__dirname, '../../.env.local') });
 
-class EntraPulseLiteApp {  private mainWindow: BrowserWindow | null = null;
+class EntraPulseLiteApp {
+  private mainWindow: BrowserWindow | null = null;
   private authService!: AuthService;
   private graphService!: GraphService;
+  private configService!: ConfigService;
   private llmService!: EnhancedLLMService;
   private mcpClient!: MCPClient;
   private mcpServerManager!: MCPServerManager;
@@ -44,7 +47,14 @@ class EntraPulseLiteApp {  private mainWindow: BrowserWindow | null = null;
       default:
         return 'gpt-4o-mini';
     }
-  }private initializeServices(): void {    // Initialize configuration
+  }  private initializeServices(): void {    // Initialize configuration service first
+    this.configService = new ConfigService();
+    
+    // Set initial authentication context (client-credentials mode)
+    this.configService.setAuthenticationContext('client-credentials');
+    
+    // Initialize configuration using stored config
+    const storedLLMConfig = this.configService.getLLMConfig();
     // Check if we have Lokka credentials configured for non-interactive authentication
     const hasLokkaCreds = process.env.LOKKA_CLIENT_ID && process.env.LOKKA_TENANT_ID && process.env.LOKKA_CLIENT_SECRET;
     const useExternalLokka = process.env.USE_EXTERNAL_LOKKA === 'true' || hasLokkaCreds;
@@ -56,25 +66,12 @@ class EntraPulseLiteApp {  private mainWindow: BrowserWindow | null = null;
           : '14d82eec-204b-4c2f-b7e8-296a70dab67e', // Microsoft Graph PowerShell fallback
         tenantId: process.env.MSAL_TENANT_ID && process.env.MSAL_TENANT_ID.trim() !== '' 
           ? process.env.MSAL_TENANT_ID 
-          : 'common',
-        scopes: hasLokkaCreds 
+          : 'common',        scopes: hasLokkaCreds 
           ? ['https://graph.microsoft.com/.default'] // Client credentials flow requires .default scope
-          : ['User.Read', 'User.ReadBasic.All', 'Directory.Read.All', 'Group.Read.All'], // Interactive flow can use specific scopes
-        clientSecret: process.env.MSAL_CLIENT_SECRET || process.env.LOKKA_CLIENT_SECRET, // Only needed for confidential client applications
-        useClientCredentials: Boolean(hasLokkaCreds), // Use client credentials flow if Lokka creds are configured
-      },      llm: {
-        provider: (process.env.LLM_PROVIDER as 'ollama' | 'lmstudio' | 'openai' | 'anthropic') || 'openai',
-        baseUrl: process.env.LLM_PROVIDER === 'lmstudio' 
-          ? process.env.LLM_BASE_URL || 'http://localhost:1234'
-          : process.env.LLM_PROVIDER === 'ollama'
-          ? process.env.LLM_BASE_URL || 'http://localhost:11434'
-          : undefined,
-        model: process.env.LLM_MODEL || this.getDefaultModelForProvider(process.env.LLM_PROVIDER as 'ollama' | 'lmstudio' | 'openai' | 'anthropic' || 'openai'),
-        temperature: parseFloat(process.env.LLM_TEMPERATURE || '0.7'),
-        maxTokens: parseInt(process.env.LLM_MAX_TOKENS || '2048'),
-        apiKey: process.env.LLM_API_KEY || process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY,
-        organization: process.env.OPENAI_ORGANIZATION,
-        preferLocal: process.env.LLM_PREFER_LOCAL === 'true',      },
+          : ['https://graph.microsoft.com/.default'], // Interactive flow using .default to inherit all app registration permissions
+        clientSecret: process.env.MSAL_CLIENT_SECRET || process.env.LOKKA_CLIENT_SECRET, // Only needed for confidential client applications        useClientCredentials: Boolean(hasLokkaCreds), // Use client credentials flow if Lokka creds are configured
+      },
+      llm: storedLLMConfig, // Use stored LLM configuration
       mcpServers: [
         {
           name: 'lokka',
@@ -117,9 +114,8 @@ class EntraPulseLiteApp {  private mainWindow: BrowserWindow | null = null;
           clientId: this.config.auth.clientId,
           tenantId: this.config.auth.tenantId
         };
-      }
-    });    // Initialize services
-    this.authService = new AuthService(this.config);
+      }    });    // Initialize services
+    this.authService = new AuthService(this.config, this.configService);
     this.graphService = new GraphService(this.authService);
 
     // Initialize MCP services first
@@ -143,11 +139,11 @@ class EntraPulseLiteApp {  private mainWindow: BrowserWindow | null = null;
     if (process.platform === 'win32') {
       app.setAppUserModelId('com.increment.entrapulselite');
     }
-    
-    app.whenReady().then(() => {
+      app.whenReady().then(() => {
       this.createWindow();
       this.setupMenu();
       this.setupIpcHandlers();
+      this.setupGlobalShortcuts();
 
       app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) this.createWindow();
@@ -157,25 +153,22 @@ class EntraPulseLiteApp {  private mainWindow: BrowserWindow | null = null;
     });
     
     app.on('will-quit', async (event) => {
-      // Stop all MCP servers gracefully before quitting
+      // Prevent default quit to clean up properly
       event.preventDefault();
+      
       try {
+        // Unregister all global shortcuts
+        globalShortcut.unregisterAll();
+        console.log('Global shortcuts unregistered');
+        
+        // Stop all MCP servers gracefully before quitting
         await this.mcpClient.stopAllServers();
+        console.log('MCP servers stopped');
+        
+        // Now quit for real
         app.quit();
       } catch (error) {
-        console.error('Error stopping MCP servers:', error);
-        app.quit();
-      }
-    });
-    
-    app.on('will-quit', async (event) => {
-      // Stop all MCP servers gracefully before quitting
-      event.preventDefault();
-      try {
-        await this.mcpClient.stopAllServers();
-        app.quit();
-      } catch (error) {
-        console.error('Error stopping MCP servers:', error);
+        console.error('Error during cleanup:', error);
         app.quit();
       }
     });
@@ -243,13 +236,15 @@ class EntraPulseLiteApp {  private mainWindow: BrowserWindow | null = null;
           { role: 'copy' },
           { role: 'paste' },
         ],
-      },
-      {
+      },      {
         label: 'View',
         submenu: [
           { role: 'reload' },
           { role: 'forceReload' },
-          { role: 'toggleDevTools' },
+          { 
+            role: 'toggleDevTools',
+            accelerator: 'F12'
+          },
           { type: 'separator' },
           { role: 'resetZoom' },
           { role: 'zoomIn' },
@@ -269,11 +264,28 @@ class EntraPulseLiteApp {  private mainWindow: BrowserWindow | null = null;
           },
         ],
       },
-    ];
-
-    const menu = Menu.buildFromTemplate(template);
+    ];    const menu = Menu.buildFromTemplate(template);
     Menu.setApplicationMenu(menu);
   }
+
+  private setupGlobalShortcuts(): void {
+    // Register F12 to toggle DevTools - this ensures it works even if menu doesn't respond
+    globalShortcut.register('F12', () => {
+      if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+        this.mainWindow.webContents.toggleDevTools();
+      }
+    });
+
+    // Register Ctrl+Shift+I as backup shortcut for DevTools
+    globalShortcut.register('CmdOrCtrl+Shift+I', () => {
+      if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+        this.mainWindow.webContents.toggleDevTools();
+      }
+    });
+
+    console.log('Global shortcuts registered: F12 and Ctrl+Shift+I for DevTools');
+  }
+
   private setupIpcHandlers(): void {
     // Asset path handler
     ipcMain.handle('app:getAssetPath', (event, assetName: string) => {
@@ -341,6 +353,26 @@ class EntraPulseLiteApp {  private mainWindow: BrowserWindow | null = null;
       } catch (error) {
         console.error('Get authentication info failed:', error);
         return null;
+      }
+    });
+
+    // Token cache management handlers
+    ipcMain.handle('auth:clearTokenCache', async () => {
+      try {
+        await this.authService.clearTokenCache();
+        return { success: true };
+      } catch (error) {
+        console.error('Clear token cache failed:', error);
+        throw error;
+      }
+    });
+
+    ipcMain.handle('auth:forceReauthentication', async () => {
+      try {
+        return await this.authService.forceReauthentication();
+      } catch (error) {
+        console.error('Force reauthentication failed:', error);
+        throw error;
       }
     });
 
@@ -450,24 +482,50 @@ class EntraPulseLiteApp {  private mainWindow: BrowserWindow | null = null;
         console.error('Config update failed:', error);
         throw error;
       }
-    });
-
-    // LLM Configuration handlers
+    });    // LLM Configuration handlers
     ipcMain.handle('config:getLLMConfig', async () => {
-      return this.config.llm;
+      return this.configService.getLLMConfig();
     });
 
-    ipcMain.handle('config:saveLLMConfig', async (event, newLLMConfig) => {      try {
+    ipcMain.handle('config:saveLLMConfig', async (event, newLLMConfig) => {
+      try {
+        // Save configuration securely
+        this.configService.saveLLMConfig(newLLMConfig);
+        
+        // Update runtime config
         this.config.llm = newLLMConfig;
+        
         // Reinitialize LLM service with new config
         this.llmService = new EnhancedLLMService(this.config.llm, this.authService, this.mcpClient);
-        // In a real implementation, save to file
-        return this.config.llm;
+        
+        return this.configService.getLLMConfig();
       } catch (error) {
         console.error('LLM config update failed:', error);
         throw error;
       }
-    });    // LLM testing handlers
+    });
+
+    // Model cache management handlers
+    ipcMain.handle('config:clearModelCache', async (event, provider?: string) => {
+      try {
+        this.configService.clearModelCache(provider);
+        return { success: true };
+      } catch (error) {
+        console.error('Failed to clear model cache:', error);
+        throw error;
+      }
+    });
+
+    ipcMain.handle('config:getCachedModels', async (event, provider: string) => {
+      try {
+        return this.configService.getCachedModels(provider) || [];
+      } catch (error) {
+        console.error('Failed to get cached models:', error);
+        return [];
+      }
+    });
+
+    // LLM testing handlers
     ipcMain.handle('llm:testConnection', async (event, testConfig) => {
       try {
         const { UnifiedLLMService } = require('../llm/UnifiedLLMService');
@@ -481,15 +539,41 @@ class EntraPulseLiteApp {  private mainWindow: BrowserWindow | null = null;
       try {
         // If config is provided, use the appropriate service
         if (config && (config.provider === 'openai' || config.provider === 'anthropic') && config.apiKey) {
+          // Check cache first
+          const cachedModels = this.configService.getCachedModels(config.provider);
+          if (cachedModels && cachedModels.length > 0) {
+            console.log(`Using cached models for ${config.provider}:`, cachedModels);
+            return cachedModels;
+          }
+
+          console.log(`Fetching fresh models for ${config.provider}...`);
           const { CloudLLMService } = require('../llm/CloudLLMService');
           const cloudService = new CloudLLMService(config, this.mcpClient);
-          return await cloudService.getAvailableModels();
+          const freshModels = await cloudService.getAvailableModels();
+          
+          // Cache the results
+          if (freshModels && freshModels.length > 0) {
+            this.configService.cacheModels(config.provider, freshModels);
+            console.log(`Cached ${freshModels.length} models for ${config.provider}`);
+          }
+          
+          return freshModels;
         }
         
         // Otherwise use the default service
         return await this.llmService.getAvailableModels();
       } catch (error) {
         console.error('Get available models failed:', error);
+        
+        // Return cached models as fallback if available
+        if (config?.provider) {
+          const cachedModels = this.configService.getCachedModels(config.provider);
+          if (cachedModels && cachedModels.length > 0) {
+            console.log(`Returning cached models as fallback for ${config.provider}`);
+            return cachedModels;
+          }
+        }
+        
         return [];
       }
     });

@@ -70,46 +70,51 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
       // Update user object to include photoUrl for other components
       setUser(prevUser => prevUser ? { ...prevUser, photoUrl } : null);
     }
-  };
-  const initializeApp = async () => {
-    try {      // Get authentication information first
-      const authInfo = await window.electronAPI.auth.getAuthenticationInfo();
-      if (authInfo) {
-        console.log('Authentication Info:', authInfo);
-        setAuthMode(authInfo.mode);        // Set permissions based on authentication mode
-        if (authInfo.mode === 'client-credentials') {
-          // For client credentials flow, prefer actual permissions from token if available
-          if (authInfo.actualPermissions && authInfo.actualPermissions.length > 0) {
-            setCurrentPermissions(authInfo.actualPermissions);
-            setPermissionSource('actual');
-            console.log('Using actual permissions from token:', authInfo.actualPermissions);
-          } else {
-            setCurrentPermissions(authInfo.permissions);
-            setPermissionSource('configured');
-            console.log('Using configured permissions:', authInfo.permissions);
-          }
-        } else {
-          // For interactive flow, keep the default User.Read
-          setCurrentPermissions(['User.Read']);
-          setPermissionSource('default');
-        }
-      }
-
-      // Check authentication status
+  };  const initializeApp = async () => {
+    try {
+      console.log('🚀 Initializing EntraPulse Lite...');
+      
+      // Check authentication status first
       const token = await window.electronAPI.auth.getToken();
       if (token) {
         setAuthToken(token);
+        console.log('✅ Found existing authentication token');
+        
         const currentUser = await window.electronAPI.auth.getCurrentUser();
         setUser(currentUser);
+        console.log('✅ Retrieved current user:', currentUser?.displayName);
+      }
+
+      // Get authentication information (including permissions)
+      const authInfo = await window.electronAPI.auth.getAuthenticationInfo();
+      if (authInfo) {
+        console.log('📋 Authentication Info received:', authInfo);
+        setAuthMode(authInfo.mode);
         
-        // No need to call fetchUserPhoto here as it will be triggered by the useEffect
+        // Set permissions based on authentication mode and what's available
+        if (authInfo.actualPermissions && authInfo.actualPermissions.length > 0) {
+          console.log('✅ Using actual permissions from token:', authInfo.actualPermissions);
+          setCurrentPermissions(authInfo.actualPermissions);
+          setPermissionSource('actual');
+        } else if (authInfo.permissions && authInfo.permissions.length > 0) {
+          console.log('⚠️ Using configured permissions (no actual permissions found):', authInfo.permissions);
+          setCurrentPermissions(authInfo.permissions);
+          setPermissionSource('configured');
+        } else {
+          console.log('⚠️ No permissions found, using default');
+          setCurrentPermissions(['User.Read']);
+          setPermissionSource('default');
+        }
+      } else {
+        console.log('❌ No authentication info available');
       }
 
       // Check LLM availability
       const available = await window.electronAPI.llm.isAvailable();
       setLlmAvailable(available);
+      console.log('🤖 LLM availability:', available);
 
-      // Add welcome message
+      // Add welcome message if authenticated and LLM is available
       if (token && available) {
         const welcomeMessage: ChatMessage = {
           id: 'welcome',
@@ -118,12 +123,13 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
           timestamp: new Date(),
         };
         setMessages([welcomeMessage]);
+        console.log('✅ Welcome message added');
       }
     } catch (error) {
-      console.error('Failed to initialize app:', error);
+      console.error('❌ Failed to initialize app:', error);
       setError('Failed to initialize application');
     }
-  };  const handleLogin = async () => {
+  };const handleLogin = async () => {
     try {
       setIsLoading(true);
       // Pass the redirect flow preference to the login function
@@ -298,8 +304,7 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
     } finally {
       setIsLoading(false);
     }
-  };
-  const toggleTraceExpansion = (messageId: string) => {
+  };  const toggleTraceExpansion = (messageId: string) => {
     setExpandedTraces(prev => {
       const newSet = new Set(prev);
       if (newSet.has(messageId)) {
@@ -309,6 +314,61 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
       }
       return newSet;
     });
+  };
+
+  const checkAuthenticationStatus = async () => {
+    try {
+      console.log('🔄 Refreshing authentication status and permissions...');
+      
+      // Get updated authentication information
+      const authInfo = await window.electronAPI.auth.getAuthenticationInfo();
+      if (authInfo) {
+        console.log('Updated Authentication Info:', authInfo);
+        setAuthMode(authInfo.mode);
+        
+        // Set permissions based on authentication mode
+        if (authInfo.mode === 'client-credentials') {
+          // For client credentials flow, prefer actual permissions from token if available
+          if (authInfo.actualPermissions && authInfo.actualPermissions.length > 0) {
+            setCurrentPermissions(authInfo.actualPermissions);
+            setPermissionSource('actual');
+            console.log('Using actual permissions from token:', authInfo.actualPermissions);
+          } else {
+            setCurrentPermissions(authInfo.permissions);
+            setPermissionSource('configured');
+            console.log('Using configured permissions:', authInfo.permissions);
+          }
+        } else {
+          // For interactive flow, also use actual permissions from token if available
+          if (authInfo.actualPermissions && authInfo.actualPermissions.length > 0) {
+            setCurrentPermissions(authInfo.actualPermissions);
+            setPermissionSource('actual');
+            console.log('Using actual permissions from interactive token:', authInfo.actualPermissions);
+          } else {
+            setCurrentPermissions(authInfo.permissions);
+            setPermissionSource('configured');
+            console.log('Using configured permissions for interactive:', authInfo.permissions);
+          }
+        }
+      }
+
+      // Check and update authentication token
+      const token = await window.electronAPI.auth.getToken();
+      if (token) {
+        setAuthToken(token);
+        const currentUser = await window.electronAPI.auth.getCurrentUser();
+        setUser(currentUser);
+        console.log('✅ Authentication status refreshed successfully');
+      } else {
+        console.log('❌ No valid token found after refresh');
+        setAuthToken(null);
+        setUser(null);
+        setUserPhotoUrl(null);
+      }
+    } catch (error) {
+      console.error('Failed to refresh authentication status:', error);
+      throw error; // Re-throw to let the caller handle it
+    }
   };
 
   if (!authToken) {
@@ -656,9 +716,7 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
             {error}
           </Alert>
         </Box>
-      )}
-
-      {/* Input */}
+      )}      {/* Input */}
       <Box sx={{ p: 2, borderTop: 1, borderColor: 'divider' }}>
         <Box display="flex" gap={1}>
           <TextField
@@ -668,10 +726,14 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
             value={inputMessage}
             onChange={(e) => setInputMessage(e.target.value)}
             onKeyPress={handleKeyPress}
-            placeholder="Ask about your Microsoft Entra environment..."
-            disabled={isLoading || !llmAvailable}
+            placeholder={!llmAvailable 
+              ? "LLM is offline - configure a local LLM service to enable chat..." 
+              : "Ask about your Microsoft Entra environment..."
+            }
+            disabled={isLoading}
             variant="outlined"
             size="small"
+            helperText={!llmAvailable ? "Configure Ollama, LM Studio, or other local LLM to enable chat functionality" : ""}
           />
           <Button
             variant="contained"
@@ -682,7 +744,7 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
             <SendIcon />
           </Button>
         </Box>
-      </Box>      {/* Permissions Status Panel */}
+      </Box>{/* Permissions Status Panel */}
       <Box sx={{ p: 2, backgroundColor: 'background.paper', borderBottom: 1, borderColor: 'divider' }}>
         {/* Authentication Mode Display */}
         {authMode && (
@@ -753,14 +815,37 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
             disabled={isLoading}
           >
             List Groups
-          </Button>
-          <Button
+          </Button>          <Button
             size="small"
             variant="outlined"
             onClick={() => testGraphQuery('/applications', ['Application.Read.All'])}
             disabled={isLoading}
           >
             List Applications
+          </Button>
+          <Button
+            size="small"
+            variant="contained"
+            color="secondary"
+            onClick={async () => {
+              try {
+                setIsLoading(true);
+                console.log('🔄 Clearing token cache and forcing reauthentication...');
+                const result = await window.electronAPI.auth.forceReauthentication();
+                if (result) {
+                  console.log('✅ Reauthentication successful, refreshing permissions...');
+                  // Refresh the authentication info to get new permissions
+                  await checkAuthenticationStatus();
+                }
+              } catch (error) {
+                console.error('Failed to refresh permissions:', error);
+              } finally {
+                setIsLoading(false);
+              }
+            }}
+            disabled={isLoading}
+          >
+            Refresh Permissions
           </Button>
         </Box>
         

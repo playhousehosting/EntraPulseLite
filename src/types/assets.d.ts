@@ -43,9 +43,11 @@ interface Window {
       login: (useRedirectFlow?: boolean) => Promise<any>;
       logout: () => Promise<void>;
       getToken: () => Promise<any>;
-      getCurrentUser: () => Promise<any>;
-      requestPermissions: (permissions: string[]) => Promise<any>;
-      getTokenWithPermissions: (permissions: string[]) => Promise<any>;      getAuthenticationInfo: () => Promise<{
+      getCurrentUser: () => Promise<any>;      requestPermissions: (permissions: string[]) => Promise<any>;
+      getTokenWithPermissions: (permissions: string[]) => Promise<any>;
+      clearTokenCache: () => Promise<{ success: boolean }>;
+      forceReauthentication: () => Promise<any>;
+      getAuthenticationInfo: () => Promise<{
         mode: 'client-credentials' | 'interactive';
         permissions: string[];
         actualPermissions?: string[];
@@ -76,6 +78,8 @@ interface Window {
       update: (config: any) => Promise<any>;
       getLLMConfig: () => Promise<any>;
       saveLLMConfig: (config: any) => Promise<any>;
+      clearModelCache: (provider?: string) => Promise<{ success: boolean }>;
+      getCachedModels: (provider: string) => Promise<string[]>;
     };
     debug: {
       checkMCPServerHealth: () => Promise<any>;
