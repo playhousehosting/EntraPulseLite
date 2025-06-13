@@ -87,12 +87,22 @@ export class CloudLLMService {
       return false;
     }
   }
-
   private async chatWithOpenAI(messages: ChatMessage[]): Promise<string> {
     const openaiMessages = messages.map(msg => ({
       role: msg.role,
       content: msg.content,
-    }));    const systemPrompt = `You are an expert Microsoft Entra (Azure AD) and Microsoft Graph API assistant integrated into EntraPulse Lite. 
+    }));
+
+    // Check if a system prompt is already provided in the messages
+    const hasSystemPrompt = messages.some(msg => msg.role === 'system');
+    
+    let fullMessages;
+    if (hasSystemPrompt) {
+      // Use the provided system prompt (from EnhancedLLMService)
+      fullMessages = openaiMessages;
+    } else {
+      // Use default system prompt for direct calls
+      const defaultSystemPrompt = `You are an expert Microsoft Entra (Azure AD) and Microsoft Graph API assistant integrated into EntraPulse Lite. 
 
 You have access to Microsoft Graph APIs through built-in MCP servers and can help users:
 - Query user accounts, groups, applications, and service principals
@@ -140,10 +150,11 @@ Examples of valid queries:
 
 Always be helpful, accurate, and security-conscious in your responses.`;
 
-    const fullMessages = [
-      { role: 'system', content: systemPrompt },
-      ...openaiMessages
-    ];    const response = await axios.post('https://api.openai.com/v1/chat/completions', {
+      fullMessages = [
+        { role: 'system', content: defaultSystemPrompt },
+        ...openaiMessages
+      ];
+    }const response = await axios.post('https://api.openai.com/v1/chat/completions', {
       model: this.config.model || 'gpt-4o-mini',
       messages: fullMessages,
       temperature: this.config.temperature || 0.1,
@@ -158,12 +169,15 @@ Always be helpful, accurate, and security-conscious in your responses.`;
 
     return response.data.choices[0].message.content;
   }
-
   private async chatWithAnthropic(messages: ChatMessage[]): Promise<string> {
     const anthropicMessages = messages.filter(msg => msg.role !== 'system').map(msg => ({
       role: msg.role,
       content: msg.content,
-    }));    const systemPrompt = `You are an expert Microsoft Entra (Azure AD) and Microsoft Graph API assistant integrated into EntraPulse Lite. 
+    }));
+
+    // Check if messages already contain an enhanced system prompt, if so use it
+    const systemMessage = messages.find(msg => msg.role === 'system');
+    const systemPrompt = systemMessage?.content || `You are an expert Microsoft Entra (Azure AD) and Microsoft Graph API assistant integrated into EntraPulse Lite. 
 
 You have access to Microsoft Graph APIs through built-in MCP servers and can help users:
 - Query user accounts, groups, applications, and service principals
@@ -209,7 +223,9 @@ Examples of valid queries:
 }
 </execute_query>
 
-Always be helpful, accurate, and security-conscious in your responses.`;    const response = await axios.post('https://api.anthropic.com/v1/messages', {
+Always be helpful, accurate, and security-conscious in your responses.`;
+
+    const response = await axios.post('https://api.anthropic.com/v1/messages', {
       model: this.config.model || 'claude-3-5-sonnet-20241022', // Use latest stable model as default
       max_tokens: this.config.maxTokens || 2048,
       temperature: this.config.temperature || 0.1,

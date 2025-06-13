@@ -5,3 +5,147 @@ body {
   max-width: 38rem;
   padding: 2rem;
 }
+
+/* Markdown Styling for ChatComponent */
+.markdown-content {
+  line-height: 1.6;
+  color: inherit;
+}
+
+.markdown-content h1 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin: 1rem 0 0.5rem 0;
+  color: #1976d2;
+  border-bottom: 2px solid #e3f2fd;
+  padding-bottom: 0.3rem;
+}
+
+.markdown-content h2 {
+  font-size: 1.3rem;
+  font-weight: 600;
+  margin: 1.2rem 0 0.5rem 0;
+  color: #1976d2;
+  border-bottom: 1px solid #e3f2fd;
+  padding-bottom: 0.2rem;
+}
+
+.markdown-content h3 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 1rem 0 0.4rem 0;
+  color: #1976d2;
+}
+
+.markdown-content h4, .markdown-content h5, .markdown-content h6 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0.8rem 0 0.3rem 0;
+  color: #1976d2;
+}
+
+.markdown-content p {
+  margin: 0.5rem 0;
+}
+
+.markdown-content strong {
+  font-weight: 600;
+  color: #1976d2;
+}
+
+.markdown-content em {
+  font-style: italic;
+  color: #424242;
+}
+
+.markdown-content code {
+  background-color: rgba(25, 118, 210, 0.08);
+  padding: 0.2rem 0.4rem;
+  border-radius: 3px;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 0.9em;
+  color: #1976d2;
+}
+
+.markdown-content pre {
+  background-color: rgba(25, 118, 210, 0.05);
+  border: 1px solid rgba(25, 118, 210, 0.2);
+  border-radius: 6px;
+  padding: 1rem;
+  margin: 1rem 0;
+  overflow-x: auto;
+}
+
+.markdown-content pre code {
+  background-color: transparent;
+  padding: 0;
+  border-radius: 0;
+  color: inherit;
+}
+
+.markdown-content blockquote {
+  border-left: 4px solid #1976d2;
+  background-color: rgba(25, 118, 210, 0.03);
+  margin: 1rem 0;
+  padding: 0.5rem 1rem;
+  border-radius: 0 4px 4px 0;
+  font-style: italic;
+}
+
+.markdown-content blockquote p {
+  margin: 0.3rem 0;
+}
+
+.markdown-content ul, .markdown-content ol {
+  margin: 0.5rem 0;
+  padding-left: 1.5rem;
+}
+
+.markdown-content li {
+  margin: 0.2rem 0;
+}
+
+.markdown-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+  font-size: 0.9rem;
+}
+
+.markdown-content table th,
+.markdown-content table td {
+  border: 1px solid rgba(25, 118, 210, 0.2);
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+}
+
+.markdown-content table th {
+  background-color: rgba(25, 118, 210, 0.08);
+  font-weight: 600;
+  color: #1976d2;
+}
+
+.markdown-content table tr:nth-child(even) {
+  background-color: rgba(25, 118, 210, 0.02);
+}
+
+.markdown-content table tr:hover {
+  background-color: rgba(25, 118, 210, 0.05);
+}
+
+.markdown-content hr {
+  border: none;
+  border-top: 1px solid rgba(25, 118, 210, 0.2);
+  margin: 1.5rem 0;
+}
+
+.markdown-content a {
+  color: #1976d2;
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: border-bottom 0.2s ease;
+}
+
+.markdown-content a:hover {
+  border-bottom: 1px solid #1976d2;
+}

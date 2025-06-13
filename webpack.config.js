@@ -19,8 +19,7 @@ const commonConfig = {
       '@auth': path.resolve(__dirname, 'src/auth'),
       '@llm': path.resolve(__dirname, 'src/llm'),
       '@types': path.resolve(__dirname, 'src/types')
-    }
-  },  module: {
+    }  },  module: {
     rules: [
       {
         test: /\.tsx?$/,
@@ -41,6 +40,14 @@ const commonConfig = {
         type: 'asset/resource',
         generator: {
           filename: 'assets/[name][ext]'
+        }
+      },
+      // Handle ESM modules that might be problematic
+      {
+        test: /\.m?js$/,
+        type: 'javascript/auto',
+        resolve: {
+          fullySpecified: false
         }
       }
     ]
@@ -73,7 +80,29 @@ const rendererConfig = {
   output: {
     path: path.resolve(__dirname, 'dist'),
     filename: 'renderer.js'
-  },  plugins: [
+  },  resolve: {
+    ...commonConfig.resolve,
+    fallback: {
+      // Provide Node.js polyfills for browser environment
+      "path": require.resolve("path-browserify"),
+      "fs": false,
+      "os": require.resolve("os-browserify/browser"),
+      "crypto": require.resolve("crypto-browserify"),
+      "stream": require.resolve("stream-browserify"),
+      "util": require.resolve("util"),
+      "buffer": require.resolve("buffer"),
+      "process": require.resolve("process/browser"),
+      "vm": false,
+      "constants": false,
+      "assert": require.resolve("assert"),
+      "url": require.resolve("url"),
+      "querystring": require.resolve("querystring-es3"),
+      "worker_threads": false,
+      "child_process": false,
+      "module": false
+    }
+  },
+  plugins: [
     new HtmlWebpackPlugin({
       template: './src/renderer/index.html',
       filename: 'index.html'
@@ -93,6 +122,11 @@ const rendererConfig = {
           to: 'assets'
         }
       ]
+    }),
+    // Provide global variables for Node.js compatibility
+    new (require('webpack')).ProvidePlugin({
+      process: 'process/browser',
+      Buffer: ['buffer', 'Buffer']
     })
   ],
   externals: {

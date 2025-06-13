@@ -20,6 +20,8 @@ import {
   FormControlLabel,
   Checkbox,
 } from '@mui/material';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import {
   Send as SendIcon,
   Person as PersonIcon,
@@ -578,14 +580,80 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
                       )}
                     </Box>
                   }                  secondary={
-                    <>
-                      <Typography
-                        variant="body1"
-                        component="div"
-                        sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
+                    <>                      <Box
+                        sx={{ 
+                          whiteSpace: 'pre-wrap', 
+                          wordBreak: 'break-word',
+                          '& h1, & h2, & h3, & h4, & h5, & h6': {
+                            marginTop: '1rem',
+                            marginBottom: '0.5rem',
+                            fontWeight: 'bold',
+                          },
+                          '& h1': { fontSize: '1.5rem' },
+                          '& h2': { fontSize: '1.3rem' },
+                          '& h3': { fontSize: '1.1rem' },
+                          '& p': {
+                            marginBottom: '0.75rem',
+                            lineHeight: 1.6,
+                          },
+                          '& ul, & ol': {
+                            marginBottom: '0.75rem',
+                            paddingLeft: '1.5rem',
+                          },
+                          '& li': {
+                            marginBottom: '0.25rem',
+                          },
+                          '& code': {
+                            backgroundColor: 'rgba(175, 184, 193, 0.2)',
+                            padding: '0.125rem 0.25rem',
+                            borderRadius: '0.25rem',
+                            fontSize: '0.875rem',
+                            fontFamily: 'Monaco, Menlo, "Ubuntu Mono", monospace',
+                          },
+                          '& pre': {
+                            backgroundColor: 'rgba(175, 184, 193, 0.1)',
+                            padding: '1rem',
+                            borderRadius: '0.5rem',
+                            overflow: 'auto',
+                            marginBottom: '0.75rem',
+                          },
+                          '& pre code': {
+                            backgroundColor: 'transparent',
+                            padding: 0,
+                          },
+                          '& blockquote': {
+                            borderLeft: '4px solid #1976d2',
+                            paddingLeft: '1rem',
+                            marginLeft: 0,
+                            marginBottom: '0.75rem',
+                            fontStyle: 'italic',
+                          },
+                          '& table': {
+                            borderCollapse: 'collapse',
+                            width: '100%',
+                            marginBottom: '0.75rem',
+                          },
+                          '& th, & td': {
+                            border: '1px solid rgba(175, 184, 193, 0.3)',
+                            padding: '0.5rem',
+                            textAlign: 'left',
+                          },
+                          '& th': {
+                            backgroundColor: 'rgba(175, 184, 193, 0.1)',
+                            fontWeight: 'bold',
+                          },
+                          '& strong': {
+                            fontWeight: 'bold',
+                          },
+                          '& em': {
+                            fontStyle: 'italic',
+                          },
+                        }}
                       >
-                        {message.content}
-                      </Typography>
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                          {message.content}
+                        </ReactMarkdown>
+                      </Box>
                       
                       {/* Enhanced trace data display */}
                       {message.metadata?.traceData && expandedTraces.has(message.id) && (

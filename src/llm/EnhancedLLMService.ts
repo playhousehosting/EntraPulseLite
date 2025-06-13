@@ -409,8 +409,7 @@ Respond ONLY with a JSON object in this exact format:
           lokkaData = mcpResults.lokkaResult;
         }
       }
-      
-      if (lokkaData !== null && lokkaData !== undefined) {
+        if (lokkaData !== null && lokkaData !== undefined) {
         console.log('🔍 Processing Lokka data:', {
           dataType: typeof lokkaData,
           isString: typeof lokkaData === 'string',
@@ -467,7 +466,38 @@ Respond ONLY with a JSON object in this exact format:
             console.log('🔍 Using object data as-is');
           }
         }
+          
+        // Prepare user-friendly context based on data type
+        if (typeof finalLokkaData === 'number') {
+          // Simple count
+          contextData += `Microsoft Graph Data (Count): ${finalLokkaData}\n\n`;
+        } else if (Array.isArray(finalLokkaData)) {
+          // Array of objects - provide structured summary
+          contextData += `Microsoft Graph Data (${finalLokkaData.length} items):\n`;
+          
+          // Add a summary of the data structure for the LLM
+          if (finalLokkaData.length > 0) {
+            const sampleItem = finalLokkaData[0];
+            if (sampleItem && typeof sampleItem === 'object') {
+              const keys = Object.keys(sampleItem);
+              contextData += `Data structure includes: ${keys.join(', ')}\n`;
+              
+              // For user data, provide a sample formatted entry
+              if (keys.includes('displayName') || keys.includes('userPrincipalName')) {
+                contextData += 'Sample entry format: Name (Title) - Email\n';
+              }
+            }
+          }
+          
+          contextData += `Raw data: ${JSON.stringify(finalLokkaData, null, 2)}\n\n`;
+        } else if (typeof finalLokkaData === 'object') {
+          // Single object
+          contextData += `Microsoft Graph Data (Single object):\n${JSON.stringify(finalLokkaData, null, 2)}\n\n`;
+        } else {
+          // Other types
           contextData += `Microsoft Graph Data:\n${JSON.stringify(finalLokkaData, null, 2)}\n\n`;
+        }
+        
         console.log('🔍 Added context data:', {
           finalLokkaData,
           contextLength: contextData.length,
@@ -493,17 +523,48 @@ ${contextData}
 9. If asked for a count and the data shows 52, your answer MUST contain "52"
 10. NEVER generate different numbers than what is provided in the data
 
+📋 RESPONSE FORMATTING INSTRUCTIONS (Claude Desktop Style):
+1. NEVER show raw JSON data to the user
+2. Start with a clear, prominent summary using ## heading
+3. Use markdown formatting extensively:
+   - ## for main headings
+   - ### for subsections  
+   - **Bold** for important numbers and key terms
+   - - Bullet points for lists
+   - > Blockquotes for important insights
+   - \`code\` for technical terms or IDs
+   - Tables for structured data comparison
+4. For user lists: create clean tables or bullet points with:
+   - **Name** (Title/Role) - email@domain.com
+5. For counts: make numbers prominent with **bold formatting**
+6. Add insights section with > blockquotes
+7. Structure like this:
+   ## Summary
+   [Direct answer with key numbers in bold]
+   
+   ### Details
+   [Organized data presentation]
+   
+   ### Key Insights
+   > [Analysis and patterns]
+8. Use emojis sparingly for visual appeal (📊 📈 👥 🏢)
+9. End with helpful context about what the data means
+
 VERIFICATION CHECK: What number does the data show? You must use that exact number in your response.` : ''}
 
 You are responding to user queries about Microsoft Graph API and Entra ID.
-${contextData ? 'Base your response ENTIRELY on the data provided above. Use the exact numbers and information shown.' : ''}
-If you received Graph data:
-- State the exact count or information from the data
-- Do not generate different numbers or estimates  
-- Provide insights based on the actual data shown
-- For count queries, use the precise number from the results
-If you received documentation, summarize the key points accurately.
-Be helpful and informative while staying strictly accurate to the provided data.`;
+${contextData ? 'Base your response ENTIRELY on the data provided above. Parse and present it in a user-friendly format using the Claude Desktop formatting style above.' : ''}
+
+Response guidelines:
+- Start with a ## Summary section and clear, direct answer
+- Present data in organized, visually appealing markdown format
+- For user accounts: use tables or clean bullet lists with names, titles, emails
+- For counts: use **bold** to make numbers prominent
+- Add a ### Key Insights section with > blockquotes
+- Use proper markdown headings, tables, and formatting
+- Be helpful and informative while staying strictly accurate to the provided data
+
+If you received documentation, summarize the key points accurately.`;
 
     const responseMessages: ChatMessage[] = [
       { 
