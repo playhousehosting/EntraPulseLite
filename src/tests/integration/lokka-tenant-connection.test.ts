@@ -4,7 +4,7 @@
 import { ExternalLokkaMCPServer } from '../../mcp/servers/lokka/ExternalLokkaMCPServer';
 import { MCPAuthService } from '../../mcp/auth/MCPAuthService';
 import { AuthService } from '../../auth/AuthService';
-import { extractJsonFromMCPResponse, validateMCPResponse } from '../utils/mcpResponseParser';
+import { validateMCPResponse } from '../utils/mcpResponseParser';
 import dotenv from 'dotenv';
 import path from 'path';
 
@@ -78,10 +78,45 @@ describe('Lokka MCP Server Tenant Connection', () => {
       const response = await server.handleRequest(request);      // Verify the response
       expect(response).toBeDefined();
       expect(response.error).toBeUndefined();      // Validate and extract data using utility
-      validateMCPResponse(response);
+      validateMCPResponse(response);      console.log('🔍 Raw MCP response:', JSON.stringify(response, null, 2));
       
-      console.log('🔍 Raw MCP response:', JSON.stringify(response, null, 2));
-      const organizationData = extractJsonFromMCPResponse(response);
+      // Simple and robust MCP response parsing
+      let organizationData;
+        // Handle the MCP response format we're actually getting
+      if (response.result?.content && Array.isArray(response.result.content)) {
+        const content = response.result.content[0];
+        console.log('🔍 Content structure:', JSON.stringify(content, null, 2));
+        console.log('🔍 Content type:', content?.type);
+        
+        let textContent = null;
+        
+        if (content?.type === 'text' && content?.text) {
+          // Direct text content
+          textContent = content.text;
+        } else if (content?.type === 'json' && content?.json?.content && Array.isArray(content.json.content)) {
+          // Nested MCP structure with JSON wrapper
+          const nestedContent = content.json.content[0];
+          if (nestedContent?.type === 'text' && nestedContent?.text) {
+            textContent = nestedContent.text;
+          }
+        }
+        
+        if (textContent) {
+          // Extract JSON from the text
+          const jsonStart = textContent.indexOf('{');
+          if (jsonStart !== -1) {
+            const jsonString = textContent.substring(jsonStart);
+            organizationData = JSON.parse(jsonString);
+          } else {
+            throw new Error('No JSON found in MCP text response');
+          }
+        } else {
+          throw new Error(`Invalid MCP content format. Content: ${JSON.stringify(content)}`);
+        }
+      } else {
+        throw new Error(`Invalid MCP response structure. Response: ${JSON.stringify(response.result)}`);
+      }
+      
       console.log('🔍 Extracted organization data:', JSON.stringify(organizationData, null, 2));
       console.log('🔍 Type of organizationData:', typeof organizationData);
       
@@ -141,10 +176,45 @@ describe('Lokka MCP Server Tenant Connection', () => {
         // Verify the response
       expect(response).toBeDefined();
       expect(response.error).toBeUndefined();      // Validate and extract data using utility
-      validateMCPResponse(response);
+      validateMCPResponse(response);      console.log('🔍 Raw users MCP response:', JSON.stringify(response, null, 2));
       
-      console.log('🔍 Raw users MCP response:', JSON.stringify(response, null, 2));
-      const usersData = extractJsonFromMCPResponse(response);
+      // Simple and robust MCP response parsing
+      let usersData;
+        // Handle the MCP response format we're actually getting
+      if (response.result?.content && Array.isArray(response.result.content)) {
+        const content = response.result.content[0];
+        console.log('🔍 Users content structure:', JSON.stringify(content, null, 2));
+        console.log('🔍 Users content type:', content?.type);
+        
+        let textContent = null;
+        
+        if (content?.type === 'text' && content?.text) {
+          // Direct text content
+          textContent = content.text;
+        } else if (content?.type === 'json' && content?.json?.content && Array.isArray(content.json.content)) {
+          // Nested MCP structure with JSON wrapper
+          const nestedContent = content.json.content[0];
+          if (nestedContent?.type === 'text' && nestedContent?.text) {
+            textContent = nestedContent.text;
+          }
+        }
+        
+        if (textContent) {
+          // Extract JSON from the text
+          const jsonStart = textContent.indexOf('{');
+          if (jsonStart !== -1) {
+            const jsonString = textContent.substring(jsonStart);
+            usersData = JSON.parse(jsonString);
+          } else {
+            throw new Error('No JSON found in MCP text response');
+          }
+        } else {
+          throw new Error(`Invalid MCP content format. Content: ${JSON.stringify(content)}`);
+        }
+      } else {
+        throw new Error(`Invalid MCP response structure. Response: ${JSON.stringify(response.result)}`);
+      }
+      
       console.log('🔍 Extracted users data:', JSON.stringify(usersData, null, 2));
       console.log('🔍 Type of usersData:', typeof usersData);
       

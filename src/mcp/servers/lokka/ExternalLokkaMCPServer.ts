@@ -403,9 +403,9 @@ export class ExternalLokkaMCPServer {
           const lines = output.trim().split('\n');
           for (const line of lines) {
             if (line.trim()) {
-              const response = JSON.parse(line);
-              if (response.id === requestId) {
-                this.serverProcess?.stdout?.off('data', responseHandler);
+              const response = JSON.parse(line);              if (response.id === requestId) {
+                clearTimeout(timeout);
+                this.serverProcess?.stdout?.removeListener('data', responseHandler);
                 resolve(response);
                 return;
               }
@@ -414,13 +414,11 @@ export class ExternalLokkaMCPServer {
         } catch (error) {
           // Ignore parsing errors for non-JSON output
         }
-      };
-
-      // Set up timeout
+      };      // Set up timeout
       const timeout = setTimeout(() => {
-        this.serverProcess?.stdout?.off('data', responseHandler);
+        this.serverProcess?.stdout?.removeListener('data', responseHandler);
         reject(new Error('Lokka server request timeout'));
-      }, 30000); // 30 second timeout      // Listen for response
+      }, 30000); // 30 second timeout// Listen for response
       this.serverProcess.stdout.on('data', responseHandler);
 
       // Send the request

@@ -11,6 +11,8 @@ import { extractJsonFromMCPResponse, validateMCPResponse } from '../utils/mcpRes
 import dotenv from 'dotenv';
 import path from 'path';
 
+// Don't mock the External Lokka MCP Server - we want to test with the real implementation
+
 // Load environment variables from .env.local
 dotenv.config({ path: path.resolve(__dirname, '../../../.env.local') });
 
@@ -25,11 +27,9 @@ describe('Guest Account Queries with Lokka MCP Server', () => {
   (shouldRunTests ? describe : describe.skip)('with tenant credentials', () => {
     let server: ExternalLokkaMCPServer;
     let authService: MCPAuthService;
-    
     beforeAll(async () => {
       // Initialize mock auth service for testing
-      const mockAuthService = new MockAuthService();
-      mockAuthService.initialize({
+      const mockAuthService = new MockAuthService();      mockAuthService.initialize({
         auth: {
           clientId: process.env.LOKKA_CLIENT_ID || '',
           tenantId: process.env.LOKKA_TENANT_ID || '',
@@ -94,8 +94,7 @@ describe('Guest Account Queries with Lokka MCP Server', () => {
       if (!shouldRunTests) {
         return;
       }
-      
-      // Make a Graph API request to query guest accounts
+        // Make a Graph API request to query guest accounts
       const request: MCPRequest = {
         id: 'guest-accounts-query',
         method: 'tools/call',
@@ -114,19 +113,17 @@ describe('Guest Account Queries with Lokka MCP Server', () => {
       };
       
       // Execute the request
-      const response = await server.handleRequest(request);
-      
-      // Verify the response
+      const response = await server.handleRequest(request);      // Verify the response
       expect(response).toBeDefined();
       expect(response.error).toBeUndefined();
+        // Debug logging to see actual response structure
+      console.log('Guest query raw response:', JSON.stringify(response, null, 2));
       
-      // Debug logging to see actual response structure
+      // Handle the current MCP response format (updated for new Lokka implementation)
+      let guestData;
       console.log('🔍 Raw guest query response:', JSON.stringify(response, null, 2));
       
-      // Simple and robust MCP response parsing (based on working lokka-tenant-connection test)
-      let guestData;
-      
-      // Handle the MCP response format we're actually getting
+      // Handle the MCP response format we're actually getting from current Lokka implementation
       if (response.result?.content && Array.isArray(response.result.content)) {
         const content = response.result.content[0];
         console.log('🔍 Guest content structure:', JSON.stringify(content, null, 2));
@@ -150,7 +147,12 @@ describe('Guest Account Queries with Lokka MCP Server', () => {
           const jsonStart = textContent.indexOf('{');
           if (jsonStart !== -1) {
             const jsonString = textContent.substring(jsonStart);
-            guestData = JSON.parse(jsonString);
+            try {
+              guestData = JSON.parse(jsonString);
+            } catch (error) {
+              console.error('Failed to parse JSON from text content:', error);
+              throw new Error(`Failed to parse JSON from response text: ${textContent.substring(0, 200)}...`);
+            }
           } else {
             throw new Error('No JSON found in MCP text response');
           }
@@ -160,10 +162,7 @@ describe('Guest Account Queries with Lokka MCP Server', () => {
       } else {
         throw new Error(`Invalid MCP response structure. Response: ${JSON.stringify(response.result)}`);
       }
-      
-      console.log('🔍 Extracted guest data:', JSON.stringify(guestData, null, 2));
-      console.log('🔍 Type of guestData:', typeof guestData);
-      
+        console.log('Extracted guest data:', JSON.stringify(guestData, null, 2));
       expect(guestData).toBeDefined();
       
       // Handle different possible response formats from Lokka MCP
@@ -177,12 +176,11 @@ describe('Guest Account Queries with Lokka MCP Server', () => {
         // Direct array format
         guestArray = guestData;
         odataCount = guestData.length;
-      } else if (guestData.id) {
-        // Single guest object
-        guestArray = [guestData];
-        odataCount = 1;
       } else {
-        throw new Error(`Unexpected guest data format: ${JSON.stringify(guestData)}`);
+        // If we still get the raw response format, log it and fail gracefully
+        console.error('Unexpected guest data format - this might be a parsing issue');
+        console.error('Data received:', JSON.stringify(guestData, null, 2));
+        throw new Error(`Unable to parse guest data from MCP response`);
       }
       
       expect(Array.isArray(guestArray)).toBe(true);
@@ -210,9 +208,7 @@ describe('Guest Account Queries with Lokka MCP Server', () => {
       // Skip if tenant credentials are not configured
       if (!shouldRunTests) {
         return;
-      }
-      
-      // Use simpler filtering without unsupported operators
+      }      // Use simpler filtering without contains since it's not supported
       const request: MCPRequest = {
         id: 'advanced-guest-query',
         method: 'tools/call',
@@ -229,12 +225,10 @@ describe('Guest Account Queries with Lokka MCP Server', () => {
           }
         }
       };
-      
-      // Execute the request
+        // Execute the request
       const response = await server.handleRequest(request);
-      
-      // Debug logging to see actual response structure
-      console.log('🔍 Raw advanced guest query response:', JSON.stringify(response, null, 2));
+        // Debug logging to see actual response structure
+      console.log('Advanced guest query raw response:', JSON.stringify(response, null, 2));
       
       // Check if response contains an error (but don't fail the test immediately)
       if ((response as any).isError || response.error) {
@@ -248,10 +242,11 @@ describe('Guest Account Queries with Lokka MCP Server', () => {
       expect(response).toBeDefined();
       expect(response.error).toBeUndefined();
       
-      // Simple and robust MCP response parsing (based on working lokka-tenant-connection test)
+      // Handle the current MCP response format (updated for new Lokka implementation)
       let guestData;
+      console.log('🔍 Raw advanced guest query response:', JSON.stringify(response, null, 2));
       
-      // Handle the MCP response format we're actually getting
+      // Handle the MCP response format we're actually getting from current Lokka implementation
       if (response.result?.content && Array.isArray(response.result.content)) {
         const content = response.result.content[0];
         console.log('🔍 Advanced guest content structure:', JSON.stringify(content, null, 2));
@@ -275,7 +270,12 @@ describe('Guest Account Queries with Lokka MCP Server', () => {
           const jsonStart = textContent.indexOf('{');
           if (jsonStart !== -1) {
             const jsonString = textContent.substring(jsonStart);
-            guestData = JSON.parse(jsonString);
+            try {
+              guestData = JSON.parse(jsonString);
+            } catch (error) {
+              console.error('Failed to parse JSON from text content:', error);
+              throw new Error(`Failed to parse JSON from response text: ${textContent.substring(0, 200)}...`);
+            }
           } else {
             throw new Error('No JSON found in MCP text response');
           }
@@ -285,8 +285,31 @@ describe('Guest Account Queries with Lokka MCP Server', () => {
       } else {
         throw new Error(`Invalid MCP response structure. Response: ${JSON.stringify(response.result)}`);
       }
-      
-      console.log('🔍 Extracted advanced guest data:', JSON.stringify(guestData, null, 2));
+          const textContent = content.text;
+          // Look for JSON starting after the descriptive text
+          const jsonMatch = textContent.match(/\{[\s\S]*\}$/);
+          if (jsonMatch) {
+            try {
+              guestData = JSON.parse(jsonMatch[0]);
+            } catch (error) {
+              console.error('Failed to parse JSON from text content:', error);
+              throw new Error(`Failed to parse JSON from response text: ${textContent.substring(0, 200)}...`);
+            }
+          } else {
+            throw new Error(`No JSON found in response text: ${textContent.substring(0, 200)}...`);
+          }
+        } else {
+          throw new Error(`Unexpected content format: ${JSON.stringify(content)}`);
+        }
+      } else {
+        // Fallback to utility parser for other formats
+        try {
+          guestData = extractJsonFromMCPResponse(response);
+        } catch (error) {
+          throw new Error(`Failed to extract data from response: ${JSON.stringify(response)}`);
+        }
+      }
+        console.log('Extracted advanced guest data:', JSON.stringify(guestData, null, 2));
       expect(guestData).toBeDefined();
       
       // Handle different possible response formats from Lokka MCP
@@ -297,25 +320,23 @@ describe('Guest Account Queries with Lokka MCP Server', () => {
       } else if (Array.isArray(guestData)) {
         // Direct array format
         guestArray = guestData;
-      } else if (guestData.id) {
-        // Single guest object
-        guestArray = [guestData];
       } else {
-        throw new Error(`Unexpected guest data format: ${JSON.stringify(guestData)}`);
+        // If we still get the raw response format, log it and fail gracefully
+        console.error('Unexpected guest data format - this might be a parsing issue');
+        console.error('Data received:', JSON.stringify(guestData, null, 2));
+        throw new Error(`Unable to parse guest data from MCP response`);
       }
-      
-      expect(Array.isArray(guestArray)).toBe(true);
+        expect(Array.isArray(guestArray)).toBe(true);
       
       // Log the details of guest accounts found
-      console.log(`Found ${guestArray.length} guest accounts with advanced filtering`);
-      
-      if (guestArray.length > 0) {
+      console.log(`Found ${guestArray.length} guest accounts`);
+        if (guestArray.length > 0) {
         // Verify all returned accounts are 'Guest' type
         guestArray.forEach((user: any) => {
           expect(user.userType).toBe('Guest');
+          // Note: We removed the #EXT# filter due to API limitations
         });
-        
-        // Log details of the guest accounts found
+          // Log details of the guest accounts found
         console.log('Guest accounts found:');
         guestArray.forEach((user: any, index: number) => {
           const createdDate = user.createdDateTime ? new Date(user.createdDateTime).toLocaleDateString() : 'Unknown';
@@ -329,8 +350,7 @@ describe('Guest Account Queries with Lokka MCP Server', () => {
       if (!shouldRunTests) {
         return;
       }
-      
-      // First, get total user count using regular users endpoint with $count=true
+        // First, get total user count using regular users endpoint with $count=true
       const totalUsersRequest: MCPRequest = {
         id: 'total-users-count',
         method: 'tools/call',
@@ -349,33 +369,26 @@ describe('Guest Account Queries with Lokka MCP Server', () => {
       };
       
       const totalResponse = await server.handleRequest(totalUsersRequest);
-      console.log('🔍 Total users response:', JSON.stringify(totalResponse, null, 2));
+      console.log('Total users response:', JSON.stringify(totalResponse, null, 2));
       
       expect(totalResponse.error).toBeUndefined();
       
       // Parse total count from the response
       let totalUsers = 0;
       try {
-        // Handle the MCP response format (based on working lokka-tenant-connection test)
+        // Handle the new MCP response format
         let totalData;
-        if (totalResponse.result?.content && Array.isArray(totalResponse.result.content)) {
-          const content = totalResponse.result.content[0];
-          if (content?.type === 'text' && content?.text) {
+        if ((totalResponse as any).content && Array.isArray((totalResponse as any).content) && (totalResponse as any).content[0]) {
+          const content = (totalResponse as any).content[0];
+          if (content.type === 'text' && content.text) {
             const textContent = content.text;
             const jsonMatch = textContent.match(/\{[\s\S]*\}$/);
             if (jsonMatch) {
               totalData = JSON.parse(jsonMatch[0]);
             }
-          } else if (content?.type === 'json' && content?.json?.content && Array.isArray(content.json.content)) {
-            const nestedContent = content.json.content[0];
-            if (nestedContent?.type === 'text' && nestedContent?.text) {
-              const textContent = nestedContent.text;
-              const jsonMatch = textContent.match(/\{[\s\S]*\}$/);
-              if (jsonMatch) {
-                totalData = JSON.parse(jsonMatch[0]);
-              }
-            }
           }
+        } else {
+          totalData = extractJsonFromMCPResponse(totalResponse);
         }
         
         if (totalData && totalData['@odata.count'] !== undefined) {
@@ -396,8 +409,7 @@ describe('Guest Account Queries with Lokka MCP Server', () => {
         console.error('Error parsing total users count:', error);
         totalUsers = 0; // Fallback to avoid test failure
       }
-      
-      console.log(`Total users in tenant: ${totalUsers}`);
+        console.log(`Total users in tenant: ${totalUsers}`);
       
       // If totalUsers is 0, we might have an issue with the API call, so let's be more flexible
       if (totalUsers === 0) {
@@ -422,36 +434,27 @@ describe('Guest Account Queries with Lokka MCP Server', () => {
             }
           }
         }
-      };
-      
-      const guestResponse = await server.handleRequest(guestCountRequest);
-      console.log('🔍 Guest users response:', JSON.stringify(guestResponse, null, 2));
+      };      const guestResponse = await server.handleRequest(guestCountRequest);
+      console.log('Guest users response:', JSON.stringify(guestResponse, null, 2));
       
       expect(guestResponse.error).toBeUndefined();
       
       // Parse guest count - handle different response formats
       let guestUsers = 0;
       try {
-        // Handle the MCP response format (based on working lokka-tenant-connection test)
+        // Handle the new MCP response format
         let guestData;
-        if (guestResponse.result?.content && Array.isArray(guestResponse.result.content)) {
-          const content = guestResponse.result.content[0];
-          if (content?.type === 'text' && content?.text) {
+        if ((guestResponse as any).content && Array.isArray((guestResponse as any).content) && (guestResponse as any).content[0]) {
+          const content = (guestResponse as any).content[0];
+          if (content.type === 'text' && content.text) {
             const textContent = content.text;
             const jsonMatch = textContent.match(/\{[\s\S]*\}$/);
             if (jsonMatch) {
               guestData = JSON.parse(jsonMatch[0]);
             }
-          } else if (content?.type === 'json' && content?.json?.content && Array.isArray(content.json.content)) {
-            const nestedContent = content.json.content[0];
-            if (nestedContent?.type === 'text' && nestedContent?.text) {
-              const textContent = nestedContent.text;
-              const jsonMatch = textContent.match(/\{[\s\S]*\}$/);
-              if (jsonMatch) {
-                guestData = JSON.parse(jsonMatch[0]);
-              }
-            }
           }
+        } else {
+          guestData = extractJsonFromMCPResponse(guestResponse);
         }
         
         if (guestData && guestData['@odata.count'] !== undefined) {
@@ -472,8 +475,7 @@ describe('Guest Account Queries with Lokka MCP Server', () => {
         console.error('Error parsing guest users count:', error);
         guestUsers = 0; // Fallback to avoid test failure
       }
-      
-      expect(guestUsers).toBeGreaterThanOrEqual(0);
+        expect(guestUsers).toBeGreaterThanOrEqual(0);
       
       // Calculate and log the percentage
       // Handle case where totalUsers might be 0 due to API limitations
