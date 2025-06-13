@@ -3,7 +3,6 @@
 
 import { MCPServerConfig } from '../types';
 import { FetchMCPServer } from './fetch';
-import { LokkaMCPServer } from './lokka';
 import { ExternalLokkaMCPStdioServer } from './lokka/ExternalLokkaMCPStdioServer';
 import { MCPAuthService } from '../auth/MCPAuthService';
 
@@ -13,16 +12,11 @@ export interface MCPServerHandlers {
   stopServer?: () => Promise<void>;
 }
 
-export class MCPServerFactory {
-  static createServer(config: MCPServerConfig, authService?: MCPAuthService): MCPServerHandlers {
+export class MCPServerFactory {  static createServer(config: MCPServerConfig, authService?: MCPAuthService): MCPServerHandlers {
     switch (config.type) {
       case 'fetch':
         return new FetchMCPServer(config);
-      case 'lokka':
-        if (!authService) {
-          throw new Error('Auth service is required for lokka MCP server');
-        }
-        return new LokkaMCPServer(config, authService);      case 'external-lokka':
+      case 'external-lokka':
         if (!authService) {
           throw new Error('Auth service is required for external lokka MCP server');
         }

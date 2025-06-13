@@ -5,6 +5,7 @@ import { ExternalLokkaMCPServer } from '../../mcp/servers/lokka/ExternalLokkaMCP
 import { MCPAuthService } from '../../mcp/auth/MCPAuthService';
 import { AuthService } from '../../auth/AuthService';
 import { MCPRequest, MCPResponse } from '../../mcp/types';
+import { extractJsonFromMCPResponse, validateMCPResponse } from '../utils/mcpResponseParser';
 import dotenv from 'dotenv';
 import path from 'path';
 
@@ -104,23 +105,23 @@ describe('External Lokka MCP Server End-to-End Tests', () => {
       // 3. Send the request to the External Lokka MCP Server
       console.log('Step 3: Sending request to External Lokka MCP Server');
       const response: MCPResponse = await server.handleRequest(mcpRequest);
-      
-      // 4. Verify the response
+        // 4. Verify the response
       console.log('Step 4: Verifying the response');
       expect(response).toBeDefined();
       expect(response.error).toBeUndefined();
-      expect(response.result).toBeDefined();
-      expect(response.result.content).toBeDefined();
-      expect(response.result.content[0].type).toBe('json');
+        // Validate and extract data using utility
+      validateMCPResponse(response);
       
-      // 5. Extract the user data from the response
-      const userData = response.result.content[0].json;
+      // Debug logging to see actual response structure
+      console.log('E2E raw response:', JSON.stringify(response, null, 2));
+      
+      const userData = extractJsonFromMCPResponse(response);
+      console.log('Extracted user data:', JSON.stringify(userData, null, 2));
       expect(userData).toBeDefined();
       expect(userData.value).toBeDefined();
       expect(Array.isArray(userData.value)).toBe(true);
-      
-      // 6. Simulate LLM formatting the response for the user
-      console.log('Step 6: LLM formats the response data for the user');
+        // 5. Simulate LLM formatting the response for the user
+      console.log('Step 5: LLM formats the response data for the user');
       const usersFound = userData.value;
       console.log(`Found ${usersFound.length} users:`);
       
@@ -160,14 +161,19 @@ describe('External Lokka MCP Server End-to-End Tests', () => {
       
       // Send the request
       const response = await server.handleRequest(mcpRequest);
-      
-      // Verify the response
+        // Verify the response
       expect(response).toBeDefined();
       expect(response.error).toBeUndefined();
       expect(response.result).toBeDefined();
       
-      // Check the returned data
-      const userData = response.result.content[0].json;
+      // Validate and extract data using utility
+      validateMCPResponse(response);
+      
+      // Debug logging to see actual response structure
+      console.log('Complex query raw response:', JSON.stringify(response, null, 2));
+      
+      const userData = extractJsonFromMCPResponse(response);
+      console.log('Extracted complex query data:', JSON.stringify(userData, null, 2));
       expect(userData).toBeDefined();
       expect(userData.value).toBeDefined();
       expect(Array.isArray(userData.value)).toBe(true);

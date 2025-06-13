@@ -49,8 +49,7 @@ export class EnhancedLLMService {
     if (mcpClient) {
       this.mcpClient = mcpClient;
       console.log('EnhancedLLMService: Using provided MCPClient');
-    } else {
-      console.log('EnhancedLLMService: Creating fallback MCPClient with basic servers');
+    } else {      console.log('EnhancedLLMService: Creating fallback MCPClient with basic servers');
       // Initialize MCP client with fallback servers (for backward compatibility)
       const serverConfigs: MCPServerConfig[] = [
         {
@@ -61,13 +60,13 @@ export class EnhancedLLMService {
           url: 'http://localhost:3001'
         },
         {
-          name: 'lokka',
-          type: 'lokka',
-          port: 3002,
+          name: 'external-lokka',
+          type: 'external-lokka',
+          port: 3003,
           enabled: true,
-          url: 'http://localhost:3002',
+          url: 'http://localhost:3003',
           command: 'npx',
-          args: ['@merill/lokka', '--stdio']
+          args: ['-y', '@merill/lokka']
         }
       ];
       
@@ -128,17 +127,9 @@ export class EnhancedLLMService {
               ])
             ) : undefined;          // Ensure method is lowercase as required by Lokka MCP
           const method = (analysis.graphMethod || 'get').toLowerCase();
-          
-          // Check if external-lokka server is available, fallback to lokka if not
-          const availableServers = this.mcpClient.getAvailableServers();
-          let serverName = 'external-lokka';
-          let toolName = 'microsoft_graph_query';
-          
-          if (!availableServers.includes('external-lokka')) {
-            console.log('External-lokka not available, trying lokka server');
-            serverName = 'lokka';
-            toolName = 'microsoft_graph_query';
-          }
+            // Use external-lokka server directly
+          const serverName = 'external-lokka';
+          const toolName = 'microsoft_graph_query';
           
           console.log(`🔧 EnhancedLLMService: Using MCP server: ${serverName}, tool: ${toolName}`);
           

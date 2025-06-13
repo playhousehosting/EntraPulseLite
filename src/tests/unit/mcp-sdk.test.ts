@@ -7,7 +7,6 @@ import { GraphMCPClient } from '../../mcp/clients/GraphMCPClient';
 import { MCPServerConfig } from '../../mcp/types';
 import { AuthService } from '../../auth/AuthService';
 import { FetchMCPServer } from '../../mcp/servers/fetch/FetchMCPServer';
-import { LokkaMCPServer } from '../../mcp/servers/lokka/LokkaMCPServer';
 import { MCPServerManager } from '../../mcp/servers/MCPServerManager';
 import { MCPErrorHandler, ErrorCode } from '../../mcp/utils';
 
@@ -43,12 +42,13 @@ describe('MCP SDK Implementation', () => {
         type: 'fetch',
         port: 8081,
         enabled: true
-      },
-      {
+      },      {
         name: 'graph',
-        type: 'lokka',
+        type: 'external-lokka',
         port: 8080,
         enabled: true,
+        command: 'npx',
+        args: ['-y', '@merill/lokka'],
         authConfig: {
           type: 'msal',
           scopes: ['User.Read']
@@ -82,7 +82,7 @@ describe('MCP SDK Implementation', () => {
   });
     describe('MCPAuthService', () => {
     test('should get auth headers for lokka server', async () => {
-      const headers = await mcpAuthService.getAuthHeaders('lokka');
+      const headers = await mcpAuthService.getAuthHeaders('external-lokka');
       expect(headers).toHaveProperty('Authorization');
       expect(headers).toHaveProperty('Content-Type', 'application/json');
       expect(headers.Authorization).toContain('Bearer mock-access-token');
@@ -108,10 +108,9 @@ describe('MCP SDK Implementation', () => {
       jest.spyOn(authService, 'getToken').mockImplementationOnce(() => {
         throw new Error('Authentication failed');
       });
-      
-      // Test error handling
-      await expect(mcpAuthService.getAuthHeaders('lokka'))
-        .rejects.toThrow('Failed to get authentication headers for lokka server');
+        // Test error handling
+      await expect(mcpAuthService.getAuthHeaders('external-lokka'))
+        .rejects.toThrow('Failed to get authentication headers for external-lokka server');
     });
   });
   

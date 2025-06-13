@@ -220,12 +220,13 @@ export function createDefaultMCPClient(): MCPClient {
   const mcpAuthService = new MCPAuthService(authService);
   
   // Define server configurations
-  const serverConfigs: MCPServerConfig[] = [
-    {
+  const serverConfigs: MCPServerConfig[] = [    {
       name: 'graph',
-      type: 'lokka',
+      type: 'external-lokka',
       port: 8080,
       enabled: true,
+      command: 'npx',
+      args: ['-y', '@merill/lokka'],
       authConfig: {
         type: 'msal',
         scopes: ['User.Read', 'User.ReadBasic.All']

@@ -6,12 +6,13 @@ jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
 
 describe('MCPClient', () => {
-  let mcpClient: MCPClient;
-  const testConfig = {
+  let mcpClient: MCPClient;  const testConfig = {
     name: 'TestServer',
-    type: 'lokka',
+    type: 'external-lokka',
     port: 3000,
     enabled: true,
+    command: 'npx',
+    args: ['-y', '@merill/lokka'],
     url: 'http://localhost:3000/mcp'
   };
 

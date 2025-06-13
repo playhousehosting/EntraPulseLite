@@ -94,10 +94,12 @@ export const mockLLMConfig = {
 
 export const mockMCPServers = [
   {
-    name: 'lokka',
-    type: 'lokka' as const,
-    port: 3001,
+    name: 'external-lokka',
+    type: 'external-lokka' as const,
+    port: 3003,
     enabled: true,
+    command: 'npx',
+    args: ['-y', '@merill/lokka'],
   },
   {
     name: 'fetch',

@@ -88,7 +88,7 @@ export class UnifiedLLMService {
         
         if (!availableServers.includes('external-lokka')) {
           console.log('🔧 UnifiedLLMService: External-lokka not available, trying lokka server');
-          serverName = 'lokka';
+          serverName = 'external-lokka';
           toolName = 'microsoft_graph_query';
         }
         

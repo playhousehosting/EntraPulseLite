@@ -4,6 +4,7 @@
 import { ExternalLokkaMCPServer } from '../../mcp/servers/lokka/ExternalLokkaMCPServer';
 import { MCPAuthService } from '../../mcp/auth/MCPAuthService';
 import { AuthService } from '../../auth/AuthService';
+import { extractJsonFromMCPResponse, validateMCPResponse } from '../utils/mcpResponseParser';
 import dotenv from 'dotenv';
 import path from 'path';
 
@@ -16,7 +17,7 @@ const invalidConfig: any = {
   type: 'external-lokka',
   port: 3100, // Use a unique port for this test
   enabled: true,
-  command: 'lokka', // This should be installed globally for tests
+  command: '@merill/lokka', // This should be installed globally for tests
   env: {
     TENANT_ID: 'invalid-tenant-id',
     CLIENT_ID: 'invalid-client-id',

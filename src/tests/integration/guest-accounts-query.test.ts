@@ -7,6 +7,7 @@ import { MockAuthService } from '../mocks/MockAuthService';
 import { MCPRequest, MCPResponse } from '../../mcp/types';
 import { GuestAccountAnalyzer } from '../../shared/GuestAccountAnalyzer';
 import { MCPClient } from '../../mcp/clients/MCPClient';
+import { extractJsonFromMCPResponse, validateMCPResponse } from '../utils/mcpResponseParser';
 import dotenv from 'dotenv';
 import path from 'path';
 
@@ -113,15 +114,17 @@ describe('Guest Account Queries with Lokka MCP Server', () => {
       
       // Execute the request
       const response = await server.handleRequest(request);
-      
-      // Verify the response
+        // Verify the response
       expect(response).toBeDefined();
       expect(response.error).toBeUndefined();
-      expect(response.result).toBeDefined();
-      expect(response.result.content).toBeDefined();
-      expect(response.result.content[0].type).toBe('json');
-        // Extract the guest account data
-      const guestData = response.result.content[0].json;
+        // Validate and extract data using utility
+      validateMCPResponse(response);
+      
+      // Debug logging to see actual response structure
+      console.log('Guest query raw response:', JSON.stringify(response, null, 2));
+      
+      const guestData = extractJsonFromMCPResponse(response);
+      console.log('Extracted guest data:', JSON.stringify(guestData, null, 2));
       expect(guestData).toBeDefined();
       
       // Handle different possible response formats from Lokka MCP
@@ -188,13 +191,17 @@ describe('Guest Account Queries with Lokka MCP Server', () => {
       
       // Execute the request
       const response = await server.handleRequest(request);
-      
-      // Verify the response
+        // Verify the response
       expect(response).toBeDefined();
       expect(response.error).toBeUndefined();
-      expect(response.result).toBeDefined();
-        // Extract the guest account data
-      const guestData = response.result.content[0].json;
+        // Validate and extract data using utility
+      validateMCPResponse(response);
+      
+      // Debug logging to see actual response structure
+      console.log('Advanced guest query raw response:', JSON.stringify(response, null, 2));
+      
+      const guestData = extractJsonFromMCPResponse(response);
+      console.log('Extracted advanced guest data:', JSON.stringify(guestData, null, 2));
       expect(guestData).toBeDefined();
       
       // Handle different possible response formats from Lokka MCP
@@ -204,8 +211,7 @@ describe('Guest Account Queries with Lokka MCP Server', () => {
         guestArray = guestData.value;
       } else if (Array.isArray(guestData)) {
         // Direct array format
-        guestArray = guestData;
-      } else {
+        guestArray = guestData;      } else {
         throw new Error(`Unexpected guest data format: ${JSON.stringify(guestData)}`);
       }
       
@@ -246,13 +252,13 @@ describe('Guest Account Queries with Lokka MCP Server', () => {
             method: 'GET'
           }
         }
-      };
-        const totalResponse = await server.handleRequest(totalUsersRequest);
+      };      const totalResponse = await server.handleRequest(totalUsersRequest);
       expect(totalResponse.error).toBeUndefined();
       
       // Parse total count - handle different response formats
       let totalUsers;
-      const totalData = totalResponse.result.content[0].json;
+      validateMCPResponse(totalResponse);
+      const totalData = extractJsonFromMCPResponse(totalResponse);
       
       if (typeof totalData === 'number') {
         totalUsers = totalData;
@@ -281,13 +287,13 @@ describe('Guest Account Queries with Lokka MCP Server', () => {
             }
           }
         }
-      };
-        const guestResponse = await server.handleRequest(guestCountRequest);
+      };      const guestResponse = await server.handleRequest(guestCountRequest);
       expect(guestResponse.error).toBeUndefined();
       
       // Parse guest count - handle different response formats
       let guestUsers;
-      const guestData = guestResponse.result.content[0].json;
+      validateMCPResponse(guestResponse);
+      const guestData = extractJsonFromMCPResponse(guestResponse);
       
       if (typeof guestData === 'number') {
         guestUsers = guestData;

@@ -41,9 +41,7 @@ export class MCPAuthService {
    * @throws Error if authentication fails
    */  async getAuthHeaders(serverType: string): Promise<Record<string, string>> {
     // Different servers may require different authentication headers
-    try {
-      switch (serverType) {
-        case 'lokka':
+    try {      switch (serverType) {
         case 'external-lokka':
           const token = await this.authService.getToken();
           if (!token) {

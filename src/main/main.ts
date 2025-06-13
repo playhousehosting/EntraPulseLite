@@ -70,15 +70,9 @@ class EntraPulseLiteApp {
           ? ['https://graph.microsoft.com/.default'] // Client credentials flow requires .default scope
           : ['https://graph.microsoft.com/.default'], // Interactive flow using .default to inherit all app registration permissions
         clientSecret: process.env.MSAL_CLIENT_SECRET || process.env.LOKKA_CLIENT_SECRET, // Only needed for confidential client applications        useClientCredentials: Boolean(hasLokkaCreds), // Use client credentials flow if Lokka creds are configured
-      },
-      llm: storedLLMConfig, // Use stored LLM configuration
+      },      llm: storedLLMConfig, // Use stored LLM configuration
       mcpServers: [
         {
-          name: 'lokka',
-          type: 'lokka',
-          port: parseInt(process.env.MCP_LOKKA_PORT || '3001'),
-          enabled: process.env.USE_EXTERNAL_LOKKA !== 'true' && !hasLokkaCreds, // Disable if using external Lokka
-        },        {
           name: 'external-lokka',
           type: 'external-lokka',
           port: parseInt(process.env.EXTERNAL_MCP_LOKKA_PORT || '3003'),
@@ -101,18 +95,9 @@ class EntraPulseLiteApp {
       features: {
         enablePremiumFeatures: process.env.ENABLE_PREMIUM_FEATURES === 'true',
         enableTelemetry: process.env.ENABLE_TELEMETRY === 'true',
-      },
-    };// Update MCP server configs with auth configuration
-    this.config.mcpServers.forEach(server => {
-      if (server.type === 'lokka') {
-        // Add authentication config for Graph API
-        server.authConfig = {
-          type: 'msal',
-          scopes: this.config.auth.scopes,
-          clientId: this.config.auth.clientId,
-          tenantId: this.config.auth.tenantId
-        };
-      }    });    // Initialize services
+      },    };
+
+    // Initialize services
     this.authService = new AuthService(this.config);
     this.graphService = new GraphService(this.authService);
 

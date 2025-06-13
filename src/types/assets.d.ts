@@ -2,6 +2,15 @@
  * Type definitions for static assets
  */
 
+// React JSX namespace for react-markdown compatibility
+declare global {
+  namespace JSX {
+    interface IntrinsicElements {
+      [tagName: string]: any;
+    }
+  }
+}
+
 // Image file declarations
 declare module '*.png' {
   const content: string;

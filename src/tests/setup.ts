@@ -2,20 +2,29 @@
 import 'jest';
 
 // Mock MSAL dependencies before any other imports
-jest.mock('@azure/msal-node', () => ({
-  PublicClientApplication: jest.fn().mockImplementation(() => ({
+jest.mock('@azure/msal-node', () => {
+  const mockMsalInstance = {
     acquireTokenInteractive: jest.fn(),
     acquireTokenSilent: jest.fn(),
-    getTokenCache: jest.fn(),
-    clearCache: jest.fn(),
-  })),
-  LogLevel: {
-    Error: 0,
-    Warning: 1,
-    Info: 2,
-    Verbose: 3,
-  },
-}));
+    acquireTokenByClientCredential: jest.fn(),
+    getTokenCache: jest.fn().mockReturnValue({
+      getAllAccounts: jest.fn(),
+      removeAccount: jest.fn()
+    }),
+    clearCache: jest.fn()
+  };
+
+  return {
+    PublicClientApplication: jest.fn().mockImplementation(() => mockMsalInstance),
+    ConfidentialClientApplication: jest.fn().mockImplementation(() => mockMsalInstance),
+    LogLevel: {
+      Error: 0,
+      Warning: 1,
+      Info: 2,
+      Verbose: 3,
+    },
+  };
+});
 
 // Mock Microsoft Graph Client
 jest.mock('@microsoft/microsoft-graph-client', () => ({
@@ -94,6 +103,13 @@ global.console = {
   warn: jest.fn(),
   error: jest.fn(),
 };
+
+// Mock Node.js setImmediate for Jest compatibility
+if (typeof global.setImmediate === 'undefined') {
+  (global as any).setImmediate = jest.fn((callback: (...args: any[]) => void, ...args: any[]) => {
+    return setTimeout(callback, 0, ...args);
+  });
+}
 
 // Setup global test utilities
 global.beforeEach(() => {

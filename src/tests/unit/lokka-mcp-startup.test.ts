@@ -99,7 +99,7 @@ describe('External Lokka MCP Server Startup', () => {
   test('should use custom command if provided in config', async () => {
     const customConfig = {
       ...mockConfig,
-      command: 'lokka',
+      command: '@merill/lokka',
       args: ['--port', '3097']
     };
     
@@ -131,7 +131,7 @@ describe('External Lokka MCP Server Startup', () => {
     
     // Verify spawn was called with custom command
     expect(mockedSpawn).toHaveBeenCalledWith(
-      'lokka',
+      '@merill/lokka',
       ['--port', '3097'],
       expect.objectContaining({
         env: expect.objectContaining({
