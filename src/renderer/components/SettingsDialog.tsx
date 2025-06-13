@@ -115,6 +115,12 @@ export const SettingsDialog: React.FC<SettingsDialogProps> = ({
         model: 'claude-3-5-sonnet-20241022',
         apiKey: config.apiKey || '',
         organization: undefined
+      }),
+      ...(provider === 'gemini' && {
+        baseUrl: undefined,
+        model: 'gemini-1.5-pro',
+        apiKey: config.apiKey || '',
+        organization: undefined
       })
     };
     setConfig(newConfig);
@@ -166,7 +172,7 @@ export const SettingsDialog: React.FC<SettingsDialogProps> = ({
     onClose();
   };
 
-  const isCloudProvider = config.provider === 'openai' || config.provider === 'anthropic';
+  const isCloudProvider = config.provider === 'openai' || config.provider === 'anthropic' || config.provider === 'gemini';
   const isLocalProvider = config.provider === 'ollama' || config.provider === 'lmstudio';
 
   return (
@@ -187,6 +193,7 @@ export const SettingsDialog: React.FC<SettingsDialogProps> = ({
               <MenuItem value="lmstudio">LM Studio (Local)</MenuItem>
               <MenuItem value="openai">OpenAI (Cloud)</MenuItem>
               <MenuItem value="anthropic">Anthropic (Cloud)</MenuItem>
+              <MenuItem value="gemini">Google Gemini (Cloud)</MenuItem>
             </Select>
           </FormControl>
 

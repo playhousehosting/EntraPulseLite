@@ -1,6 +1,7 @@
 // Local LLM service for Ollama/LM Studio integration
 import axios from 'axios';
 import { LLMConfig, ChatMessage } from '../types';
+import { StandardizedPrompts } from '../shared/StandardizedPrompts';
 
 export class LLMService {
   private config: LLMConfig;
@@ -46,69 +47,32 @@ export class LLMService {
       }
       return false;
     }
-  }
-  private async chatWithOllama(messages: ChatMessage[]): Promise<string> {
+  }  private async chatWithOllama(messages: ChatMessage[]): Promise<string> {
     const ollamaMessages = messages.map(msg => ({
       role: msg.role,
       content: msg.content,
     }));
 
-    const systemPrompt = `You are an expert Microsoft Entra (Azure AD) and Microsoft Graph API assistant integrated into EntraPulse Lite. 
-
-You have access to Microsoft Graph APIs through built-in MCP servers and can help users:
-- Query user accounts, groups, applications, and service principals
-- Understand Microsoft Entra concepts and best practices
-- Analyze permissions and security configurations
-- Provide natural language explanations of complex directory structures
-
-When users ask questions that require Microsoft Graph API data:
-1. ALWAYS create proper Graph query in the following <execute_query> format:
-   <execute_query>
-   {
-     "endpoint": "/users",  // Microsoft Graph API endpoint - REQUIRED
-     "method": "get",       // HTTP method (get, post, put, delete, patch) - REQUIRED
-     "params": {            // Optional parameters as needed
-       "$select": "displayName,mail,userPrincipalName",
-       "$filter": "startsWith(displayName, 'A')"
-     }
-   }
-   </execute_query>
-
-2. Explain Microsoft Entra concepts clearly
-3. Provide actionable insights about identity and access management
-4. Help with troubleshooting and security analysis
-
-Examples of valid queries:
-<execute_query>
-{
-  "endpoint": "/users",
-  "method": "get",
-  "params": {
-    "$filter": "userType eq 'Guest'"
-  }
-}
-</execute_query>
-
-<execute_query>
-{
-  "endpoint": "/groups",
-  "method": "get",
-  "params": {
-    "$select": "displayName,description"
-  }
-}
-</execute_query>
-
-Always be helpful, accurate, and security-conscious in your responses.`;
-
-    const fullMessages = [
-      { role: 'system', content: systemPrompt },
-      ...ollamaMessages
-    ];
+    // Check if a system prompt is already provided in the messages
+    const hasSystemPrompt = messages.some(msg => msg.role === 'system');
+    
+    let fullMessages;
+    if (hasSystemPrompt) {
+      // Use the provided system prompt (from EnhancedLLMService)
+      fullMessages = ollamaMessages;
+    } else {
+      // Use standardized system prompt for direct calls
+      const systemPrompt = StandardizedPrompts.getSystemPrompt(this.config.provider);
+      fullMessages = [
+        { role: 'system', content: systemPrompt },
+        ...ollamaMessages
+      ];
+    }
 
     const response = await axios.post(`${this.config.baseUrl}/api/chat`, {
       model: this.config.model,
-      messages: fullMessages,      stream: false,
+      messages: fullMessages,
+      stream: false,
       options: {
         temperature: this.config.temperature || 0.2,
         num_predict: this.config.maxTokens || 2048,
@@ -116,68 +80,31 @@ Always be helpful, accurate, and security-conscious in your responses.`;
     });
 
     return response.data.message.content;
-  }
-  private async chatWithLMStudio(messages: ChatMessage[]): Promise<string> {
+  }  private async chatWithLMStudio(messages: ChatMessage[]): Promise<string> {
     const openaiMessages = messages.map(msg => ({
       role: msg.role,
       content: msg.content,
     }));
 
-    const systemPrompt = `You are an expert Microsoft Entra (Azure AD) and Microsoft Graph API assistant integrated into EntraPulse Lite. 
-
-You have access to Microsoft Graph APIs through built-in MCP servers and can help users:
-- Query user accounts, groups, applications, and service principals
-- Understand Microsoft Entra concepts and best practices
-- Analyze permissions and security configurations
-- Provide natural language explanations of complex directory structures
-
-When users ask questions that require Microsoft Graph API data:
-1. ALWAYS create proper Graph query in the following <execute_query> format:
-   <execute_query>
-   {
-     "endpoint": "/users",  // Microsoft Graph API endpoint - REQUIRED
-     "method": "get",       // HTTP method (get, post, put, delete, patch) - REQUIRED
-     "params": {            // Optional parameters as needed
-       "$select": "displayName,mail,userPrincipalName",
-       "$filter": "startsWith(displayName, 'A')"
-     }
-   }
-   </execute_query>
-
-2. Explain Microsoft Entra concepts clearly
-3. Provide actionable insights about identity and access management
-4. Help with troubleshooting and security analysis
-
-Examples of valid queries:
-<execute_query>
-{
-  "endpoint": "/users",
-  "method": "get",
-  "params": {
-    "$filter": "userType eq 'Guest'"
-  }
-}
-</execute_query>
-
-<execute_query>
-{
-  "endpoint": "/groups",
-  "method": "get",
-  "params": {
-    "$select": "displayName,description"
-  }
-}
-</execute_query>
-
-Always be helpful, accurate, and security-conscious in your responses.`;
-
-    const fullMessages = [
-      { role: 'system', content: systemPrompt },
-      ...openaiMessages
-    ];
+    // Check if a system prompt is already provided in the messages
+    const hasSystemPrompt = messages.some(msg => msg.role === 'system');
+    
+    let fullMessages;
+    if (hasSystemPrompt) {
+      // Use the provided system prompt (from EnhancedLLMService)
+      fullMessages = openaiMessages;
+    } else {
+      // Use standardized system prompt for direct calls
+      const systemPrompt = StandardizedPrompts.getSystemPrompt(this.config.provider);
+      fullMessages = [
+        { role: 'system', content: systemPrompt },
+        ...openaiMessages
+      ];
+    }
 
     const response = await axios.post(`${this.config.baseUrl}/v1/chat/completions`, {
-      model: this.config.model,      messages: fullMessages,
+      model: this.config.model,
+      messages: fullMessages,
       temperature: this.config.temperature || 0.2,
       max_tokens: this.config.maxTokens || 2048,
     });

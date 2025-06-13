@@ -54,7 +54,7 @@ export interface GraphApiCall {
 }
 
 export interface LLMConfig {
-  provider: 'ollama' | 'lmstudio' | 'openai' | 'anthropic';
+  provider: 'ollama' | 'lmstudio' | 'openai' | 'anthropic' | 'gemini';
   baseUrl?: string; // Not required for cloud providers
   model: string;
   temperature?: number;

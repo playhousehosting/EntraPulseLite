@@ -22,7 +22,7 @@ export class UnifiedLLMService {
       if (!config.baseUrl) {
         throw new Error(`baseUrl is required for ${config.provider}`);
       }
-      this.localService = new LLMService(config);    } else if (config.provider === 'openai' || config.provider === 'anthropic') {
+      this.localService = new LLMService(config);    } else if (config.provider === 'openai' || config.provider === 'anthropic' || config.provider === 'gemini') {
       if (!config.apiKey || config.apiKey.trim() === '') {
         console.warn(`⚠️  ${config.provider} provider selected but no API key configured. Service will be unavailable until API key is provided.`);
         this.cloudService = null; // Will be initialized when API key is provided
@@ -354,7 +354,7 @@ export class UnifiedLLMService {
   }
 
   isCloudProvider(): boolean {
-    return this.config.provider === 'openai' || this.config.provider === 'anthropic';
+    return this.config.provider === 'openai' || this.config.provider === 'anthropic' || this.config.provider === 'gemini';
   }
   getProviderType(): 'local' | 'cloud' {
     return this.isLocalProvider() ? 'local' : 'cloud';
