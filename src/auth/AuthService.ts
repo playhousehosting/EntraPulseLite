@@ -310,7 +310,39 @@ export class AuthService {
           userPrincipalName: this.account.username
         };
       }
+        return null;
+    }
+  }
+
+  /**
+   * Get claims from the current ID token
+   * @returns Parsed ID token claims or null if not available
+   */
+  async getIdTokenClaims(): Promise<any | null> {
+    try {
+      const token = await this.getToken();
+      if (!token || !token.idToken) {
+        return null;
+      }
+
+      // Parse JWT token (ID tokens are in JWT format)
+      const parts = token.idToken.split('.');
+      if (parts.length !== 3) {
+        console.warn('Invalid ID token format');
+        return null;
+      }
+
+      // Decode the payload (second part)
+      const payload = parts[1];
+      // Add padding if needed for base64 decoding
+      const paddedPayload = payload + '='.repeat((4 - (payload.length % 4)) % 4);
+      const decodedPayload = Buffer.from(paddedPayload.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8');
+      const claims = JSON.parse(decodedPayload);
       
+      console.log('ID token claims parsed successfully');
+      return claims;
+    } catch (error) {
+      console.error('Failed to parse ID token claims:', error);
       return null;
     }
   }

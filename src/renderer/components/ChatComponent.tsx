@@ -40,6 +40,7 @@ import { getAssetPath } from '../utils/assetUtils';
 import { ChatMessage, User, AuthToken, EnhancedLLMResponse, QueryAnalysis } from '../../types';
 import { AppIcon } from './AppIcon';
 import { UserProfileAvatar } from './UserProfileAvatar';
+import { UserProfileDropdown } from './UserProfileDropdown';
 
 interface ChatComponentProps {}
 
@@ -53,10 +54,10 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
   const [error, setError] = useState<string | null>(null);  const [currentPermissions, setCurrentPermissions] = useState<string[]>(['User.Read']);
   const [authMode, setAuthMode] = useState<'client-credentials' | 'interactive' | null>(null);
   const [permissionSource, setPermissionSource] = useState<'actual' | 'configured' | 'default'>('default');
-  const [permissionRequests, setPermissionRequests] = useState<string[]>([]);
-  const [useRedirectFlow, setUseRedirectFlow] = useState(false);
+  const [permissionRequests, setPermissionRequests] = useState<string[]>([]);  const [useRedirectFlow, setUseRedirectFlow] = useState(false);
   const [userPhotoUrl, setUserPhotoUrl] = useState<string | null>(null);
   const [expandedTraces, setExpandedTraces] = useState<Set<string>>(new Set());
+  const [profileDropdownAnchor, setProfileDropdownAnchor] = useState<HTMLElement | null>(null);
 
   useEffect(() => {
     initializeApp();
@@ -171,6 +172,14 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
       console.error('Logout failed:', error);
       setError('Logout failed');
     }
+  };
+
+  const handleProfileSettings = (event: React.MouseEvent<HTMLButtonElement>) => {
+    setProfileDropdownAnchor(event.currentTarget);
+  };
+
+  const handleCloseProfileDropdown = () => {
+    setProfileDropdownAnchor(null);
   };
 
   const handleSendMessage = async () => {
@@ -508,10 +517,9 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
               size="small" 
             />
           )}
-        </Box>
-          <Box display="flex" alignItems="center" gap={1}>          {user && <UserProfileAvatar user={user} />}
-          <Tooltip title="Settings">
-            <IconButton>
+        </Box>          <Box display="flex" alignItems="center" gap={1}>          {user && <UserProfileAvatar user={user} />}
+          <Tooltip title="User Profile">
+            <IconButton onClick={handleProfileSettings}>
               <SettingsIcon />
             </IconButton>
           </Tooltip>
@@ -812,7 +820,7 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
             <SendIcon />
           </Button>
         </Box>
-      </Box>{/* Permissions Status Panel */}
+      </Box>      {/* Permissions Status Panel */}
       <Box sx={{ p: 2, backgroundColor: 'background.paper', borderBottom: 1, borderColor: 'divider' }}>
         {/* Authentication Mode Display */}
         {authMode && (
@@ -826,36 +834,42 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
             />
           </Box>
         )}
-          <Box display="flex" alignItems="center" gap={1} mb={1}>
-          <Typography variant="subtitle2" gutterBottom>Current Permissions:</Typography>
-          {permissionSource === 'actual' && (
-            <Chip 
-              label="From Token" 
-              size="small" 
-              color="success" 
-              variant="outlined"
-            />
-          )}
-          {permissionSource === 'configured' && (
-            <Chip 
-              label="Configured" 
-              size="small" 
-              color="warning" 
-              variant="outlined"
-            />
-          )}
-        </Box>
-        <Box display="flex" flexWrap="wrap" gap={1} mb={2}>
-          {currentPermissions.map((permission) => (
-            <Chip 
-              key={permission}
-              label={permission}
-              size="small"
-              color="primary"
-              variant="outlined"
-            />
-          ))}
-        </Box>
+
+        {/* Show detailed permissions only for client-credentials mode */}
+        {authMode === 'client-credentials' && (
+          <>
+            <Box display="flex" alignItems="center" gap={1} mb={1}>
+              <Typography variant="subtitle2" gutterBottom>Current Permissions:</Typography>
+              {permissionSource === 'actual' && (
+                <Chip 
+                  label="From Token" 
+                  size="small" 
+                  color="success" 
+                  variant="outlined"
+                />
+              )}
+              {permissionSource === 'configured' && (
+                <Chip 
+                  label="Configured" 
+                  size="small" 
+                  color="warning" 
+                  variant="outlined"
+                />
+              )}
+            </Box>
+            <Box display="flex" flexWrap="wrap" gap={1} mb={2}>
+              {currentPermissions.map((permission) => (
+                <Chip 
+                  key={permission}
+                  label={permission}
+                  size="small"
+                  color="primary"
+                  variant="outlined"
+                />
+              ))}
+            </Box>
+          </>
+        )}
         
         {/* Quick Test Buttons */}
         <Typography variant="subtitle2" gutterBottom>Quick Tests:</Typography>
@@ -891,30 +905,33 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
           >
             List Applications
           </Button>
-          <Button
-            size="small"
-            variant="contained"
-            color="secondary"
-            onClick={async () => {
-              try {
-                setIsLoading(true);
-                console.log('🔄 Clearing token cache and forcing reauthentication...');
-                const result = await window.electronAPI.auth.forceReauthentication();
-                if (result) {
-                  console.log('✅ Reauthentication successful, refreshing permissions...');
-                  // Refresh the authentication info to get new permissions
-                  await checkAuthenticationStatus();
+          {/* Only show Refresh Permissions button for client-credentials mode */}
+          {authMode === 'client-credentials' && (
+            <Button
+              size="small"
+              variant="contained"
+              color="secondary"
+              onClick={async () => {
+                try {
+                  setIsLoading(true);
+                  console.log('🔄 Clearing token cache and forcing reauthentication...');
+                  const result = await window.electronAPI.auth.forceReauthentication();
+                  if (result) {
+                    console.log('✅ Reauthentication successful, refreshing permissions...');
+                    // Refresh the authentication info to get new permissions
+                    await checkAuthenticationStatus();
+                  }
+                } catch (error) {
+                  console.error('Failed to refresh permissions:', error);
+                } finally {
+                  setIsLoading(false);
                 }
-              } catch (error) {
-                console.error('Failed to refresh permissions:', error);
-              } finally {
-                setIsLoading(false);
-              }
-            }}
-            disabled={isLoading}
-          >
-            Refresh Permissions
-          </Button>
+              }}
+              disabled={isLoading}
+            >
+              Refresh Permissions
+            </Button>
+          )}
         </Box>
         
         {/* Permission Request Buttons */}
@@ -929,9 +946,17 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
             >
               Grant {permissionRequests.join(', ')}
             </Button>
-          </Box>
-        )}
+          </Box>        )}
       </Box>
+
+      {/* User Profile Dropdown */}
+      <UserProfileDropdown
+        anchorEl={profileDropdownAnchor}
+        open={Boolean(profileDropdownAnchor)}
+        onClose={handleCloseProfileDropdown}
+        user={user}
+        authToken={authToken}
+      />
     </Box>
   );
 };

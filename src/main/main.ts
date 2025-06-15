@@ -302,13 +302,20 @@ class EntraPulseLiteApp {
         console.error('Get token failed:', error);
         return null;
       }
-    });
-
-    ipcMain.handle('auth:getCurrentUser', async () => {
+    });    ipcMain.handle('auth:getCurrentUser', async () => {
       try {
         return await this.authService.getCurrentUser();
       } catch (error) {
         console.error('Get current user failed:', error);
+        return null;
+      }
+    });
+
+    ipcMain.handle('auth:getIdTokenClaims', async () => {
+      try {
+        return await this.authService.getIdTokenClaims();
+      } catch (error) {
+        console.error('Get ID token claims failed:', error);
         return null;
       }
     });
