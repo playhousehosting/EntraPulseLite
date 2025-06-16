@@ -1,6 +1,86 @@
 // azure-openai.test.ts
 // Dedicated tests for Azure OpenAI functionality
 
+// Mock electron-store before any imports
+jest.mock('electron-store', () => {
+  class MockStore {
+    private data: any = {};
+    private defaults: any = {};
+
+    constructor(options: any = {}) {
+      this.defaults = options.defaults || {};
+    }
+
+    get(key?: string, defaultValue?: any) {
+      if (key === undefined) {
+        return { ...this.defaults, ...this.data };
+      }
+      
+      const keys = key.split('.');
+      let current = { ...this.defaults, ...this.data };
+      
+      for (const k of keys) {
+        if (current && typeof current === 'object' && k in current) {
+          current = current[k];
+        } else {
+          return defaultValue;
+        }
+      }
+      
+      return current;
+    }
+
+    set(key: string | object, value?: any) {
+      if (typeof key === 'object') {
+        Object.assign(this.data, key);
+        return;
+      }
+      
+      const keys = key.split('.');
+      let current = this.data;
+      
+      for (let i = 0; i < keys.length - 1; i++) {
+        const k = keys[i];
+        if (!(k in current) || typeof current[k] !== 'object') {
+          current[k] = {};
+        }
+        current = current[k];
+      }
+      
+      current[keys[keys.length - 1]] = value;
+    }
+
+    has(key: string) {
+      return this.get(key) !== undefined;
+    }
+
+    delete(key: string) {
+      const keys = key.split('.');
+      let current = this.data;
+      
+      for (let i = 0; i < keys.length - 1; i++) {
+        const k = keys[i];
+        if (!(k in current) || typeof current[k] !== 'object') {
+          return;
+        }
+        current = current[k];
+      }
+      
+      delete current[keys[keys.length - 1]];
+    }
+
+    clear() {
+      this.data = {};
+    }
+
+    get size() {
+      return Object.keys(this.data).length;
+    }
+  }
+
+  return MockStore;
+});
+
 import { CloudLLMService } from '../../llm/CloudLLMService';
 import { EnhancedCloudLLMService } from '../../llm/EnhancedCloudLLMService';
 import { UnifiedLLMService } from '../../llm/UnifiedLLMService';
@@ -325,12 +405,12 @@ describe('Azure OpenAI Provider Tests', () => {
         model: 'gpt-4o',
         temperature: 0.1,
         maxTokens: 2048
-      };
-
-      configService.saveCloudProviderConfig('azure-openai', azureOpenAIConfig);
+      };      configService.saveCloudProviderConfig('azure-openai', azureOpenAIConfig);
       const configuredProviders = configService.getConfiguredCloudProviders();
 
-      expect(configuredProviders).toContain('azure-openai');
+      expect(configuredProviders).toHaveLength(1);
+      expect(configuredProviders[0].provider).toBe('azure-openai');
+      expect(configuredProviders[0].config).toEqual(azureOpenAIConfig);
     });
 
     test('should set Azure OpenAI as default provider', () => {
@@ -341,13 +421,13 @@ describe('Azure OpenAI Provider Tests', () => {
         model: 'gpt-4o',
         temperature: 0.1,
         maxTokens: 2048
-      };
-
-      configService.saveCloudProviderConfig('azure-openai', azureOpenAIConfig);
+      };      configService.saveCloudProviderConfig('azure-openai', azureOpenAIConfig);
       configService.setDefaultCloudProvider('azure-openai');
 
       const defaultProvider = configService.getDefaultCloudProvider();
-      expect(defaultProvider).toBe('azure-openai');
+      expect(defaultProvider).not.toBeNull();
+      expect(defaultProvider!.provider).toBe('azure-openai');
+      expect(defaultProvider!.config).toEqual(azureOpenAIConfig);
     });
 
     test('should remove Azure OpenAI provider configuration', () => {

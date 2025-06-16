@@ -338,17 +338,28 @@ export class UnifiedLLMService {
 
   /**
    * Get the reason why the service is not ready (if applicable)
-   */
-  getServiceStatus(): { ready: boolean; reason?: string } {
+   */  getServiceStatus(): { ready: boolean; reason?: string } {
     if (this.localService) {
       return { ready: true };
     } else if (this.cloudService) {
       return { ready: true };
     } else {
-      const reason = this.isCloudProvider() 
-        ? `${this.config.provider} API key is not configured` 
-        : `${this.config.provider} service failed to initialize`;
-      return { ready: false, reason };
+      // Provide specific error messages based on what's missing
+      if (this.isCloudProvider()) {
+        if (!this.config.apiKey || this.config.apiKey.trim() === '') {
+          return { ready: false, reason: `${this.config.provider} API key is not configured` };
+        } else if (this.config.provider === 'azure-openai' && (!this.config.baseUrl || this.config.baseUrl.trim() === '')) {
+          return { ready: false, reason: `${this.config.provider} baseUrl is not configured` };
+        } else {
+          return { ready: false, reason: `${this.config.provider} service failed to initialize` };
+        }
+      } else {
+        if (this.isLocalProvider() && (!this.config.baseUrl || this.config.baseUrl.trim() === '')) {
+          return { ready: false, reason: `${this.config.provider} baseUrl is not configured` };
+        } else {
+          return { ready: false, reason: `${this.config.provider} service failed to initialize` };
+        }
+      }
     }
   }
 
