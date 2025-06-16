@@ -37,15 +37,14 @@ export class ConfigService {
     this.store = new Store({
       name: 'entrapulse-lite-config',
       encryptionKey: 'entrapulse-lite-secret-key-2025', // In production, this should be generated or from env
-      defaults: {
-        application: {
+      defaults: {        application: {
           llm: {
             provider: 'anthropic',
             model: 'claude-3-5-sonnet-20241022',
             apiKey: '',
             baseUrl: '',
             temperature: 0.2,
-            maxTokens: 2048,
+            maxTokens: 4096,
             organization: ''
           },
           lastUsedProvider: 'anthropic',
@@ -81,14 +80,13 @@ export class ConfigService {
       const users = this.store.get('users');
       if (!users[this.currentUserKey]) {
         console.log(`[ConfigService] Creating new user config for ${this.currentUserKey}`);
-        users[this.currentUserKey] = {
-          llm: {
+        users[this.currentUserKey] = {          llm: {
             provider: 'anthropic',
             model: 'claude-3-5-sonnet-20241022',
             apiKey: '',
             baseUrl: '',
             temperature: 0.2,
-            maxTokens: 2048,
+            maxTokens: 4096,
             organization: ''
           },
           lastUsedProvider: 'anthropic',
@@ -138,15 +136,14 @@ export class ConfigService {
   /**
    * Get default user configuration
    */
-  private getDefaultUserConfig(): UserConfigSchema {
-    return {
+  private getDefaultUserConfig(): UserConfigSchema {    return {
       llm: {
         provider: 'anthropic',
         model: 'claude-3-5-sonnet-20241022',
         apiKey: '',
         baseUrl: '',
         temperature: 0.2,
-        maxTokens: 2048,
+        maxTokens: 4096,
         organization: ''
       },
       lastUsedProvider: 'anthropic',
@@ -175,11 +172,19 @@ export class ConfigService {
     }
   }  /**
    * Get the current LLM configuration (context-aware)
-   */
-  getLLMConfig(): LLMConfig {
+   */  getLLMConfig(): LLMConfig {
     try {
       const context = this.getCurrentContext();
       const config = context?.llm || this.getDefaultUserConfig().llm;
+      
+      console.log('[ConfigService] getLLMConfig - Retrieved config:', {
+        provider: config.provider,
+        model: config.model,
+        temperature: config.temperature,
+        maxTokens: config.maxTokens,
+        preferLocal: config.preferLocal,
+        hasCloudProviders: !!config.cloudProviders
+      });
       
       // Add debugging for Azure OpenAI specifically
       if (config.cloudProviders?.['azure-openai']) {
@@ -200,8 +205,13 @@ export class ConfigService {
   }
   /**
    * Save LLM configuration securely (context-aware)
-   */  saveLLMConfig(config: LLMConfig): void {    console.log('[ConfigService] saveLLMConfig - Input config:', {
+   */  saveLLMConfig(config: LLMConfig): void {
+    console.log('[ConfigService] saveLLMConfig - Input config:', {
       provider: config.provider,
+      model: config.model,
+      temperature: config.temperature,
+      maxTokens: config.maxTokens,
+      preferLocal: config.preferLocal,
       hasCloudProviders: !!config.cloudProviders,
       cloudProviderKeys: config.cloudProviders ? Object.keys(config.cloudProviders) : 'none',
       inputDefaultProvider: config.defaultCloudProvider
@@ -215,11 +225,16 @@ export class ConfigService {
     const preservedDefaultCloudProvider = existingLlmConfig.defaultCloudProvider;
     
     console.log('[ConfigService] saveLLMConfig - Existing config:', {
+      existingModel: existingLlmConfig.model,
+      existingTemperature: existingLlmConfig.temperature,
+      existingMaxTokens: existingLlmConfig.maxTokens,
+      existingPreferLocal: existingLlmConfig.preferLocal,
       hasExistingCloudProviders: !!preservedCloudProviders,
       existingProviderKeys: preservedCloudProviders ? Object.keys(preservedCloudProviders) : 'none',
       existingDefaultProvider: preservedDefaultCloudProvider
     });
-      // Merge cloud providers: prioritize incoming config over existing config
+
+    // Merge cloud providers: prioritize incoming config over existing config
     let finalCloudProviders;
     if (config.cloudProviders && Object.keys(config.cloudProviders).length > 0) {
       // If incoming config has cloud providers, use them (preserving existing ones that aren't overwritten)
@@ -248,7 +263,10 @@ export class ConfigService {
       // No incoming default provider specified, keep existing
       finalDefaultCloudProvider = preservedDefaultCloudProvider;
       console.log('[ConfigService] saveLLMConfig - No incoming default provider, keeping existing:', preservedDefaultCloudProvider);
-    }      currentContext.llm = {
+    }
+
+    // Create the final configuration, ensuring all values are preserved
+    currentContext.llm = {
       ...config,
       // Use the merged cloud provider configurations
       cloudProviders: finalCloudProviders,
@@ -257,13 +275,28 @@ export class ConfigService {
     };
     currentContext.lastUsedProvider = config.provider;
     
-    console.log('[ConfigService] saveLLMConfig - Final config:', {
+    console.log('[ConfigService] saveLLMConfig - Final config being saved:', {
+      provider: currentContext.llm.provider,
+      model: currentContext.llm.model,
+      temperature: currentContext.llm.temperature,
+      maxTokens: currentContext.llm.maxTokens,
+      preferLocal: currentContext.llm.preferLocal,
       hasCloudProviders: !!currentContext.llm.cloudProviders,
       finalProviderKeys: currentContext.llm.cloudProviders ? Object.keys(currentContext.llm.cloudProviders) : 'none',
       finalDefaultProvider: currentContext.llm.defaultCloudProvider
     });
     
     this.saveCurrentContext(currentContext);
+    
+    // Verify the save worked by reading it back
+    const verifyContext = this.getCurrentContext();
+    console.log('[ConfigService] saveLLMConfig - Verification read back:', {
+      provider: verifyContext.llm?.provider,
+      model: verifyContext.llm?.model,
+      temperature: verifyContext.llm?.temperature,
+      maxTokens: verifyContext.llm?.maxTokens,
+      preferLocal: verifyContext.llm?.preferLocal
+    });
   }
 
   /**
@@ -520,12 +553,11 @@ export class ConfigService {
       // Reset application config to defaults
       const defaultAppConfig: UserConfigSchema = {
         llm: {
-          provider: 'anthropic',
-          model: 'claude-3-5-sonnet-20241022',
+          provider: 'anthropic',          model: 'claude-3-5-sonnet-20241022',
           apiKey: '',
           baseUrl: '',
           temperature: 0.2,
-          maxTokens: 2048,
+          maxTokens: 4096,
           organization: ''
         },
         lastUsedProvider: 'anthropic',

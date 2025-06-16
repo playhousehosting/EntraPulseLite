@@ -472,21 +472,76 @@ Respond ONLY with a JSON object in this exact format:
             if (sampleItem && typeof sampleItem === 'object') {
               const keys = Object.keys(sampleItem);
               contextData += `Data structure includes: ${keys.join(', ')}\n`;
-              
-              // For user data, provide a sample formatted entry
+                    // For user data, provide a sample formatted entry
               if (keys.includes('displayName') || keys.includes('userPrincipalName')) {
                 contextData += 'Sample entry format: Name (Title) - Email\n';
               }
             }
           }
           
-          contextData += `Raw data: ${JSON.stringify(finalLokkaData, null, 2)}\n\n`;
-        } else if (typeof finalLokkaData === 'object') {
-          // Single object
-          contextData += `Microsoft Graph Data (Single object):\n${JSON.stringify(finalLokkaData, null, 2)}\n\n`;
-        } else {
-          // Other types
-          contextData += `Microsoft Graph Data:\n${JSON.stringify(finalLokkaData, null, 2)}\n\n`;
+          // Add raw data with intelligent truncation for large datasets
+          const rawDataString = JSON.stringify(finalLokkaData, null, 2);
+          const MAX_CONTEXT_SIZE = 100000; // 100KB limit for context data
+          
+          if (rawDataString.length > MAX_CONTEXT_SIZE) {
+            // For large datasets, provide summary + sample data
+            console.log(`🔍 Large dataset detected (${rawDataString.length} chars), truncating...`);
+            
+            // If it's secure score data, provide a meaningful summary
+            if (finalLokkaData[0] && finalLokkaData[0].currentScore !== undefined) {
+              const latest = finalLokkaData[0];
+              const summary = {
+                latestScore: latest.currentScore,
+                maxScore: latest.maxScore,
+                percentage: Math.round((latest.currentScore / latest.maxScore) * 100),
+                date: latest.createdDateTime,
+                activeUserCount: latest.activeUserCount,
+                tenantId: latest.azureTenantId,
+                totalRecords: finalLokkaData.length
+              };
+              
+              contextData += `Raw data summary: ${JSON.stringify(summary, null, 2)}\n`;
+              contextData += `Note: Full dataset contains ${finalLokkaData.length} records but is too large to include completely.\n\n`;
+            } else {
+              // Generic truncation for other large datasets
+              const truncatedData = finalLokkaData.slice(0, 3); // Show first 3 items
+              contextData += `Raw data (first 3 of ${finalLokkaData.length} items): ${JSON.stringify(truncatedData, null, 2)}\n`;
+              contextData += `Note: Dataset truncated due to size (${rawDataString.length} chars). Showing first 3 items only.\n\n`;
+            }
+          } else {
+            // Small enough to include in full
+            contextData += `Raw data: ${rawDataString}\n\n`;
+          }        } else if (typeof finalLokkaData === 'object') {
+          // Single object - check size before including
+          const rawDataString = JSON.stringify(finalLokkaData, null, 2);
+          const MAX_CONTEXT_SIZE = 100000; // 100KB limit
+          
+          if (rawDataString.length > MAX_CONTEXT_SIZE) {
+            console.log(`🔍 Large single object detected (${rawDataString.length} chars), providing summary...`);
+            
+            // Provide object structure summary instead of full data
+            const keys = Object.keys(finalLokkaData);
+            const summary = {
+              dataType: 'Single object',
+              keys: keys,
+              keyCount: keys.length,
+              sizeInfo: `${rawDataString.length} characters (too large to display fully)`
+            };
+            
+            contextData += `Microsoft Graph Data (Single large object):\n${JSON.stringify(summary, null, 2)}\n\n`;
+          } else {
+            contextData += `Microsoft Graph Data (Single object):\n${rawDataString}\n\n`;
+          }        } else {
+          // Other types - apply same size check
+          const rawDataString = JSON.stringify(finalLokkaData, null, 2);
+          const MAX_CONTEXT_SIZE = 100000; // 100KB limit
+          
+          if (rawDataString.length > MAX_CONTEXT_SIZE) {
+            console.log(`🔍 Large data of type ${typeof finalLokkaData} detected (${rawDataString.length} chars), providing summary...`);
+            contextData += `Microsoft Graph Data (${typeof finalLokkaData}):\nData too large to display (${rawDataString.length} characters)\n\n`;
+          } else {
+            contextData += `Microsoft Graph Data:\n${rawDataString}\n\n`;
+          }
         }
         
         console.log('🔍 Added context data:', {
@@ -503,16 +558,16 @@ ${contextData ? `Here is the relevant data retrieved from Microsoft Graph and do
 ${contextData}
 
 🚨 CRITICAL ANTI-HALLUCINATION INSTRUCTIONS - MUST FOLLOW EXACTLY 🚨:
-1. The data above shows: ${JSON.stringify(mcpResults.lokkaResult)}
+1. Use ONLY the data provided in the context above
 2. You MUST use ONLY the exact numbers from this data
-3. If the data shows "52", you MUST say "52" - NEVER any other number
+3. If the data shows "553.4", you MUST say "553.4" - NEVER any other number
 4. DO NOT perform ANY mathematical operations on the numbers
 5. DO NOT round, estimate, or approximate - use the EXACT number shown
-6. DO NOT say "5" when the data shows "52"
-7. DO NOT say "about" or "approximately" - state the precise number
-8. The number in the data is the FINAL ANSWER - do not change it
-9. If asked for a count and the data shows 52, your answer MUST contain "52"
-10. NEVER generate different numbers than what is provided in the data
+6. DO NOT say "about" or "approximately" - state the precise number
+7. The number in the data is the FINAL ANSWER - do not change it
+8. If asked for a score and the data shows 553.4, your answer MUST contain "553.4"
+9. NEVER generate different numbers than what is provided in the data
+10. Base your response ONLY on the context data provided above
 
 📋 RESPONSE FORMATTING INSTRUCTIONS (Claude Desktop Style):
 1. NEVER show raw JSON data to the user

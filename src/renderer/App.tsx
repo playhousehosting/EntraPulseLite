@@ -12,12 +12,11 @@ import { LLMConfig } from '../types';
 export const App: React.FC = () => {
   const [darkMode, setDarkMode] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [llmConfig, setLlmConfig] = useState<LLMConfig>({
+  const [settingsOpen, setSettingsOpen] = useState(false);  const [llmConfig, setLlmConfig] = useState<LLMConfig>({
     provider: 'openai', // Default to cloud for better initial experience
     model: 'gpt-4o-mini',
     temperature: 0.7,
-    maxTokens: 2048,
+    maxTokens: 4096,
     apiKey: '',
     preferLocal: false
   });
@@ -76,12 +75,27 @@ export const App: React.FC = () => {
   const handleSettings = () => {
     setSettingsOpen(true);
   };
-
   const handleSaveSettings = async (newConfig: LLMConfig) => {
     try {
+      console.log('[App] handleSaveSettings - Received config:', {
+        provider: newConfig.provider,
+        temperature: newConfig.temperature,
+        maxTokens: newConfig.maxTokens,
+        preferLocal: newConfig.preferLocal,
+        model: newConfig.model
+      });
+      
       await window.electronAPI?.config?.saveLLMConfig(newConfig);
       setLlmConfig(newConfig);
-      console.log('LLM configuration saved:', newConfig.provider);
+      
+      console.log('[App] handleSaveSettings - Configuration saved successfully');
+      console.log('[App] handleSaveSettings - Updated state with:', {
+        provider: newConfig.provider,
+        temperature: newConfig.temperature,
+        maxTokens: newConfig.maxTokens,
+        preferLocal: newConfig.preferLocal,
+        model: newConfig.model
+      });
     } catch (error) {
       console.error('Failed to save LLM configuration:', error);
     }

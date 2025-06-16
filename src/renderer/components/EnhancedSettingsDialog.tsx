@@ -221,30 +221,57 @@ export const EnhancedSettingsDialog: React.FC<EnhancedSettingsDialogProps> = ({
   };  const handleSave = () => {
     let finalConfig = { ...config };
     
-    // If the provider is a cloud provider and matches the default cloud provider,
-    // merge the cloud provider configuration
-    if (defaultCloudProvider && config.provider === defaultCloudProvider) {
-      const cloudProviderConfig = cloudProviders.find(p => p.provider === defaultCloudProvider)?.config;
-      if (cloudProviderConfig) {
-        finalConfig = {
-          ...finalConfig,
-          apiKey: cloudProviderConfig.apiKey,
-          baseUrl: cloudProviderConfig.baseUrl,
-          organization: cloudProviderConfig.organization,
-          model: cloudProviderConfig.model || finalConfig.model,
-          temperature: cloudProviderConfig.temperature || finalConfig.temperature,
-          maxTokens: cloudProviderConfig.maxTokens || finalConfig.maxTokens
-        };
+    console.log('[EnhancedSettingsDialog] handleSave - Original config:', {
+      provider: config.provider,
+      temperature: config.temperature,
+      maxTokens: config.maxTokens,
+      preferLocal: config.preferLocal,
+      model: config.model
+    });
+    
+    // For local providers (ollama, lmstudio), use the config as-is
+    if (config.provider === 'ollama' || config.provider === 'lmstudio') {
+      finalConfig = {
+        ...config,
+        // Ensure these values are preserved for local providers
+        temperature: config.temperature || 0.2,
+        maxTokens: config.maxTokens || 4096,
+        preferLocal: config.preferLocal || false
+      };
+    } else {
+      // For cloud providers, merge with cloud provider configuration but prioritize user settings
+      if (defaultCloudProvider && config.provider === defaultCloudProvider) {
+        const cloudProviderConfig = cloudProviders.find(p => p.provider === defaultCloudProvider)?.config;
+        if (cloudProviderConfig) {
+          finalConfig = {
+            ...finalConfig,
+            // Use cloud provider credentials
+            apiKey: cloudProviderConfig.apiKey,
+            baseUrl: cloudProviderConfig.baseUrl,
+            organization: cloudProviderConfig.organization,
+            // Prioritize user-modified values, fallback to cloud provider or defaults
+            model: config.model || cloudProviderConfig.model,
+            temperature: config.temperature !== undefined ? config.temperature : (cloudProviderConfig.temperature || 0.2),
+            maxTokens: config.maxTokens !== undefined ? config.maxTokens : (cloudProviderConfig.maxTokens || 4096),
+            preferLocal: config.preferLocal !== undefined ? config.preferLocal : false
+          };
+        }
       }
     }
 
-    // Always include the current default cloud provider, not the selected provider
-    // This ensures the ConfigService knows what the current default is, regardless of the currently selected provider
+    // Always include the current default cloud provider
     if (defaultCloudProvider) {
       finalConfig.defaultCloudProvider = defaultCloudProvider;
     }
 
-    console.log('[EnhancedSettingsDialog] handleSave - Sending config with defaultCloudProvider:', defaultCloudProvider);
+    console.log('[EnhancedSettingsDialog] handleSave - Final config being saved:', {
+      provider: finalConfig.provider,
+      temperature: finalConfig.temperature,
+      maxTokens: finalConfig.maxTokens,
+      preferLocal: finalConfig.preferLocal,
+      model: finalConfig.model,
+      defaultCloudProvider: finalConfig.defaultCloudProvider
+    });
 
     onSave(finalConfig);
     onClose();
@@ -431,8 +458,7 @@ export const EnhancedSettingsDialog: React.FC<EnhancedSettingsDialogProps> = ({
                   <TextField
                     fullWidth
                     label="Max Tokens"
-                    type="number"
-                    value={config.maxTokens || 2048}
+                    type="number"                    value={config.maxTokens || 4096}
                     onChange={(e) => setConfig({ ...config, maxTokens: parseInt(e.target.value) })}
                     inputProps={{ min: 1, max: 8192 }}
                     helperText="Maximum response length"
@@ -501,10 +527,9 @@ const CloudProviderCard: React.FC<CloudProviderCardProps> = ({
       model: provider === 'openai' ? 'gpt-4o-mini' : 
              provider === 'anthropic' ? 'claude-3-5-sonnet-20241022' : 
              provider === 'gemini' ? 'gemini-1.5-flash' :
-             provider === 'azure-openai' ? 'gpt-4o' : 'gpt-4o-mini',
-      apiKey: '',
+             provider === 'azure-openai' ? 'gpt-4o' : 'gpt-4o-mini',      apiKey: '',
       temperature: 0.2,
-      maxTokens: 2048,
+      maxTokens: 4096,
       baseUrl: provider === 'azure-openai' ? '' : undefined
     }
   );

@@ -349,8 +349,7 @@ export const SettingsDialog: React.FC<SettingsDialogProps> = ({
                     fullWidth
                     label="Max Tokens"
                     type="number"
-                    inputProps={{ min: 1, max: 8192 }}
-                    value={config.maxTokens || 2048}
+                    inputProps={{ min: 1, max: 8192 }}                    value={config.maxTokens || 4096}
                     onChange={(e) => setConfig({ ...config, maxTokens: parseInt(e.target.value) })}
                     helperText="Maximum response length"
                   />
