@@ -80,10 +80,10 @@ export const UserProfileDropdown: React.FC<UserProfileDropdownProps> = ({
       fetchIdTokenClaims();
     }
   }, [authToken]);
-
   const fetchIdTokenClaims = async () => {
     try {
-      const claims = await window.electronAPI.auth.getIdTokenClaims();
+      // Use type assertion for getIdTokenClaims method
+      const claims = await (window.electronAPI.auth as any).getIdTokenClaims();
       setIdTokenClaims(claims);
       console.log('Fetched ID token claims:', claims);
     } catch (error) {

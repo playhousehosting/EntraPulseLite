@@ -489,7 +489,6 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
       </Box>
     );
   }
-
   return (
     <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
       {/* Header */}      <Box
@@ -500,8 +499,9 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
+          flexShrink: 0,
         }}
-      >          <Box display="flex" alignItems="center" gap={2}>          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+      ><Box display="flex" alignItems="center" gap={2}>          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <AppIcon 
               size={28} 
               sx={{ 
@@ -529,10 +529,8 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
             </IconButton>
           </Tooltip>
         </Box>
-      </Box>
-
-      {/* Messages */}
-      <Box sx={{ flex: 1, overflow: 'auto', p: 2 }}>
+      </Box>      {/* Messages */}
+      <Box sx={{ flex: 1, overflow: 'auto', p: 2, pb: 8, minHeight: 0 }}>
         <List>
           {messages.map((message) => (
             <ListItem key={message.id} alignItems="flex-start" sx={{ mb: 2 }}>              <Box sx={{ mr: 2, mt: 0.5 }}>
@@ -783,45 +781,11 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
               </Box>
             </ListItem>
           )}
-        </List>
-      </Box>
+        </List>      </Box>
 
-      {error && (
-        <Box sx={{ p: 2 }}>
-          <Alert severity="error" onClose={() => setError(null)}>
-            {error}
-          </Alert>
-        </Box>
-      )}      {/* Input */}
-      <Box sx={{ p: 2, borderTop: 1, borderColor: 'divider' }}>
-        <Box display="flex" gap={1}>
-          <TextField
-            fullWidth
-            multiline
-            maxRows={4}
-            value={inputMessage}
-            onChange={(e) => setInputMessage(e.target.value)}
-            onKeyPress={handleKeyPress}
-            placeholder={!llmAvailable 
-              ? "LLM is offline - configure a local LLM service to enable chat..." 
-              : "Ask about your Microsoft Entra environment..."
-            }
-            disabled={isLoading}
-            variant="outlined"
-            size="small"
-            helperText={!llmAvailable ? "Configure Ollama, LM Studio, or other local LLM to enable chat functionality" : ""}
-          />
-          <Button
-            variant="contained"
-            onClick={handleSendMessage}
-            disabled={!inputMessage.trim() || isLoading || !llmAvailable}
-            sx={{ minWidth: 60 }}
-          >
-            <SendIcon />
-          </Button>
-        </Box>
-      </Box>      {/* Permissions Status Panel */}
-      <Box sx={{ p: 2, backgroundColor: 'background.paper', borderBottom: 1, borderColor: 'divider' }}>
+      {/* Permissions Status Panel - Show for client-credentials mode or when permission requests are needed */}
+      {(authMode === 'client-credentials' || permissionRequests.length > 0) && (
+        <Box sx={{ p: 2, backgroundColor: 'background.paper', borderTop: 1, borderColor: 'divider', flexShrink: 0 }}>
         {/* Authentication Mode Display */}
         {authMode && (
           <Box display="flex" alignItems="center" gap={1} mb={2}>
@@ -833,9 +797,7 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
               variant="filled"
             />
           </Box>
-        )}
-
-        {/* Show detailed permissions only for client-credentials mode */}
+        )}        {/* Show detailed permissions only for client-credentials mode */}
         {authMode === 'client-credentials' && (
           <>
             <Box display="flex" alignItems="center" gap={1} mb={1}>
@@ -868,73 +830,70 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
                 />
               ))}
             </Box>
+
+            {/* Quick Test Buttons for client-credentials mode */}
+            <Typography variant="subtitle2" gutterBottom>Quick Tests:</Typography>
+            <Box display="flex" flexWrap="wrap" gap={1}>
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={() => testGraphQuery('/me', ['User.Read'])}
+                disabled={isLoading}
+              >
+                Get My Profile
+              </Button>
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={() => testGraphQuery('/users', ['User.ReadBasic.All'])}
+                disabled={isLoading}
+              >
+                List Users
+              </Button>
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={() => testGraphQuery('/groups', ['Group.Read.All'])}
+                disabled={isLoading}
+              >
+                List Groups
+              </Button>
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={() => testGraphQuery('/applications', ['Application.Read.All'])}
+                disabled={isLoading}
+              >
+                List Applications
+              </Button>
+              <Button
+                size="small"
+                variant="contained"
+                color="secondary"
+                onClick={async () => {
+                  try {
+                    setIsLoading(true);
+                    console.log('🔄 Clearing token cache and forcing reauthentication...');
+                    const result = await window.electronAPI.auth.forceReauthentication();
+                    if (result) {
+                      console.log('✅ Reauthentication successful, refreshing permissions...');
+                      // Refresh the authentication info to get new permissions
+                      await checkAuthenticationStatus();
+                    }
+                  } catch (error) {
+                    console.error('Failed to refresh permissions:', error);
+                  } finally {
+                    setIsLoading(false);
+                  }
+                }}
+                disabled={isLoading}
+              >
+                Refresh Permissions
+              </Button>
+            </Box>
           </>
         )}
-        
-        {/* Quick Test Buttons */}
-        <Typography variant="subtitle2" gutterBottom>Quick Tests:</Typography>
-        <Box display="flex" flexWrap="wrap" gap={1}>
-          <Button
-            size="small"
-            variant="outlined"
-            onClick={() => testGraphQuery('/me', ['User.Read'])}
-            disabled={isLoading}
-          >
-            Get My Profile
-          </Button>
-          <Button
-            size="small"
-            variant="outlined"
-            onClick={() => testGraphQuery('/users', ['User.ReadBasic.All'])}
-            disabled={isLoading}
-          >
-            List Users
-          </Button>
-          <Button
-            size="small"
-            variant="outlined"
-            onClick={() => testGraphQuery('/groups', ['Group.Read.All'])}
-            disabled={isLoading}
-          >
-            List Groups
-          </Button>          <Button
-            size="small"
-            variant="outlined"
-            onClick={() => testGraphQuery('/applications', ['Application.Read.All'])}
-            disabled={isLoading}
-          >
-            List Applications
-          </Button>
-          {/* Only show Refresh Permissions button for client-credentials mode */}
-          {authMode === 'client-credentials' && (
-            <Button
-              size="small"
-              variant="contained"
-              color="secondary"
-              onClick={async () => {
-                try {
-                  setIsLoading(true);
-                  console.log('🔄 Clearing token cache and forcing reauthentication...');
-                  const result = await window.electronAPI.auth.forceReauthentication();
-                  if (result) {
-                    console.log('✅ Reauthentication successful, refreshing permissions...');
-                    // Refresh the authentication info to get new permissions
-                    await checkAuthenticationStatus();
-                  }
-                } catch (error) {
-                  console.error('Failed to refresh permissions:', error);
-                } finally {
-                  setIsLoading(false);
-                }
-              }}
-              disabled={isLoading}
-            >
-              Refresh Permissions
-            </Button>
-          )}
-        </Box>
-        
-        {/* Permission Request Buttons */}
+          {/* Permission Request Buttons */}
         {permissionRequests.length > 0 && (
           <Box mt={2}>
             <Typography variant="subtitle2" gutterBottom>Grant Required Permissions:</Typography>
@@ -946,7 +905,63 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
             >
               Grant {permissionRequests.join(', ')}
             </Button>
-          </Box>        )}
+          </Box>
+        )}
+        </Box>
+      )}
+
+      {/* Error Alert */}
+      {error && (
+        <Box sx={{ p: 2, flexShrink: 0 }}>
+          <Alert severity="error" onClose={() => setError(null)}>
+            {error}
+          </Alert>
+        </Box>
+      )}      {/* Input - Always at the bottom with proper spacing */}
+      <Box sx={{ 
+        p: 4, 
+        pb: 15,  // Tripled bottom padding for maximum visibility
+        borderTop: 1, 
+        borderColor: 'divider', 
+        flexShrink: 0, 
+        backgroundColor: 'background.paper',
+        minHeight: 200  // Significantly increased minimum height for input area
+      }}>
+        <Box display="flex" gap={1} alignItems="flex-start">
+          <TextField
+            fullWidth
+            multiline
+            maxRows={4}
+            value={inputMessage}
+            onChange={(e) => setInputMessage(e.target.value)}
+            onKeyPress={handleKeyPress}
+            placeholder={!llmAvailable 
+              ? "LLM is offline - configure a local LLM service to enable chat..." 
+              : "Ask about your Microsoft Entra environment..."
+            }
+            disabled={isLoading}
+            variant="outlined"
+            size="medium"  // Changed from small to medium for better visibility
+            helperText={!llmAvailable ? "Configure Ollama, LM Studio, or other local LLM to enable chat functionality" : ""}
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                minHeight: 48  // Ensure the input field has good height
+              }
+            }}
+          />
+          <Button
+            variant="contained"
+            onClick={handleSendMessage}
+            disabled={!inputMessage.trim() || isLoading || !llmAvailable}
+            sx={{ 
+              minWidth: 60,
+              height: 48,  // Match the input field height
+              alignSelf: 'flex-start'
+            }}
+          >
+            <SendIcon />
+          </Button>
+        </Box>
       </Box>
 
       {/* User Profile Dropdown */}

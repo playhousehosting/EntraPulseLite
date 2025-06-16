@@ -29,14 +29,15 @@
     },
     "types": ["node", "jest", "react", "react-dom"],
     "typeRoots": ["./node_modules/@types", "./src/types"]
-  },"include": [
+  },  "include": [
     "src/**/*",
     "src/types/assets.d.ts",
     "src/types/react-markdown.d.ts",
     "src/types/jsx.d.ts",
     "src/types/react-jsx-global.d.ts",
-    "src/types/react-markdown-patch.d.ts"
-  ],  "exclude": [
+    "src/types/react-markdown-patch.d.ts",
+    "src/types/electron.d.ts"
+  ],"exclude": [
     "node_modules",
     "dist",
     "out",
