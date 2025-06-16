@@ -62,11 +62,18 @@ Always be helpful, accurate, and security-conscious in your responses.`,
       apiKey: process.env.ANTHROPIC_API_KEY || 'test-key',
       temperature: 0.1,
       maxTokens: 2048
-    },
-    gemini: {
+    },    gemini: {
       provider: 'gemini',
       model: 'gemini-1.5-pro',
       apiKey: process.env.GEMINI_API_KEY || 'test-key',
+      temperature: 0.1,
+      maxTokens: 2048
+    },
+    'azure-openai': {
+      provider: 'azure-openai',
+      model: 'gpt-4o',
+      apiKey: process.env.AZURE_OPENAI_API_KEY || 'test-key',
+      baseUrl: process.env.AZURE_OPENAI_BASE_URL || 'https://test.openai.azure.com',
       temperature: 0.1,
       maxTokens: 2048
     }

@@ -6,6 +6,7 @@ import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { ChatComponent } from './components/ChatComponent';
 import { AppIcon } from './components/AppIcon';
 import { SettingsDialog } from './components/SettingsDialog';
+import { EnhancedSettingsDialog } from './components/EnhancedSettingsDialog';
 import { LLMConfig } from '../types';
 
 export const App: React.FC = () => {
@@ -129,10 +130,8 @@ export const App: React.FC = () => {
         </AppBar>        {/* Main Content */}
         <Box sx={{ flex: 1, overflow: 'hidden' }}>
           <ChatComponent />
-        </Box>
-
-        {/* Settings Dialog */}
-        <SettingsDialog
+        </Box>        {/* Settings Dialog */}
+        <EnhancedSettingsDialog
           open={settingsOpen}
           onClose={() => setSettingsOpen(false)}
           currentConfig={llmConfig}

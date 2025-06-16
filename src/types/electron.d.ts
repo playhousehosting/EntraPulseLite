@@ -40,6 +40,12 @@ interface ConfigAPI {
   saveLLMConfig(config: any): Promise<void>;
   clearModelCache(provider?: string): Promise<void>;
   getCachedModels(provider: string): Promise<string[]>;
+  saveCloudProviderConfig(provider: 'openai' | 'anthropic' | 'gemini', config: any): Promise<void>;
+  getCloudProviderConfig(provider: 'openai' | 'anthropic' | 'gemini'): Promise<any>;
+  getConfiguredCloudProviders(): Promise<Array<{ provider: 'openai' | 'anthropic' | 'gemini'; config: any }>>;
+  setDefaultCloudProvider(provider: 'openai' | 'anthropic' | 'gemini'): Promise<void>;
+  getDefaultCloudProvider(): Promise<{ provider: 'openai' | 'anthropic' | 'gemini'; config: any } | null>;
+  removeCloudProviderConfig(provider: 'openai' | 'anthropic' | 'gemini'): Promise<void>;
 }
 
 interface ElectronAPI {

@@ -504,14 +504,68 @@ class EntraPulseLiteApp {
         console.error('Failed to clear model cache:', error);
         throw error;
       }
-    });
-
-    ipcMain.handle('config:getCachedModels', async (event, provider: string) => {
+    });    ipcMain.handle('config:getCachedModels', async (event, provider: string) => {
       try {
         return this.configService.getCachedModels(provider) || [];
       } catch (error) {
         console.error('Failed to get cached models:', error);
         return [];
+      }
+    });    // Cloud provider configuration handlers
+    ipcMain.handle('config:saveCloudProviderConfig', async (event, provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai', config) => {
+      try {
+        this.configService.saveCloudProviderConfig(provider, config);
+        return true;
+      } catch (error) {
+        console.error('Save cloud provider config failed:', error);
+        throw error;
+      }
+    });
+
+    ipcMain.handle('config:getCloudProviderConfig', async (event, provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai') => {
+      try {
+        return this.configService.getCloudProviderConfig(provider);
+      } catch (error) {
+        console.error('Get cloud provider config failed:', error);
+        return null;
+      }
+    });
+
+    ipcMain.handle('config:getConfiguredCloudProviders', async () => {
+      try {
+        return this.configService.getConfiguredCloudProviders();
+      } catch (error) {
+        console.error('Get configured cloud providers failed:', error);
+        return [];
+      }
+    });
+
+    ipcMain.handle('config:setDefaultCloudProvider', async (event, provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai') => {
+      try {
+        this.configService.setDefaultCloudProvider(provider);
+        return true;
+      } catch (error) {
+        console.error('Set default cloud provider failed:', error);
+        throw error;
+      }
+    });
+
+    ipcMain.handle('config:getDefaultCloudProvider', async () => {
+      try {
+        return this.configService.getDefaultCloudProvider();
+      } catch (error) {
+        console.error('Get default cloud provider failed:', error);
+        return null;
+      }
+    });
+
+    ipcMain.handle('config:removeCloudProviderConfig', async (event, provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai') => {
+      try {
+        this.configService.removeCloudProviderConfig(provider);
+        return true;
+      } catch (error) {
+        console.error('Remove cloud provider config failed:', error);
+        throw error;
       }
     });
 
@@ -528,7 +582,7 @@ class EntraPulseLiteApp {
     });    ipcMain.handle('llm:getAvailableModels', async (event, config?: any) => {
       try {
         // If config is provided, use the appropriate service
-        if (config && (config.provider === 'openai' || config.provider === 'anthropic') && config.apiKey) {
+        if (config && (config.provider === 'openai' || config.provider === 'anthropic' || config.provider === 'gemini' || config.provider === 'azure-openai') && config.apiKey) {
           // Check cache first
           const cachedModels = this.configService.getCachedModels(config.provider);
           if (cachedModels && cachedModels.length > 0) {
@@ -566,13 +620,11 @@ class EntraPulseLiteApp {
         
         return [];
       }
-    });
-
-    // Enhanced LLM testing for specific providers
+    });    // Enhanced LLM testing for specific providers
     ipcMain.handle('llm:testProviderConnection', async (event, provider: string, config: any) => {
       try {
         let testService;
-        if (provider === 'openai' || provider === 'anthropic') {
+        if (provider === 'openai' || provider === 'anthropic' || provider === 'gemini' || provider === 'azure-openai') {
           const { CloudLLMService } = require('../llm/CloudLLMService');
           testService = new CloudLLMService(config, this.mcpClient);
         } else {
@@ -589,7 +641,7 @@ class EntraPulseLiteApp {
     ipcMain.handle('llm:getProviderModels', async (event, provider: string, config: any) => {
       try {
         let service;
-        if (provider === 'openai' || provider === 'anthropic') {
+        if (provider === 'openai' || provider === 'anthropic' || provider === 'gemini' || provider === 'azure-openai') {
           const { CloudLLMService } = require('../llm/CloudLLMService');
           service = new CloudLLMService(config, this.mcpClient);
         } else {

@@ -208,13 +208,12 @@ describe('External Lokka MCP Server Startup', () => {
               const request = JSON.parse(data.toString());
               if (request.method === 'tools/list') {
                 const mockStdout = mockProcess.stdout;
-                setTimeout(() => {
-                  // Find the data callback and trigger response
+                setTimeout(() => {                  // Find the data callback and trigger response
                   const dataCallbacks = mockStdout.on.mock.calls
-                    .filter(call => call[0] === 'data')
-                    .map(call => call[1]);
+                    .filter((call: any[]) => call[0] === 'data')
+                    .map((call: any[]) => call[1]);
                   
-                  dataCallbacks.forEach(callback => {
+                  dataCallbacks.forEach((callback: any) => {
                     callback(Buffer.from(JSON.stringify({
                       jsonrpc: '2.0',
                       id: request.id,

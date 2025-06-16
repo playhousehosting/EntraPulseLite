@@ -22,10 +22,13 @@ export class UnifiedLLMService {
       if (!config.baseUrl) {
         throw new Error(`baseUrl is required for ${config.provider}`);
       }
-      this.localService = new LLMService(config);    } else if (config.provider === 'openai' || config.provider === 'anthropic' || config.provider === 'gemini') {
+      this.localService = new LLMService(config);    } else if (config.provider === 'openai' || config.provider === 'anthropic' || config.provider === 'gemini' || config.provider === 'azure-openai') {
       if (!config.apiKey || config.apiKey.trim() === '') {
         console.warn(`⚠️  ${config.provider} provider selected but no API key configured. Service will be unavailable until API key is provided.`);
         this.cloudService = null; // Will be initialized when API key is provided
+      } else if (config.provider === 'azure-openai' && (!config.baseUrl || config.baseUrl.trim() === '')) {
+        console.warn(`⚠️  Azure OpenAI provider selected but no baseUrl configured. Service will be unavailable until baseUrl is provided.`);
+        this.cloudService = null;
       } else {
         // Pass MCP client to CloudLLMService for enhanced model discovery
         this.cloudService = new CloudLLMService(config as any, this.mcpClient);
@@ -352,9 +355,8 @@ export class UnifiedLLMService {
   isLocalProvider(): boolean {
     return this.config.provider === 'ollama' || this.config.provider === 'lmstudio';
   }
-
   isCloudProvider(): boolean {
-    return this.config.provider === 'openai' || this.config.provider === 'anthropic' || this.config.provider === 'gemini';
+    return this.config.provider === 'openai' || this.config.provider === 'anthropic' || this.config.provider === 'gemini' || this.config.provider === 'azure-openai';
   }
   getProviderType(): 'local' | 'cloud' {
     return this.isLocalProvider() ? 'local' : 'cloud';

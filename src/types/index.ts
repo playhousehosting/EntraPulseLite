@@ -53,8 +53,18 @@ export interface GraphApiCall {
   error?: string;
 }
 
+export interface CloudLLMProviderConfig {
+  provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai';
+  model: string;
+  apiKey: string;
+  organization?: string; // For OpenAI
+  baseUrl?: string; // For Azure OpenAI endpoint
+  temperature?: number;
+  maxTokens?: number;
+}
+
 export interface LLMConfig {
-  provider: 'ollama' | 'lmstudio' | 'openai' | 'anthropic' | 'gemini';
+  provider: 'ollama' | 'lmstudio' | 'openai' | 'anthropic' | 'gemini' | 'azure-openai';
   baseUrl?: string; // Not required for cloud providers
   model: string;
   temperature?: number;
@@ -62,6 +72,11 @@ export interface LLMConfig {
   apiKey?: string; // For cloud providers
   organization?: string; // For OpenAI
   preferLocal?: boolean; // Whether to prefer local over cloud when both are available
+  // New fields for multiple cloud provider support
+  cloudProviders?: {
+    [K in 'openai' | 'anthropic' | 'gemini' | 'azure-openai']?: CloudLLMProviderConfig;
+  };
+  defaultCloudProvider?: 'openai' | 'anthropic' | 'gemini' | 'azure-openai';
 }
 
 export interface MCPAuthConfig {
@@ -130,6 +145,12 @@ export interface ElectronAPI {
     update: (config: Partial<AppConfig>) => Promise<void>;
     getLLMConfig: () => Promise<LLMConfig>;
     saveLLMConfig: (config: LLMConfig) => Promise<void>;
+    saveCloudProviderConfig: (provider: 'openai' | 'anthropic' | 'gemini', config: CloudLLMProviderConfig) => Promise<void>;
+    getCloudProviderConfig: (provider: 'openai' | 'anthropic' | 'gemini') => Promise<CloudLLMProviderConfig | null>;
+    getConfiguredCloudProviders: () => Promise<Array<{ provider: 'openai' | 'anthropic' | 'gemini'; config: CloudLLMProviderConfig }>>;
+    setDefaultCloudProvider: (provider: 'openai' | 'anthropic' | 'gemini') => Promise<void>;
+    getDefaultCloudProvider: () => Promise<{ provider: 'openai' | 'anthropic' | 'gemini'; config: CloudLLMProviderConfig } | null>;
+    removeCloudProviderConfig: (provider: 'openai' | 'anthropic' | 'gemini') => Promise<void>;
   };
 }
 

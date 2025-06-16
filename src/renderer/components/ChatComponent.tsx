@@ -55,9 +55,9 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
   const [authMode, setAuthMode] = useState<'client-credentials' | 'interactive' | null>(null);
   const [permissionSource, setPermissionSource] = useState<'actual' | 'configured' | 'default'>('default');
   const [permissionRequests, setPermissionRequests] = useState<string[]>([]);  const [useRedirectFlow, setUseRedirectFlow] = useState(false);
-  const [userPhotoUrl, setUserPhotoUrl] = useState<string | null>(null);
-  const [expandedTraces, setExpandedTraces] = useState<Set<string>>(new Set());
+  const [userPhotoUrl, setUserPhotoUrl] = useState<string | null>(null);  const [expandedTraces, setExpandedTraces] = useState<Set<string>>(new Set());
   const [profileDropdownAnchor, setProfileDropdownAnchor] = useState<HTMLElement | null>(null);
+  const [defaultCloudProvider, setDefaultCloudProvider] = useState<'openai' | 'anthropic' | 'gemini' | null>(null);
 
   useEffect(() => {
     initializeApp();
@@ -73,7 +73,27 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
       // Update user object to include photoUrl for other components
       setUser(prevUser => prevUser ? { ...prevUser, photoUrl } : null);
     }
-  };  const initializeApp = async () => {
+  };  const getProviderDisplayName = (provider: 'openai' | 'anthropic' | 'gemini') => {
+    switch (provider) {
+      case 'openai': return 'OpenAI';
+      case 'anthropic': return 'Anthropic';
+      case 'gemini': return 'Gemini';
+      default: return provider;
+    }
+  };
+  const loadDefaultCloudProvider = async () => {
+    try {
+      const electronAPI = window.electronAPI as any; // Temporary type assertion
+      const defaultProvider = await electronAPI.config.getDefaultCloudProvider();
+      setDefaultCloudProvider(defaultProvider?.provider || null);
+      console.log('🔄 Default cloud provider loaded:', defaultProvider?.provider || 'None set');
+    } catch (error) {
+      console.error('Failed to load default cloud provider:', error);
+      setDefaultCloudProvider(null);
+    }
+  };
+
+  const initializeApp = async () => {
     try {
       console.log('🚀 Initializing EntraPulse Lite...');
       
@@ -87,6 +107,9 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
         setUser(currentUser);
         console.log('✅ Retrieved current user:', currentUser?.displayName);
       }
+
+      // Load default cloud provider
+      await loadDefaultCloudProvider();
 
       // Get authentication information (including permissions)
       const authInfo = await window.electronAPI.auth.getAuthenticationInfo();
@@ -361,9 +384,7 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
             console.log('Using configured permissions for interactive:', authInfo.permissions);
           }
         }
-      }
-
-      // Check and update authentication token
+      }      // Check and update authentication token
       const token = await window.electronAPI.auth.getToken();
       if (token) {
         setAuthToken(token);
@@ -376,6 +397,9 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
         setUser(null);
         setUserPhotoUrl(null);
       }
+
+      // Refresh default cloud provider
+      await loadDefaultCloudProvider();
     } catch (error) {
       console.error('Failed to refresh authentication status:', error);
       throw error; // Re-throw to let the caller handle it
@@ -515,6 +539,14 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
               label="Local LLM Offline" 
               color="warning" 
               size="small" 
+            />
+          )}
+          {defaultCloudProvider && (
+            <Chip 
+              label={`Default: ${getProviderDisplayName(defaultCloudProvider)}`}
+              color="primary" 
+              size="small"
+              variant="outlined"
             />
           )}
         </Box>          <Box display="flex" alignItems="center" gap={1}>          {user && <UserProfileAvatar user={user} />}

@@ -28,7 +28,6 @@ export class CloudLLMService {
     this.config = config;
     this.mcpClient = mcpClient;
   }
-
   async chat(messages: ChatMessage[]): Promise<string> {
     try {
       if (this.config.provider === 'openai') {
@@ -37,6 +36,8 @@ export class CloudLLMService {
         return this.chatWithAnthropic(messages);
       } else if (this.config.provider === 'gemini') {
         return this.chatWithGemini(messages);
+      } else if (this.config.provider === 'azure-openai') {
+        return this.chatWithAzureOpenAI(messages);
       } else {
         throw new Error(`Unsupported cloud LLM provider: ${this.config.provider}`);
       }
@@ -70,8 +71,7 @@ export class CloudLLMService {
           },
           timeout: 10000,
         });
-        return response.status === 200;
-      } else if (this.config.provider === 'gemini') {
+        return response.status === 200;      } else if (this.config.provider === 'gemini') {
         // Test with a simple generate content call
         const response = await axios.post(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent`, {
           contents: [{ role: 'user', parts: [{ text: 'Hi' }] }],
@@ -84,6 +84,19 @@ export class CloudLLMService {
             key: this.config.apiKey
           },
           timeout: 10000,
+        });
+        return response.status === 200;
+      } else if (this.config.provider === 'azure-openai') {
+        // Test Azure OpenAI with a simple chat completion call
+        if (!this.config.baseUrl) {
+          console.error('Azure OpenAI requires baseUrl');
+          return false;
+        }
+        const response = await axios.get(`${this.config.baseUrl}/openai/models?api-version=2024-02-01`, {
+          headers: {
+            'api-key': this.config.apiKey
+          },
+          timeout: 5000,
         });
         return response.status === 200;
       }
@@ -187,10 +200,42 @@ export class CloudLLMService {
       params: {
         key: this.config.apiKey
       }
+    });    return response.data.candidates[0].content.parts[0].text;
+  }
+
+  private async chatWithAzureOpenAI(messages: ChatMessage[]): Promise<string> {
+    const openaiMessages = messages.map(msg => ({
+      role: msg.role,
+      content: msg.content,
+    }));
+
+    // Check if messages already contain an enhanced system prompt, if so use it
+    const systemMessage = messages.find(msg => msg.role === 'system');
+    const systemPrompt = systemMessage?.content || StandardizedPrompts.getSystemPrompt(this.config.provider);
+
+    const fullMessages = [
+      { role: 'system', content: systemPrompt },
+      ...openaiMessages
+    ];
+
+    if (!this.config.baseUrl) {
+      throw new Error('Azure OpenAI requires baseUrl');
+    }
+
+    const response = await axios.post(`${this.config.baseUrl}/openai/deployments/${this.config.model}/chat/completions?api-version=2024-02-01`, {
+      messages: fullMessages,
+      temperature: this.config.temperature || 0.1,
+      max_tokens: this.config.maxTokens || 2048,
+    }, {
+      headers: {
+        'api-key': this.config.apiKey,
+        'Content-Type': 'application/json'
+      }
     });
 
-    return response.data.candidates[0].content.parts[0].text;
+    return response.data.choices[0].message.content;
   }
+
   async getAvailableModels(): Promise<string[]> {
     try {
       if (this.config.provider === 'openai') {
@@ -202,11 +247,12 @@ export class CloudLLMService {
         });
         return response.data.data
           .filter((model: any) => model.id.includes('gpt'))
-          .map((model: any) => model.id) || [];
-      } else if (this.config.provider === 'anthropic') {
+          .map((model: any) => model.id) || [];      } else if (this.config.provider === 'anthropic') {
         return await this.getAnthropicModels();
       } else if (this.config.provider === 'gemini') {
         return await this.getGeminiModels();
+      } else if (this.config.provider === 'azure-openai') {
+        return await this.getAzureOpenAIModels();
       }
       return [];
     } catch (error) {
@@ -302,14 +348,48 @@ export class CloudLLMService {
 
       throw new Error('No models found in API response');
     } catch (error) {
-      console.warn('Failed to fetch Gemini models from API:', error);
-      return this.getFallbackGeminiModels();
+      console.warn('Failed to fetch Gemini models from API:', error);      return this.getFallbackGeminiModels();
+    }
+  }
+
+  /**
+   * Fetch Azure OpenAI models from the deployment
+   */
+  private async getAzureOpenAIModels(): Promise<string[]> {
+    try {
+      if (!this.config.baseUrl) {
+        console.warn('Azure OpenAI requires baseUrl');
+        return this.getFallbackAzureOpenAIModels();
+      }
+
+      console.log('Fetching Azure OpenAI models...');
+      const response = await axios.get(`${this.config.baseUrl}/openai/models?api-version=2024-02-01`, {
+        headers: {
+          'api-key': this.config.apiKey
+        },
+        timeout: 10000
+      });
+
+      if (response.data?.data) {
+        const models = response.data.data
+          .filter((model: any) => model.id && model.id.includes('gpt'))
+          .map((model: any) => model.id)
+          .sort();
+
+        console.log('Successfully retrieved Azure OpenAI models:', models);
+        return models;
+      }
+
+      throw new Error('No models found in Azure OpenAI response');
+    } catch (error) {
+      console.warn('Failed to fetch Azure OpenAI models:', error);
+      return this.getFallbackAzureOpenAIModels();
     }
   }
 
   /**
    * Extract model names from HTML/text content
-   */  private extractModelsFromContent(content: string): string[] {
+   */private extractModelsFromContent(content: string): string[] {
     try {
       const results: string[] = [];
       
@@ -399,23 +479,16 @@ export class CloudLLMService {
   }
 
   /**
-   * Fallback models when dynamic fetching fails
+   * Fallback OpenAI models (updated as of June 2025)
    */
-  private getFallbackModels(): string[] {
-    if (this.config.provider === 'openai') {
-      return [
-        'gpt-4o',
-        'gpt-4o-mini', 
-        'gpt-4-turbo',
-        'gpt-4',
-        'gpt-3.5-turbo'
-      ];
-    } else if (this.config.provider === 'anthropic') {
-      return this.getFallbackAnthropicModels();
-    } else if (this.config.provider === 'gemini') {
-      return this.getFallbackGeminiModels();
-    }
-    return [];
+  private getFallbackOpenAIModels(): string[] {
+    return [
+      'gpt-4o',
+      'gpt-4o-mini', 
+      'gpt-4-turbo',
+      'gpt-4',
+      'gpt-3.5-turbo'
+    ];
   }
 
   /**
@@ -436,12 +509,45 @@ export class CloudLLMService {
    * Fallback Gemini models (updated as of June 2025)
    */
   private getFallbackGeminiModels(): string[] {
-    return [
-      'gemini-1.5-pro',
+    return [      'gemini-1.5-pro',
       'gemini-1.5-flash',
       'gemini-1.0-pro',
       'gemini-pro',
       'gemini-pro-vision'
     ];
+  }
+
+  /**
+   * Fallback Azure OpenAI models (updated as of June 2025)
+   */  private getFallbackAzureOpenAIModels(): string[] {
+    return [
+      'gpt-4o',
+      'gpt-4o-mini',
+      'gpt-4-turbo',
+      'gpt-4',
+      'gpt-35-turbo'
+    ];
+  }
+
+  /**
+   * Get the current configuration
+   */
+  getConfig(): CloudLLMConfig {
+    return this.config;
+  }
+
+  /**
+   * Get fallback models for the current provider
+   */
+  getFallbackModels(): string[] {
+    if (this.config.provider === 'openai') {
+      return this.getFallbackOpenAIModels();
+    } else if (this.config.provider === 'anthropic') {
+      return this.getFallbackAnthropicModels();
+    } else if (this.config.provider === 'gemini') {
+      return this.getFallbackGeminiModels();    } else if (this.config.provider === 'azure-openai') {
+      return this.getFallbackAzureOpenAIModels();
+    } else {      return [];
+    }
   }
 }

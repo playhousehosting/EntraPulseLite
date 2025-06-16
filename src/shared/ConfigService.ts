@@ -2,7 +2,7 @@
 // Secure configuration management service with user-context awareness
 
 import Store from 'electron-store';
-import { LLMConfig } from '../types';
+import { LLMConfig, CloudLLMProviderConfig } from '../types';
 
 interface UserConfigSchema {
   llm: LLMConfig;
@@ -241,12 +241,108 @@ export class ConfigService {
     }
     this.saveCurrentContext(context);
   }
-
   /**
    * Get the last used provider (context-aware)
    */
   getLastUsedProvider(): string {
     return this.getCurrentContext().lastUsedProvider;
+  }
+
+  /**
+   * Save a cloud provider configuration
+   */
+  saveCloudProviderConfig(provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai', config: CloudLLMProviderConfig): void {
+    const currentConfig = this.getLLMConfig();
+    
+    // Initialize cloudProviders if it doesn't exist
+    if (!currentConfig.cloudProviders) {
+      currentConfig.cloudProviders = {};
+    }
+    
+    // Save the cloud provider config
+    currentConfig.cloudProviders[provider] = config;
+    
+    // If this is the first cloud provider or no default is set, make it the default
+    if (!currentConfig.defaultCloudProvider) {
+      currentConfig.defaultCloudProvider = provider;
+    }
+    
+    this.saveLLMConfig(currentConfig);
+  }
+  /**
+   * Get a specific cloud provider configuration
+   */
+  getCloudProviderConfig(provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai'): CloudLLMProviderConfig | null {
+    const config = this.getLLMConfig();
+    return config.cloudProviders?.[provider] || null;
+  }
+  /**
+   * Get all configured cloud providers
+   */
+  getConfiguredCloudProviders(): Array<{ provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai'; config: CloudLLMProviderConfig }> {
+    const config = this.getLLMConfig();
+    const providers: Array<{ provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai'; config: CloudLLMProviderConfig }> = [];
+    
+    if (config.cloudProviders) {
+      Object.entries(config.cloudProviders).forEach(([provider, providerConfig]) => {
+        if (providerConfig) {
+          providers.push({
+            provider: provider as 'openai' | 'anthropic' | 'gemini' | 'azure-openai',
+            config: providerConfig
+          });
+        }
+      });
+    }
+    
+    return providers;
+  }
+  /**
+   * Set the default cloud provider
+   */
+  setDefaultCloudProvider(provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai'): void {
+    const config = this.getLLMConfig();
+    
+    // Verify the provider is configured
+    if (!config.cloudProviders?.[provider]) {
+      throw new Error(`Cloud provider ${provider} is not configured`);
+    }
+    
+    config.defaultCloudProvider = provider;
+    this.saveLLMConfig(config);
+  }
+  /**
+   * Get the default cloud provider configuration
+   */
+  getDefaultCloudProvider(): { provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai'; config: CloudLLMProviderConfig } | null {
+    const config = this.getLLMConfig();
+    const defaultProvider = config.defaultCloudProvider;
+    
+    if (!defaultProvider || !config.cloudProviders?.[defaultProvider]) {
+      return null;
+    }
+    
+    return {
+      provider: defaultProvider,
+      config: config.cloudProviders[defaultProvider]
+    };
+  }
+  /**
+   * Remove a cloud provider configuration
+   */
+  removeCloudProviderConfig(provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai'): void {
+    const config = this.getLLMConfig();
+    
+    if (config.cloudProviders?.[provider]) {
+      delete config.cloudProviders[provider];
+      
+      // If this was the default provider, choose a new default
+      if (config.defaultCloudProvider === provider) {
+        const remainingProviders = Object.keys(config.cloudProviders) as Array<'openai' | 'anthropic' | 'gemini' | 'azure-openai'>;
+        config.defaultCloudProvider = remainingProviders.length > 0 ? remainingProviders[0] : undefined;
+      }
+      
+      this.saveLLMConfig(config);
+    }
   }
 
   /**

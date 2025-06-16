@@ -25,9 +25,10 @@ export class EnhancedCloudLLMService {
       if (this.config.provider === 'openai') {
         return this.chatWithOpenAI(messages);
       } else if (this.config.provider === 'anthropic') {
-        return this.chatWithAnthropic(messages);
-      } else if (this.config.provider === 'gemini') {
+        return this.chatWithAnthropic(messages);      } else if (this.config.provider === 'gemini') {
         return this.chatWithGemini(messages);
+      } else if (this.config.provider === 'azure-openai') {
+        return this.chatWithAzureOpenAI(messages);
       } else {
         throw new Error(`Unsupported cloud LLM provider: ${this.config.provider}`);
       }
@@ -63,7 +64,19 @@ export class EnhancedCloudLLMService {
           params: {
             key: this.config.apiKey
           },
-          timeout: 10000,
+          timeout: 10000,        });
+        return response.status === 200;
+      } else if (this.config.provider === 'azure-openai') {
+        // Test Azure OpenAI with a simple models endpoint call
+        if (!this.config.baseUrl) {
+          console.error('Azure OpenAI requires baseUrl');
+          return false;
+        }
+        const response = await axios.get(`${this.config.baseUrl}/openai/models?api-version=2024-02-01`, {
+          headers: {
+            'api-key': this.config.apiKey
+          },
+          timeout: 5000,
         });
         return response.status === 200;
       }
@@ -192,9 +205,52 @@ Always be helpful, accurate, and security-conscious in your responses.`;
       params: {
         key: this.config.apiKey
       }
+    });    return response.data.candidates[0].content.parts[0].text;
+  }
+
+  private async chatWithAzureOpenAI(messages: ChatMessage[]): Promise<string> {
+    const openaiMessages = messages.map(msg => ({
+      role: msg.role,
+      content: msg.content,
+    }));
+
+    const systemPrompt = `You are an expert Microsoft Entra (Azure AD) and Microsoft Graph API assistant integrated into EntraPulse Lite. 
+
+You have access to Microsoft Graph APIs through built-in MCP servers and can help users:
+- Query user accounts, groups, applications, and service principals
+- Understand Microsoft Entra concepts and best practices
+- Analyze permissions and security configurations
+- Provide natural language explanations of complex directory structures
+
+When users ask questions, you can:
+1. Query Microsoft Graph APIs directly using the available MCP tools
+2. Explain Microsoft Entra concepts clearly
+3. Provide actionable insights about identity and access management
+4. Help with troubleshooting and security analysis
+
+Always be helpful, accurate, and security-conscious in your responses.`;
+
+    const fullMessages = [
+      { role: 'system', content: systemPrompt },
+      ...openaiMessages
+    ];
+
+    if (!this.config.baseUrl) {
+      throw new Error('Azure OpenAI requires baseUrl');
+    }
+
+    const response = await axios.post(`${this.config.baseUrl}/openai/deployments/${this.config.model}/chat/completions?api-version=2024-02-01`, {
+      messages: fullMessages,
+      temperature: this.config.temperature || 0.2,
+      max_tokens: this.config.maxTokens || 2048,
+    }, {
+      headers: {
+        'api-key': this.config.apiKey,
+        'Content-Type': 'application/json'
+      }
     });
 
-    return response.data.candidates[0].content.parts[0].text;
+    return response.data.choices[0].message.content;
   }
 
   async getAvailableModels(): Promise<string[]> {
@@ -208,11 +264,12 @@ Always be helpful, accurate, and security-conscious in your responses.`;
         });
         return response.data.data
           .filter((model: any) => model.id.includes('gpt'))
-          .map((model: any) => model.id) || [];
-      } else if (this.config.provider === 'anthropic') {
+          .map((model: any) => model.id) || [];      } else if (this.config.provider === 'anthropic') {
         return await this.getAnthropicModels();
       } else if (this.config.provider === 'gemini') {
         return await this.getGeminiModels();
+      } else if (this.config.provider === 'azure-openai') {
+        return await this.getAzureOpenAIModels();
       }
       return [];
     } catch (error) {
@@ -369,8 +426,42 @@ Always be helpful, accurate, and security-conscious in your responses.`;
 
       throw new Error('No models found in API response');
     } catch (error) {
-      console.warn('Failed to fetch Gemini models from API:', error);
-      return this.getFallbackGeminiModels();
+      console.warn('Failed to fetch Gemini models from API:', error);      return this.getFallbackGeminiModels();
+    }
+  }
+
+  /**
+   * Fetch Azure OpenAI models from the deployment
+   */
+  private async getAzureOpenAIModels(): Promise<string[]> {
+    try {
+      if (!this.config.baseUrl) {
+        console.warn('Azure OpenAI requires baseUrl');
+        return this.getFallbackAzureOpenAIModels();
+      }
+
+      console.log('Fetching Azure OpenAI models...');
+      const response = await axios.get(`${this.config.baseUrl}/openai/models?api-version=2024-02-01`, {
+        headers: {
+          'api-key': this.config.apiKey
+        },
+        timeout: 10000
+      });
+
+      if (response.data?.data) {
+        const models = response.data.data
+          .filter((model: any) => model.id && model.id.includes('gpt'))
+          .map((model: any) => model.id)
+          .sort();
+
+        console.log('Successfully retrieved Azure OpenAI models:', models);
+        return models;
+      }
+
+      throw new Error('No models found in Azure OpenAI response');
+    } catch (error) {
+      console.warn('Failed to fetch Azure OpenAI models:', error);
+      return this.getFallbackAzureOpenAIModels();
     }
   }
 
@@ -428,11 +519,12 @@ Always be helpful, accurate, and security-conscious in your responses.`;
         'gpt-4-turbo',
         'gpt-4',
         'gpt-3.5-turbo'
-      ];
-    } else if (this.config.provider === 'anthropic') {
+      ];    } else if (this.config.provider === 'anthropic') {
       return this.getFallbackAnthropicModels();
     } else if (this.config.provider === 'gemini') {
       return this.getFallbackGeminiModels();
+    } else if (this.config.provider === 'azure-openai') {
+      return this.getFallbackAzureOpenAIModels();
     }
     return [];
   }
@@ -449,7 +541,6 @@ Always be helpful, accurate, and security-conscious in your responses.`;
       'claude-3-haiku-20240307'
     ];
   }
-
   /**
    * Fallback Gemini models (updated as of June 2025)
    */
@@ -461,5 +552,24 @@ Always be helpful, accurate, and security-conscious in your responses.`;
       'gemini-pro',
       'gemini-pro-vision'
     ];
+  }
+  /**
+   * Fallback Azure OpenAI models (updated as of June 2025)
+   */
+  private getFallbackAzureOpenAIModels(): string[] {
+    return [
+      'gpt-4o',
+      'gpt-4o-mini',
+      'gpt-4-turbo',
+      'gpt-4',
+      'gpt-35-turbo'
+    ];
+  }
+
+  /**
+   * Get the current configuration
+   */
+  getConfig(): CloudLLMConfig {
+    return this.config;
   }
 }

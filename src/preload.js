@@ -56,6 +56,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     saveLLMConfig: (config) => ipcRenderer.invoke('config:saveLLMConfig', config),
     clearModelCache: (provider) => ipcRenderer.invoke('config:clearModelCache', provider),
     getCachedModels: (provider) => ipcRenderer.invoke('config:getCachedModels', provider),
+    saveCloudProviderConfig: (provider, config) => ipcRenderer.invoke('config:saveCloudProviderConfig', provider, config),
+    getCloudProviderConfig: (provider) => ipcRenderer.invoke('config:getCloudProviderConfig', provider),
+    getConfiguredCloudProviders: () => ipcRenderer.invoke('config:getConfiguredCloudProviders'),
+    setDefaultCloudProvider: (provider) => ipcRenderer.invoke('config:setDefaultCloudProvider', provider),
+    getDefaultCloudProvider: () => ipcRenderer.invoke('config:getDefaultCloudProvider'),
+    removeCloudProviderConfig: (provider) => ipcRenderer.invoke('config:removeCloudProviderConfig', provider),
   },
 
   // Event listeners for real-time updates
