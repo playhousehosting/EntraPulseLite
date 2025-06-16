@@ -145,12 +145,12 @@ export interface ElectronAPI {
     update: (config: Partial<AppConfig>) => Promise<void>;
     getLLMConfig: () => Promise<LLMConfig>;
     saveLLMConfig: (config: LLMConfig) => Promise<void>;
-    saveCloudProviderConfig: (provider: 'openai' | 'anthropic' | 'gemini', config: CloudLLMProviderConfig) => Promise<void>;
-    getCloudProviderConfig: (provider: 'openai' | 'anthropic' | 'gemini') => Promise<CloudLLMProviderConfig | null>;
-    getConfiguredCloudProviders: () => Promise<Array<{ provider: 'openai' | 'anthropic' | 'gemini'; config: CloudLLMProviderConfig }>>;
-    setDefaultCloudProvider: (provider: 'openai' | 'anthropic' | 'gemini') => Promise<void>;
-    getDefaultCloudProvider: () => Promise<{ provider: 'openai' | 'anthropic' | 'gemini'; config: CloudLLMProviderConfig } | null>;
-    removeCloudProviderConfig: (provider: 'openai' | 'anthropic' | 'gemini') => Promise<void>;
+    saveCloudProviderConfig: (provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai', config: CloudLLMProviderConfig) => Promise<void>;
+    getCloudProviderConfig: (provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai') => Promise<CloudLLMProviderConfig | null>;
+    getConfiguredCloudProviders: () => Promise<Array<{ provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai'; config: CloudLLMProviderConfig }>>;
+    setDefaultCloudProvider: (provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai') => Promise<void>;
+    getDefaultCloudProvider: () => Promise<{ provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai'; config: CloudLLMProviderConfig } | null>;
+    removeCloudProviderConfig: (provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai') => Promise<void>;
   };
 }
 

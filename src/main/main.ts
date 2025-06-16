@@ -4,6 +4,7 @@ import * as path from 'path';
 import { AuthService } from '../auth/AuthService';
 import { GraphService } from '../shared/GraphService';
 import { ConfigService } from '../shared/ConfigService';
+import { LLMService } from '../llm/LLMService';
 import { EnhancedLLMService } from '../llm/EnhancedLLMService';
 import { MCPClient } from '../mcp/clients/MCPSDKClient';
 import { MCPAuthService } from '../mcp/auth/MCPAuthService';
@@ -107,12 +108,31 @@ class EntraPulseLiteApp {
     // Create MCPServerManager with auth service
     console.log('Initializing MCP client with server configs:', this.config.mcpServers);
     this.mcpServerManager = new MCPServerManager(this.config.mcpServers, mcpAuthService);
-    
-    // Initialize MCP client with auth service
+      // Initialize MCP client with auth service
     this.mcpClient = new MCPClient(this.config.mcpServers, mcpAuthService);
     
-    // Initialize LLM service with MCP client
-    this.llmService = new EnhancedLLMService(this.config.llm, this.authService, this.mcpClient);
+    // Get the default cloud provider configuration for LLM service
+    const defaultCloudProvider = this.configService.getDefaultCloudProvider();
+    let llmConfig = this.config.llm;
+    
+    if (defaultCloudProvider) {
+      // Use the default cloud provider configuration
+      llmConfig = {
+        provider: defaultCloudProvider.provider,
+        model: defaultCloudProvider.config.model,
+        apiKey: defaultCloudProvider.config.apiKey,
+        baseUrl: defaultCloudProvider.config.baseUrl,
+        temperature: defaultCloudProvider.config.temperature,
+        maxTokens: defaultCloudProvider.config.maxTokens,
+        organization: defaultCloudProvider.config.organization
+      };
+      console.log('🔄 Using default cloud provider for LLM:', defaultCloudProvider.provider, 'Model:', defaultCloudProvider.config.model);
+    } else {
+      console.log('⚠️ No default cloud provider configured, using stored LLM config');
+    }
+    
+    // Initialize LLM service with the appropriate configuration
+    this.llmService = new EnhancedLLMService(llmConfig, this.authService, this.mcpClient);
     
     // Log successful initialization
     console.log('Services initialized successfully');
@@ -391,13 +411,54 @@ class EntraPulseLiteApp {
         console.error('LLM chat failed:', error);
         throw error;
       }
-    });
-
-    ipcMain.handle('llm:isAvailable', async () => {
+    });    ipcMain.handle('llm:isAvailable', async () => {
       try {
         return await this.llmService.isAvailable();
       } catch (error) {
         console.error('LLM availability check failed:', error);
+        return false;
+      }
+    });
+
+    // Check specifically for local LLM availability (Ollama/LM Studio)
+    ipcMain.handle('llm:isLocalAvailable', async () => {
+      try {
+        // Check if we have a local LLM service configured and available
+        const config = this.configService.getLLMConfig();
+        
+        // Only check local providers
+        if (config.provider === 'ollama' || config.provider === 'lmstudio') {
+          const localLLM = new LLMService(config);
+          return await localLLM.isAvailable();
+        }
+        
+        // If current provider is cloud, check if we have local providers configured and available
+        const defaultOllamaConfig = {
+          provider: 'ollama' as const,
+          baseUrl: 'http://localhost:11434',
+          model: 'llama2',
+          temperature: 0.7,
+          maxTokens: 2048
+        };
+        
+        const ollamaService = new LLMService(defaultOllamaConfig);
+        const ollamaAvailable = await ollamaService.isAvailable();
+        
+        if (ollamaAvailable) return true;
+        
+        // Also check LM Studio
+        const defaultLMStudioConfig = {
+          provider: 'lmstudio' as const,
+          baseUrl: 'http://localhost:1234',
+          model: 'local-model',
+          temperature: 0.7,
+          maxTokens: 2048
+        };
+        
+        const lmStudioService = new LLMService(defaultLMStudioConfig);
+        return await lmStudioService.isAvailable();
+      } catch (error) {
+        console.error('Local LLM availability check failed:', error);
         return false;
       }
     });// MCP handlers
@@ -475,18 +536,16 @@ class EntraPulseLiteApp {
     });    // LLM Configuration handlers
     ipcMain.handle('config:getLLMConfig', async () => {
       return this.configService.getLLMConfig();
-    });
-
-    ipcMain.handle('config:saveLLMConfig', async (event, newLLMConfig) => {
-      try {
+    });    ipcMain.handle('config:saveLLMConfig', async (event, newLLMConfig) => {
+      try {        
         // Save configuration securely
         this.configService.saveLLMConfig(newLLMConfig);
         
         // Update runtime config
         this.config.llm = newLLMConfig;
         
-        // Reinitialize LLM service with new config
-        this.llmService = new EnhancedLLMService(this.config.llm, this.authService, this.mcpClient);
+        // Don't reinitialize LLM service here - let setDefaultCloudProvider handle it
+        // This prevents race conditions when both save and setDefault are called
         
         return this.configService.getLLMConfig();
       } catch (error) {
@@ -538,11 +597,51 @@ class EntraPulseLiteApp {
         console.error('Get configured cloud providers failed:', error);
         return [];
       }
-    });
-
-    ipcMain.handle('config:setDefaultCloudProvider', async (event, provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai') => {
+    });    ipcMain.handle('config:setDefaultCloudProvider', async (event, provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai') => {
       try {
         this.configService.setDefaultCloudProvider(provider);
+        
+        // Reinitialize LLM service with the new default provider
+        const defaultCloudProvider = this.configService.getDefaultCloudProvider();
+        if (defaultCloudProvider) {
+          const llmConfig = {
+            provider: defaultCloudProvider.provider,
+            model: defaultCloudProvider.config.model,
+            apiKey: defaultCloudProvider.config.apiKey,
+            baseUrl: defaultCloudProvider.config.baseUrl,
+            temperature: defaultCloudProvider.config.temperature,
+            maxTokens: defaultCloudProvider.config.maxTokens,
+            organization: defaultCloudProvider.config.organization          };
+          
+          // DEBUG: Check config before LLM service creation
+          const preInitConfig = this.configService.getLLMConfig();
+          console.log('🔍 DEBUG: Config before LLM service creation - Azure OpenAI exists:', !!preInitConfig.cloudProviders?.['azure-openai']);
+          
+          console.log('🔄 Reinitializing LLM with new default cloud provider:', defaultCloudProvider.provider, 'Model:', defaultCloudProvider.config.model);
+          this.llmService = new EnhancedLLMService(llmConfig, this.authService, this.mcpClient);
+          
+          // DEBUG: Check if config still exists immediately after LLM service creation
+          const postInitConfig = this.configService.getLLMConfig();
+          console.log('🔍 DEBUG: Config after LLM service creation - Has cloudProviders:', !!postInitConfig.cloudProviders);
+          if (postInitConfig.cloudProviders) {
+            console.log('🔍 DEBUG: Available providers after LLM init:', Object.keys(postInitConfig.cloudProviders));
+            console.log('🔍 DEBUG: Azure OpenAI config exists after LLM init:', !!postInitConfig.cloudProviders['azure-openai']);
+          }          // Update the runtime config as well
+          this.config.llm = llmConfig;
+          
+          // DEBUG: Check config after runtime config update
+          const postRuntimeConfig = this.configService.getLLMConfig();
+          console.log('🔍 DEBUG: Config after runtime config update - Azure OpenAI exists:', !!postRuntimeConfig.cloudProviders?.['azure-openai']);
+          
+          // Notify renderer process that the default cloud provider has changed
+          if (this.mainWindow) {
+            this.mainWindow.webContents.send('config:defaultCloudProviderChanged', {
+              provider: defaultCloudProvider.provider,
+              model: defaultCloudProvider.config.model
+            });
+          }
+        }
+        
         return true;
       } catch (error) {
         console.error('Set default cloud provider failed:', error);

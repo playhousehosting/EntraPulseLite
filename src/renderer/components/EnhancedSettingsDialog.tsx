@@ -136,8 +136,12 @@ export const EnhancedSettingsDialog: React.FC<EnhancedSettingsDialogProps> = ({
     }
   };  const handleSaveCloudProvider = async (provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai', providerConfig: CloudLLMProviderConfig) => {
     try {
+      console.log('🔄 Saving cloud provider config:', { provider, config: { ...providerConfig, apiKey: '[REDACTED]' } });
+      
       const electronAPI = window.electronAPI as any; // Temporary type assertion
       await electronAPI.config.saveCloudProviderConfig(provider, providerConfig);
+      
+      console.log('✅ Cloud provider config saved successfully');
       
       // Refresh the cloud providers list
       await loadCloudProviders();
@@ -145,9 +149,10 @@ export const EnhancedSettingsDialog: React.FC<EnhancedSettingsDialogProps> = ({
       // Auto-fetch models if API key is provided
       if (providerConfig.apiKey) {
         await fetchAvailableModels(provider, providerConfig.apiKey);
-      }
-    } catch (error) {
-      console.error('Failed to save cloud provider config:', error);
+      }    } catch (error) {
+      console.error('❌ Failed to save cloud provider config:', error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      alert(`Failed to save ${provider} configuration: ${errorMessage}`);
     }
   };
 
@@ -213,8 +218,7 @@ export const EnhancedSettingsDialog: React.FC<EnhancedSettingsDialogProps> = ({
       case 'azure-openai': return 'gpt-4o';
       default: return '';
     }
-  };
-  const handleSave = () => {
+  };  const handleSave = () => {
     let finalConfig = { ...config };
     
     // If the provider is a cloud provider and matches the default cloud provider,
@@ -233,7 +237,15 @@ export const EnhancedSettingsDialog: React.FC<EnhancedSettingsDialogProps> = ({
         };
       }
     }
-    
+
+    // Always include the current default cloud provider, not the selected provider
+    // This ensures the ConfigService knows what the current default is, regardless of the currently selected provider
+    if (defaultCloudProvider) {
+      finalConfig.defaultCloudProvider = defaultCloudProvider;
+    }
+
+    console.log('[EnhancedSettingsDialog] handleSave - Sending config with defaultCloudProvider:', defaultCloudProvider);
+
     onSave(finalConfig);
     onClose();
   };
@@ -514,8 +526,25 @@ const CloudProviderCard: React.FC<CloudProviderCardProps> = ({
       default: return provider;
     }
   };
-
   const handleSave = () => {
+    // Validation for Azure OpenAI
+    if (provider === 'azure-openai') {
+      if (!localConfig.baseUrl || localConfig.baseUrl.trim() === '') {
+        alert('Azure OpenAI endpoint URL is required');
+        return;
+      }
+      if (!localConfig.baseUrl.includes('openai.azure.com')) {
+        alert('Please enter a valid Azure OpenAI endpoint URL (should contain "openai.azure.com")');
+        return;
+      }
+    }
+    
+    // Validation for API key
+    if (!localConfig.apiKey || localConfig.apiKey.trim() === '') {
+      alert('API Key is required');
+      return;
+    }
+    
     onSave(localConfig);
   };
   const handleApiKeyChange = (apiKey: string) => {

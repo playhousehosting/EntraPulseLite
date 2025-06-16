@@ -47,21 +47,43 @@ interface ChatComponentProps {}
 export const ChatComponent: React.FC<ChatComponentProps> = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputMessage, setInputMessage] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(false);  const [user, setUser] = useState<User | null>(null);
   const [authToken, setAuthToken] = useState<AuthToken | null>(null);
-  const [llmAvailable, setLlmAvailable] = useState(false);
-  const [error, setError] = useState<string | null>(null);  const [currentPermissions, setCurrentPermissions] = useState<string[]>(['User.Read']);
+  const [llmAvailable, setLlmAvailable] = useState(false); // Local LLM availability
+  const [chatAvailable, setChatAvailable] = useState(false); // Any LLM (local or cloud) availability
+  const [error, setError] = useState<string | null>(null);const [currentPermissions, setCurrentPermissions] = useState<string[]>(['User.Read']);
   const [authMode, setAuthMode] = useState<'client-credentials' | 'interactive' | null>(null);
   const [permissionSource, setPermissionSource] = useState<'actual' | 'configured' | 'default'>('default');
   const [permissionRequests, setPermissionRequests] = useState<string[]>([]);  const [useRedirectFlow, setUseRedirectFlow] = useState(false);
   const [userPhotoUrl, setUserPhotoUrl] = useState<string | null>(null);  const [expandedTraces, setExpandedTraces] = useState<Set<string>>(new Set());
   const [profileDropdownAnchor, setProfileDropdownAnchor] = useState<HTMLElement | null>(null);
-  const [defaultCloudProvider, setDefaultCloudProvider] = useState<'openai' | 'anthropic' | 'gemini' | null>(null);
-
+  const [defaultCloudProvider, setDefaultCloudProvider] = useState<'openai' | 'anthropic' | 'gemini' | 'azure-openai' | null>(null);
+  const [currentModel, setCurrentModel] = useState<string | null>(null);
   useEffect(() => {
     initializeApp();
   }, []);
+  // Listen for default cloud provider changes
+  useEffect(() => {
+    const handleDefaultProviderChange = (event: any, data: { provider: string; model: string }) => {
+      console.log('🔄 Default cloud provider changed via IPC:', data.provider, 'Model:', data.model);
+      setDefaultCloudProvider(data.provider as 'openai' | 'anthropic' | 'gemini' | 'azure-openai');
+      setCurrentModel(data.model);
+    };
+
+    // Add the IPC listener using the exposed API
+    const electronAPI = window.electronAPI as any;
+    if (electronAPI?.on) {
+      electronAPI.on('config:defaultCloudProviderChanged', handleDefaultProviderChange);
+    }
+
+    // Cleanup function to remove the listener
+    return () => {
+      if (electronAPI?.removeListener) {
+        electronAPI.removeListener('config:defaultCloudProviderChanged', handleDefaultProviderChange);
+      }
+    };
+  }, []);
+
   // We don't need this useEffect anymore as the UserProfileAvatar component handles photo loading
   // But we keep the state for shared use cases
   useEffect(() => {
@@ -73,23 +95,25 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
       // Update user object to include photoUrl for other components
       setUser(prevUser => prevUser ? { ...prevUser, photoUrl } : null);
     }
-  };  const getProviderDisplayName = (provider: 'openai' | 'anthropic' | 'gemini') => {
+  };  const getProviderDisplayName = (provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai') => {
     switch (provider) {
       case 'openai': return 'OpenAI';
       case 'anthropic': return 'Anthropic';
       case 'gemini': return 'Gemini';
+      case 'azure-openai': return 'Azure OpenAI';
       default: return provider;
     }
-  };
-  const loadDefaultCloudProvider = async () => {
+  };const loadDefaultCloudProvider = async () => {
     try {
       const electronAPI = window.electronAPI as any; // Temporary type assertion
       const defaultProvider = await electronAPI.config.getDefaultCloudProvider();
       setDefaultCloudProvider(defaultProvider?.provider || null);
-      console.log('🔄 Default cloud provider loaded:', defaultProvider?.provider || 'None set');
+      setCurrentModel(defaultProvider?.config?.model || null);
+      console.log('🔄 Default cloud provider loaded:', defaultProvider?.provider || 'None set', 'Model:', defaultProvider?.config?.model || 'Default');
     } catch (error) {
       console.error('Failed to load default cloud provider:', error);
       setDefaultCloudProvider(null);
+      setCurrentModel(null);
     }
   };
 
@@ -133,15 +157,18 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
         }
       } else {
         console.log('❌ No authentication info available');
-      }
+      }      // Check LLM availability - specifically check local LLM for the status indicator
+      const localAvailable = await window.electronAPI.llm.isLocalAvailable();
+      setLlmAvailable(localAvailable);
+      console.log('🤖 Local LLM availability:', localAvailable);
 
-      // Check LLM availability
-      const available = await window.electronAPI.llm.isAvailable();
-      setLlmAvailable(available);
-      console.log('🤖 LLM availability:', available);
+      // Check if any LLM (local or cloud) is available for chat functionality
+      const anyLlmAvailable = await window.electronAPI.llm.isAvailable();
+      setChatAvailable(anyLlmAvailable);
+      console.log('🌐 Any LLM available for chat:', anyLlmAvailable);
 
-      // Add welcome message if authenticated and LLM is available
-      if (token && available) {
+      // Add welcome message if authenticated and any LLM is available
+      if (token && anyLlmAvailable) {
         const welcomeMessage: ChatMessage = {
           id: 'welcome',
           role: 'assistant',
@@ -524,32 +551,44 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
           justifyContent: 'space-between',
           alignItems: 'center',
           flexShrink: 0,
-        }}
-      ><Box display="flex" alignItems="center" gap={2}>          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <AppIcon 
-              size={28} 
-              sx={{ 
-                backgroundColor: 'transparent',
-                padding: 0
-              }} 
-            />
-            <Typography variant="h6">EntraPulse Lite</Typography>
-          </Box>          {!llmAvailable && (
+        }}      >        <Box display="flex" alignItems="center" gap={2}>
+          {/* Show Microsoft Graph connection status and tenant info */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Typography variant="body2" color="textSecondary">
+              Microsoft Graph
+            </Typography>
             <Chip 
-              label="Local LLM Offline" 
-              color="warning" 
+              label="Connected" 
+              color="success" 
               size="small" 
+              variant="outlined"
             />
-          )}
+            {user?.tenantDisplayName && (
+              <Typography variant="caption" color="textSecondary" sx={{ ml: 1 }}>
+                ({user.tenantDisplayName})
+              </Typography>
+            )}
+          </Box>
+
+          {/* Local LLM Status */}
+          <Chip 
+            label={llmAvailable ? "Local LLM Online" : "Local LLM Offline"} 
+            color={llmAvailable ? "success" : "warning"} 
+            size="small" 
+          />
+          
+          {/* Cloud LLM Provider and Model */}
           {defaultCloudProvider && (
             <Chip 
-              label={`Default: ${getProviderDisplayName(defaultCloudProvider)}`}
+              label={currentModel 
+                ? `${getProviderDisplayName(defaultCloudProvider)}: ${currentModel}` 
+                : `Default: ${getProviderDisplayName(defaultCloudProvider)}`}
               color="primary" 
               size="small"
               variant="outlined"
             />
           )}
-        </Box>          <Box display="flex" alignItems="center" gap={1}>          {user && <UserProfileAvatar user={user} />}
+        </Box><Box display="flex" alignItems="center" gap={1}>          {user && <UserProfileAvatar user={user} />}
           <Tooltip title="User Profile">
             <IconButton onClick={handleProfileSettings}>
               <SettingsIcon />
@@ -574,12 +613,11 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
                   <Avatar sx={{ bgcolor: 'secondary.main' }}><BotIcon /></Avatar>
                 }
               </Box>
-              <Box sx={{ flex: 1 }}>
-                <ListItemText
+              <Box sx={{ flex: 1 }}>                <ListItemText
                   primary={
                     <Box display="flex" alignItems="center" gap={1} mb={1}>
                       <Typography variant="subtitle2">
-                        {message.role === 'user' ? 'You' : 'Assistant'}
+                        {message.role === 'user' ? 'You' : 'EntraPulse Assistant'}
                       </Typography>
                       <Typography variant="caption" color="textSecondary">
                         {message.timestamp.toLocaleTimeString()}
@@ -804,11 +842,10 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
             <ListItem>
               <Avatar sx={{ mr: 2 }}>
                 <BotIcon />
-              </Avatar>
-              <Box display="flex" alignItems="center" gap={1}>
+              </Avatar>              <Box display="flex" alignItems="center" gap={1}>
                 <CircularProgress size={20} />
                 <Typography variant="body2" color="textSecondary">
-                  Assistant is thinking...
+                  EntraPulse Assistant is thinking...
                 </Typography>
               </Box>
             </ListItem>
@@ -966,15 +1003,14 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
             maxRows={4}
             value={inputMessage}
             onChange={(e) => setInputMessage(e.target.value)}
-            onKeyPress={handleKeyPress}
-            placeholder={!llmAvailable 
-              ? "LLM is offline - configure a local LLM service to enable chat..." 
+            onKeyPress={handleKeyPress}            placeholder={!chatAvailable 
+              ? "No LLM configured - configure a local or cloud LLM to enable chat..." 
               : "Ask about your Microsoft Entra environment..."
             }
             disabled={isLoading}
             variant="outlined"
             size="medium"  // Changed from small to medium for better visibility
-            helperText={!llmAvailable ? "Configure Ollama, LM Studio, or other local LLM to enable chat functionality" : ""}
+            helperText={!chatAvailable ? "Configure Ollama, LM Studio, or cloud LLM providers to enable chat functionality" : ""}
             sx={{
               '& .MuiOutlinedInput-root': {
                 minHeight: 48  // Ensure the input field has good height
@@ -984,7 +1020,7 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
           <Button
             variant="contained"
             onClick={handleSendMessage}
-            disabled={!inputMessage.trim() || isLoading || !llmAvailable}
+            disabled={!inputMessage.trim() || isLoading || !chatAvailable}
             sx={{ 
               minWidth: 60,
               height: 48,  // Match the input field height

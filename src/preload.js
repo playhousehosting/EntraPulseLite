@@ -35,6 +35,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   llm: {
     chat: (messages) => ipcRenderer.invoke('llm:chat', messages),
     isAvailable: () => ipcRenderer.invoke('llm:isAvailable'),
+    isLocalAvailable: () => ipcRenderer.invoke('llm:isLocalAvailable'),
     testConnection: (config) => ipcRenderer.invoke('llm:testConnection', config),
     getAvailableModels: (config) => ipcRenderer.invoke('llm:getAvailableModels', config),
     testProviderConnection: (provider, config) => ipcRenderer.invoke('llm:testProviderConnection', provider, config),
@@ -66,15 +67,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Event listeners for real-time updates
   on: (channel, callback) => {
-    const validChannels = ['auth-status-changed', 'chat-message', 'graph-api-call'];
+    const validChannels = ['auth-status-changed', 'chat-message', 'graph-api-call', 'config:defaultCloudProviderChanged'];
     if (validChannels.includes(channel)) {
       ipcRenderer.on(channel, callback);
     }
   },
 
+  // Remove specific event listener
+  removeListener: (channel, callback) => {
+    const validChannels = ['auth-status-changed', 'chat-message', 'graph-api-call', 'config:defaultCloudProviderChanged'];
+    if (validChannels.includes(channel)) {
+      ipcRenderer.removeListener(channel, callback);
+    }
+  },
+
   // Remove event listeners
   removeAllListeners: (channel) => {
-    const validChannels = ['auth-status-changed', 'chat-message', 'graph-api-call'];
+    const validChannels = ['auth-status-changed', 'chat-message', 'graph-api-call', 'config:defaultCloudProviderChanged'];
     if (validChannels.includes(channel)) {
       ipcRenderer.removeAllListeners(channel);
     }

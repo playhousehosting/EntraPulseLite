@@ -5,9 +5,10 @@ import { PublicClientApplication, Configuration, AuthenticationResult, AccountIn
 import { ConfidentialClientApplication } from '@azure/msal-node';
 import { AppConfig, AuthToken } from '../types';
 import * as dotenv from 'dotenv';
-import { BrowserWindow } from 'electron';
+import { BrowserWindow, app } from 'electron';
 import { createHash, randomBytes } from 'crypto';
 import * as http from 'http';
+import * as path from 'path';
 
 // Load environment variables
 dotenv.config({ path: '.env.local' });
@@ -122,12 +123,14 @@ export class AuthService {
       throw new Error('Public client not properly initialized for interactive flow');
     }
 
-    return new Promise((resolve, reject) => {
-      // Create a new browser window for authentication
+    return new Promise((resolve, reject) => {      // Create a new browser window for authentication
       const authWindow = new BrowserWindow({
         width: 500,
         height: 700,
         show: true,
+        icon: process.platform === 'win32'
+          ? path.resolve(app.getAppPath(), 'assets', 'icon.ico')
+          : path.resolve(app.getAppPath(), 'assets', 'EntraPulseLiteLogo.png'),
         webPreferences: {
           nodeIntegration: false,
           contextIsolation: true,
@@ -136,7 +139,7 @@ export class AuthService {
         title: 'Sign in to Microsoft',
         autoHideMenuBar: true,
         resizable: false
-      });      // Generate PKCE parameters for secure authentication
+      });// Generate PKCE parameters for secure authentication
       const codeVerifier = this.generateCodeVerifier();
       const codeChallenge = this.generateCodeChallenge(codeVerifier);      // Build the authorization URL with PKCE for Electron
       const tenantId = this.config!.auth.tenantId;

@@ -643,10 +643,18 @@ If you received documentation, summarize the key points accurately.`;
         });
       }
       
-      return correctedResponse;
-    } catch (error) {
+      return correctedResponse;    } catch (error) {
       console.error('Failed to generate final response:', error);
-      return `I encountered an error while processing your request: ${error}. However, I was able to retrieve some data that might be helpful:\n\n${contextData}`;
+      
+      // Check if we actually have any useful data to share
+      const hasData = contextData && contextData.trim().length > 0;
+      
+      if (hasData) {
+        return `I encountered an error while processing your request: ${error}. However, I was able to retrieve some data that might be helpful:\n\n${contextData}`;
+      } else {
+        // No data was retrieved, provide a cleaner error message
+        return `I encountered an error while processing your request: ${error}\n\nPlease try again or switch to a different LLM provider if the issue persists.`;
+      }
     }
   }  /**
    * Basic chat method for fallback and internal use
@@ -669,7 +677,75 @@ If you received documentation, summarize the key points accurately.`;
       return response;
     } catch (error) {
       console.error('Basic chat failed:', error);
-      throw new Error(`Failed to communicate with LLM: ${(error as Error).message}`);
+      
+      // Enhanced error handling for better user experience
+      const enhancedError = this.createUserFriendlyError(error, this.config.provider);
+      throw enhancedError;
+    }
+  }
+
+  /**
+   * Create user-friendly error messages based on error type and provider
+   */
+  private createUserFriendlyError(error: any, provider: string): Error {
+    // Handle Axios errors (HTTP requests)
+    if (error.response && error.response.status) {
+      const status = error.response.status;
+      const providerName = this.getProviderDisplayName(provider);
+      
+      switch (status) {
+        case 429:
+          return new Error(`${providerName} rate limit exceeded. Please wait a moment before trying again, or switch to a different LLM provider.`);
+        
+        case 401:
+          return new Error(`${providerName} authentication failed. Please check your API key in the settings.`);
+        
+        case 403:
+          return new Error(`${providerName} access forbidden. Please verify your API key has the necessary permissions.`);
+        
+        case 404:
+          return new Error(`${providerName} endpoint not found. The requested model may not be available.`);
+        
+        case 500:
+        case 502:
+        case 503:
+        case 504:
+          return new Error(`${providerName} is experiencing server issues. Please try again later or switch to a different provider.`);
+        
+        default:
+          return new Error(`${providerName} request failed with status ${status}. Please check your configuration and try again.`);
+      }
+    }
+    
+    // Handle network/connection errors
+    if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
+      const providerName = this.getProviderDisplayName(provider);
+      return new Error(`Cannot connect to ${providerName}. Please check your internet connection and provider configuration.`);
+    }
+    
+    // Handle timeout errors
+    if (error.code === 'ETIMEDOUT' || error.message?.includes('timeout')) {
+      const providerName = this.getProviderDisplayName(provider);
+      return new Error(`${providerName} request timed out. The service may be slow or overloaded. Please try again.`);
+    }
+    
+    // Fallback for other errors
+    const providerName = this.getProviderDisplayName(provider);
+    return new Error(`${providerName} communication failed: ${error.message || 'Unknown error'}`);
+  }
+
+  /**
+   * Get user-friendly provider display name
+   */
+  private getProviderDisplayName(provider: string): string {
+    switch (provider.toLowerCase()) {
+      case 'openai': return 'OpenAI';
+      case 'anthropic': return 'Anthropic';
+      case 'gemini': return 'Google Gemini';
+      case 'azure-openai': return 'Azure OpenAI';
+      case 'ollama': return 'Ollama';
+      case 'lmstudio': return 'LM Studio';
+      default: return provider;
     }
   }
 

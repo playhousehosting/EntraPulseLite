@@ -65,8 +65,10 @@ export class ConfigService {
    * Set the authentication context
    * @param mode Authentication mode (client-credentials for admin, interactive for users)
    * @param userInfo User information for interactive mode
-   */
-  setAuthenticationContext(mode: 'client-credentials' | 'interactive', userInfo?: { id: string, email?: string }) {
+   */  setAuthenticationContext(mode: 'client-credentials' | 'interactive', userInfo?: { id: string, email?: string }) {
+    console.log(`[ConfigService] setAuthenticationContext called - Mode: ${mode}, UserInfo:`, userInfo ? 'Yes' : 'No');
+    console.log(`[ConfigService] Previous context - Mode: ${this.currentAuthMode}, UserKey: ${this.currentUserKey}`);
+    
     this.currentAuthMode = mode;
     this.store.set('currentAuthMode', mode);
 
@@ -78,6 +80,7 @@ export class ConfigService {
       // Initialize user config if it doesn't exist
       const users = this.store.get('users');
       if (!users[this.currentUserKey]) {
+        console.log(`[ConfigService] Creating new user config for ${this.currentUserKey}`);
         users[this.currentUserKey] = {
           llm: {
             provider: 'anthropic',
@@ -97,26 +100,33 @@ export class ConfigService {
       this.currentUserKey = undefined;
       this.store.delete('currentUserKey');
     }
-  }
-  /**
+    
+    console.log(`[ConfigService] New context - Mode: ${this.currentAuthMode}, UserKey: ${this.currentUserKey}`);
+  }  /**
    * Get the current user configuration context
    */
   private getCurrentContext(): UserConfigSchema {
     try {
+      console.log(`[ConfigService] getCurrentContext - Mode: ${this.currentAuthMode}, UserKey: ${this.currentUserKey}`);
+      
       if (this.currentAuthMode === 'client-credentials') {
         const config = this.store.get('application');
+        console.log(`[ConfigService] Using application config - Has cloudProviders:`, !!config?.llm?.cloudProviders);
         return config || this.getDefaultUserConfig();
       } else if (this.currentAuthMode === 'interactive' && this.currentUserKey) {
         const users = this.store.get('users');
         if (users && users[this.currentUserKey]) {
+          console.log(`[ConfigService] Using user config for ${this.currentUserKey} - Has cloudProviders:`, !!users[this.currentUserKey]?.llm?.cloudProviders);
           return users[this.currentUserKey];
         }
         // Fallback to application config
         const appConfig = this.store.get('application');
+        console.log(`[ConfigService] Fallback to application config - Has cloudProviders:`, !!appConfig?.llm?.cloudProviders);
         return appConfig || this.getDefaultUserConfig();
       }
       // Default fallback
       const config = this.store.get('application');
+      console.log(`[ConfigService] Default fallback to application config - Has cloudProviders:`, !!config?.llm?.cloudProviders);
       return config || this.getDefaultUserConfig();
     } catch (error) {
       // If store access fails, return default configuration
@@ -163,27 +173,96 @@ export class ConfigService {
       // In a real application, you might want to throw this error or handle it differently
       // For now, we'll just log it to maintain the expected behavior
     }
-  }
-  /**
+  }  /**
    * Get the current LLM configuration (context-aware)
    */
   getLLMConfig(): LLMConfig {
     try {
       const context = this.getCurrentContext();
-      return context?.llm || this.getDefaultUserConfig().llm;
+      const config = context?.llm || this.getDefaultUserConfig().llm;
+      
+      // Add debugging for Azure OpenAI specifically
+      if (config.cloudProviders?.['azure-openai']) {
+        console.log(`[ConfigService] getLLMConfig - Azure OpenAI found:`, {
+          hasApiKey: !!config.cloudProviders['azure-openai'].apiKey,
+          model: config.cloudProviders['azure-openai'].model,
+          baseUrl: config.cloudProviders['azure-openai'].baseUrl
+        });
+      } else {
+        console.log(`[ConfigService] getLLMConfig - No Azure OpenAI config found`);
+      }
+      
+      return config;
     } catch (error) {
       console.warn('Error getting LLM config, falling back to defaults:', error);
       return this.getDefaultUserConfig().llm;
     }
   }
-
   /**
    * Save LLM configuration securely (context-aware)
-   */
-  saveLLMConfig(config: LLMConfig): void {
+   */  saveLLMConfig(config: LLMConfig): void {    console.log('[ConfigService] saveLLMConfig - Input config:', {
+      provider: config.provider,
+      hasCloudProviders: !!config.cloudProviders,
+      cloudProviderKeys: config.cloudProviders ? Object.keys(config.cloudProviders) : 'none',
+      inputDefaultProvider: config.defaultCloudProvider
+    });
+    
     const currentContext = this.getCurrentContext();
-    currentContext.llm = config;
+    
+    // Preserve existing cloud providers when saving LLM config
+    const existingLlmConfig = currentContext.llm || {};
+    const preservedCloudProviders = existingLlmConfig.cloudProviders;
+    const preservedDefaultCloudProvider = existingLlmConfig.defaultCloudProvider;
+    
+    console.log('[ConfigService] saveLLMConfig - Existing config:', {
+      hasExistingCloudProviders: !!preservedCloudProviders,
+      existingProviderKeys: preservedCloudProviders ? Object.keys(preservedCloudProviders) : 'none',
+      existingDefaultProvider: preservedDefaultCloudProvider
+    });
+      // Merge cloud providers: prioritize incoming config over existing config
+    let finalCloudProviders;
+    if (config.cloudProviders && Object.keys(config.cloudProviders).length > 0) {
+      // If incoming config has cloud providers, use them (preserving existing ones that aren't overwritten)
+      finalCloudProviders = {
+        ...preservedCloudProviders,  // Start with existing
+        ...config.cloudProviders     // Override with new ones
+      };
+    } else {
+      // If incoming config has no cloud providers, preserve existing ones
+      finalCloudProviders = preservedCloudProviders;
+    }
+
+    // Determine the final default cloud provider
+    let finalDefaultCloudProvider;
+    if (config.defaultCloudProvider) {
+      // If incoming config explicitly sets a default provider, use it (if it exists in the merged config)
+      if (finalCloudProviders && finalCloudProviders[config.defaultCloudProvider]) {
+        finalDefaultCloudProvider = config.defaultCloudProvider;
+        console.log('[ConfigService] saveLLMConfig - Using incoming default provider:', config.defaultCloudProvider);
+      } else {
+        // Incoming default provider doesn't exist in cloud providers, keep existing
+        finalDefaultCloudProvider = preservedDefaultCloudProvider;
+        console.log('[ConfigService] saveLLMConfig - Incoming default provider not found, keeping existing:', preservedDefaultCloudProvider);
+      }
+    } else {
+      // No incoming default provider specified, keep existing
+      finalDefaultCloudProvider = preservedDefaultCloudProvider;
+      console.log('[ConfigService] saveLLMConfig - No incoming default provider, keeping existing:', preservedDefaultCloudProvider);
+    }      currentContext.llm = {
+      ...config,
+      // Use the merged cloud provider configurations
+      cloudProviders: finalCloudProviders,
+      // Use the determined default cloud provider
+      defaultCloudProvider: finalDefaultCloudProvider
+    };
     currentContext.lastUsedProvider = config.provider;
+    
+    console.log('[ConfigService] saveLLMConfig - Final config:', {
+      hasCloudProviders: !!currentContext.llm.cloudProviders,
+      finalProviderKeys: currentContext.llm.cloudProviders ? Object.keys(currentContext.llm.cloudProviders) : 'none',
+      finalDefaultProvider: currentContext.llm.defaultCloudProvider
+    });
+    
     this.saveCurrentContext(currentContext);
   }
 
@@ -247,11 +326,18 @@ export class ConfigService {
   getLastUsedProvider(): string {
     return this.getCurrentContext().lastUsedProvider;
   }
-
   /**
    * Save a cloud provider configuration
    */
   saveCloudProviderConfig(provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai', config: CloudLLMProviderConfig): void {
+    console.log(`[ConfigService] Saving cloud provider config for ${provider}:`, {
+      hasApiKey: !!config.apiKey,
+      model: config.model,
+      baseUrl: config.baseUrl,
+      authMode: this.currentAuthMode,
+      userKey: this.currentUserKey
+    });
+    
     const currentConfig = this.getLLMConfig();
     
     // Initialize cloudProviders if it doesn't exist
@@ -267,14 +353,34 @@ export class ConfigService {
       currentConfig.defaultCloudProvider = provider;
     }
     
+    console.log(`[ConfigService] Before saving, cloudProviders:`, Object.keys(currentConfig.cloudProviders));
+    console.log(`[ConfigService] Default provider:`, currentConfig.defaultCloudProvider);
+    
     this.saveLLMConfig(currentConfig);
-  }
-  /**
+    
+    // Verify the save
+    const savedConfig = this.getLLMConfig();
+    console.log(`[ConfigService] After saving, verification - cloudProviders:`, Object.keys(savedConfig.cloudProviders || {}));
+    console.log(`[ConfigService] After saving, verification - ${provider} config exists:`, !!savedConfig.cloudProviders?.[provider]);
+  }  /**
    * Get a specific cloud provider configuration
    */
   getCloudProviderConfig(provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai'): CloudLLMProviderConfig | null {
+    console.log(`[ConfigService] Getting cloud provider config for ${provider}`);
+    
     const config = this.getLLMConfig();
-    return config.cloudProviders?.[provider] || null;
+    const result = config.cloudProviders?.[provider] || null;
+    
+    console.log(`[ConfigService] Found ${provider} config:`, !!result);
+    if (result && provider === 'azure-openai') {
+      console.log(`[ConfigService] Azure OpenAI config details:`, {
+        hasApiKey: !!result.apiKey,
+        model: result.model,
+        baseUrl: result.baseUrl
+      });
+    }
+    
+    return result;
   }
   /**
    * Get all configured cloud providers
