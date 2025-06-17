@@ -17,6 +17,7 @@ EntraPulse Lite is built with modern TypeScript, Electron, and React technologie
 │  - Authentication         │    - Chat Interface             │
 │  - LLM Services           │    - Settings Management       │
 │  - MCP Servers            │    - User Profile               │
+│  - Status Monitoring      │    - Real-time LLM Status       │
 ├─────────────────────────────────────────────────────────────┤
 │                        Shared Services                      │
 │  - Types & Interfaces     │    - Utilities                 │
@@ -36,6 +37,7 @@ EntraPulse Lite is built with modern TypeScript, Electron, and React technologie
 - **Local Providers**: Ollama, LM Studio
 - **Cloud Providers**: OpenAI, Anthropic, Google Gemini
 - **StandardizedPrompts**: Consistent prompts across providers
+- **Status Monitoring**: Real-time availability tracking for local LLMs
 
 #### 3. MCP Integration Layer
 - **MCPClient**: Protocol communication
@@ -104,6 +106,12 @@ src/
 │   │   ├── settings/        # Settings dialog components
 │   │   └── common/          # Reusable UI components
 │   ├── hooks/               # Custom React hooks
+│   │   ├── useAuth.ts       # Authentication hook
+│   │   ├── useConfig.ts     # Configuration hook
+│   │   └── useLLMStatusPolling.ts # LLM status polling hook
+│   ├── context/             # React contexts
+│   │   ├── AuthContext.tsx  # Authentication context
+│   │   └── LLMStatusContext.tsx # LLM status context
 │   ├── styles/              # CSS and styling
 │   └── App.tsx              # Main React application
 │
@@ -205,6 +213,52 @@ export class YourMCPServer implements MCPServer {
 // src/mcp/auth/MCPAuthService.ts
 // Add authentication logic for your server
 ```
+
+### Using LLM Status Monitoring
+
+The LLM Status monitoring system provides real-time tracking of LLM availability, particularly for local LLMs that may be started or stopped after application launch.
+
+1. **Access LLM Status in Components**:
+```typescript
+// src/renderer/components/YourComponent.tsx
+import { useLLMStatus } from '../context/LLMStatusContext';
+
+const YourComponent = () => {
+  const { 
+    localLLMAvailable, 
+    anyLLMAvailable, 
+    lastChecked, 
+    forceCheck 
+  } = useLLMStatus();
+
+  // Use status data in your component
+  return (
+    <div>
+      {localLLMAvailable ? 'Local LLM Online' : 'Local LLM Offline'}
+      <button onClick={forceCheck}>Refresh Status</button>
+    </div>
+  );
+};
+```
+
+2. **Working with IPC Handlers**:
+```typescript
+// src/main/main.ts (or ipc-handlers.ts)
+ipcMain.handle('llm:isLocalAvailable', async () => {
+  // Logic to check LLM availability
+  return isLocalLLMAvailable;
+});
+```
+
+3. **Customizing Polling Interval**:
+```typescript
+// src/renderer/App.tsx
+<LLMStatusProvider pollingInterval={10000}> {/* 10 seconds */}
+  <YourApp />
+</LLMStatusProvider>
+```
+
+For more details, see [docs/LOCAL-LLM-STATUS-MONITORING.md](../docs/LOCAL-LLM-STATUS-MONITORING.md).
 
 ### Adding New UI Components
 
@@ -466,3 +520,48 @@ Examples:
 - [Material-UI Documentation](https://mui.com)
 - [Jest Testing Framework](https://jestjs.io)
 - [MCP Protocol Specification](https://modelcontextprotocol.io)
+
+## 📋 Items for Consideration
+
+The following items represent potential enhancements and features that could be implemented in future iterations of EntraPulse Lite. These are organized by category to help with prioritization and planning.
+
+### 🚀 Enhanced Onboarding Experience
+- **Welcome First-Run Screen**: Interactive introduction for new users
+- **Quick-Start Guide**: Step-by-step walkthrough of key features
+- **Example Queries Library**: Pre-populated queries to demonstrate capabilities
+- **Interactive Demo Mode**: Guided tour of the application with sample data
+
+### 💰 Freemium Feature Implementation
+- **Query Limits Counter**: Visual indicator of remaining free queries
+- **Premium Feature Indicators**: Clear marking of premium vs. free features
+- **Contextual Upgrade Prompts**: Smart prompts when users approach limits
+- **Subscription Management UI**: Interface for managing premium subscriptions
+
+### 🛠️ Error Recovery & Resilience
+- **Connection Retry Logic**: Automatic retry with exponential backoff
+- **Offline Mode Indicators**: Clear status indicators when working offline
+- **Authentication Recovery Flow**: Guided recovery for authentication failures
+- **Diagnostic Self-Test**: Built-in system to identify and resolve common issues
+
+### ⚡ Performance Optimizations
+- **Query Response Caching**: Local storage of common query results
+- **Faster Application Load**: Optimized startup sequence
+- **Background Model Download**: Asynchronous downloading of LLM models
+- **Lazy-Loading Components**: Load UI components only when needed
+
+### 🔄 Synchronization Enhancements
+- **Background Sync**: Keep local data updated in the background
+- **Selective Sync Settings**: Control what data is synchronized
+- **Cross-Device Settings Sync**: Maintain consistent settings across installations
+- **Conflict Resolution**: Smart handling of conflicting changes
+
+## 📜 Documentation
+
+### Key Documents
+- [Installation Guide](INSTALLATION.md)
+- [Architecture Overview](ARCHITECTURE.md)
+- [Configuration Guide](CONFIGURATION.md)
+- [Privacy Policy](PRIVACY-POLICY.md)
+- [Troubleshooting](TROUBLESHOOTING.md)
+
+### Development Documentation

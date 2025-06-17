@@ -16,7 +16,7 @@
 
 ### 1. Clone the Repository
 ```bash
-git clone https://github.com/yourusername/EntrapulseLite.git
+git clone https://github.com/darrenjrobinson/EntraPulseLite.git
 cd EntrapulseLite
 ```
 
@@ -248,8 +248,8 @@ npm install
 
 ### Getting Help
 - Check [docs/TROUBLESHOOTING.md](TROUBLESHOOTING.md) for detailed solutions
-- Search [GitHub Issues](https://github.com/yourusername/EntrapulseLite/issues)
-- Ask questions in [GitHub Discussions](https://github.com/yourusername/EntrapulseLite/discussions)
+- Search [GitHub Issues](https://github.com/darrenjrobinson/EntraPulseLite/issues)
+- Ask questions in [GitHub Discussions](https://github.com/darrenjrobinson/EntraPulseLite/discussions)
 
 ## 📈 Performance Optimization
 

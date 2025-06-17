@@ -8,6 +8,7 @@ A freemium desktop application that provides natural language querying of Micros
 - **Microsoft Business Account Authentication**: Secure login with MSAL integration
 - **Natural Language Querying**: Chat with your Microsoft Graph data using plain English
 - **Multi-Provider LLM Integration**: Works with local (Ollama, LM Studio) and cloud (OpenAI, Anthropic, Google Gemini) AI models
+- **Real-time LLM Status Monitoring**: Dynamic tracking of LLM availability with automatic UI updates
 - **Built-in MCP Servers**: 
   - Lokka MCP for Microsoft Graph API access
   - External Lokka MCP using the official @merill/lokka package
@@ -53,7 +54,7 @@ src/
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/EntrapulseLite.git
+git clone https://github.com/darrenjrobinson/EntraPulseLite.git
 cd EntrapulseLite
 
 # Install dependencies
@@ -121,7 +122,7 @@ Ask questions in plain English:
 - [Installation & Setup](docs/INSTALLATION.md)
 - [Development Guide](docs/DEVELOPMENT.md)
 - [Architecture Overview](docs/ARCHITECTURE.md)
-- [API Documentation](docs/API.md)
+- [Privacy Policy](docs/PRIVACY-POLICY.md)
 - [Troubleshooting](docs/TROUBLESHOOTING.md)
 - [Contributing](docs/CONTRIBUTING.md)
 
@@ -158,6 +159,6 @@ Contributions are welcome! Please see [docs/CONTRIBUTING.md](docs/CONTRIBUTING.m
 
 ## 📞 Support
 
-- **Issues**: [GitHub Issues](https://github.com/yourusername/EntrapulseLite/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/yourusername/EntrapulseLite/discussions)
-- **Documentation**: [Project Wiki](https://github.com/yourusername/EntrapulseLite/wiki)
+- **Issues**: [GitHub Issues](https://github.com/darrenjrobinson/EntraPulseLite/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/darrenjrobinson/EntraPulseLite/discussions)
+- **Documentation**: [Project Wiki](https://github.com/darrenjrobinson/EntraPulseLite/wiki)

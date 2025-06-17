@@ -25,6 +25,12 @@ The EntraPulse Lite application now features a secure, context-aware configurati
 - API keys stored encrypted on disk
 - Separate configuration contexts prevent cross-contamination
 
+### 📊 **Real-time LLM Status Monitoring**
+- Background polling for LLM availability
+- Configurable polling interval
+- Context-aware status updates
+- UI integration with real-time status indicators
+
 ### 📦 **Model Caching**
 - 24-hour cache for fetched models
 - Cache-aware to prevent duplicate API calls
@@ -42,7 +48,12 @@ The EntraPulse Lite application now features a secure, context-aware configurati
 {
   application: {           // Admin/Client Credentials mode
     llm: { ... },
-    modelCache: { ... }
+    modelCache: { ... },
+    statusMonitoring: {    // LLM Status Monitoring settings
+      pollingInterval: 5000,
+      lastCheckTime: "2023-11-01T12:00:00Z",
+      localLLMAvailable: true
+    }
   },
   users: {
     "user_12345": {        // Individual user configurations

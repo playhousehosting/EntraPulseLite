@@ -35,12 +35,14 @@ import {
   ExpandLess as ExpandLessIcon,
   Api as ApiIcon,
   Psychology as PsychologyIcon,
+  Refresh as RefreshIcon,
 } from '@mui/icons-material';
 import { getAssetPath } from '../utils/assetUtils';
 import { ChatMessage, User, AuthToken, EnhancedLLMResponse, QueryAnalysis } from '../../types';
 import { AppIcon } from './AppIcon';
 import { UserProfileAvatar } from './UserProfileAvatar';
 import { UserProfileDropdown } from './UserProfileDropdown';
+import { useLLMStatus } from '../context/LLMStatusContext';
 
 interface ChatComponentProps {}
 
@@ -49,9 +51,15 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);  const [user, setUser] = useState<User | null>(null);
   const [authToken, setAuthToken] = useState<AuthToken | null>(null);
-  const [llmAvailable, setLlmAvailable] = useState(false); // Local LLM availability
-  const [chatAvailable, setChatAvailable] = useState(false); // Any LLM (local or cloud) availability
-  const [error, setError] = useState<string | null>(null);const [currentPermissions, setCurrentPermissions] = useState<string[]>(['User.Read']);
+  const [error, setError] = useState<string | null>(null);
+  
+  // Use the LLM status context (which provides background polling)
+  const { 
+    localLLMAvailable: llmAvailable, 
+    anyLLMAvailable: chatAvailable,
+    lastChecked: llmLastChecked,
+    forceCheck: forceLLMCheck
+  } = useLLMStatus();const [currentPermissions, setCurrentPermissions] = useState<string[]>(['User.Read']);
   const [authMode, setAuthMode] = useState<'client-credentials' | 'interactive' | null>(null);
   const [permissionSource, setPermissionSource] = useState<'actual' | 'configured' | 'default'>('default');
   const [permissionRequests, setPermissionRequests] = useState<string[]>([]);  const [useRedirectFlow, setUseRedirectFlow] = useState(false);
@@ -154,21 +162,15 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
           console.log('⚠️ No permissions found, using default');
           setCurrentPermissions(['User.Read']);
           setPermissionSource('default');
-        }
-      } else {
+        }      } else {
         console.log('❌ No authentication info available');
-      }      // Check LLM availability - specifically check local LLM for the status indicator
-      const localAvailable = await (window.electronAPI.llm as any).isLocalAvailable();
-      setLlmAvailable(localAvailable);
-      console.log('🤖 Local LLM availability:', localAvailable);
-
-      // Check if any LLM (local or cloud) is available for chat functionality
-      const anyLlmAvailable = await window.electronAPI.llm.isAvailable();
-      setChatAvailable(anyLlmAvailable);
-      console.log('🌐 Any LLM available for chat:', anyLlmAvailable);
-
+      }
+      
+      // Force a check of LLM availability through the hook
+      forceLLMCheck();
+      
       // Add welcome message if authenticated and any LLM is available
-      if (token && anyLlmAvailable) {
+      if (token && chatAvailable) {
         const welcomeMessage: ChatMessage = {
           id: 'welcome',
           role: 'assistant',
@@ -189,16 +191,13 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
       // The actual implementation will need to be added to AuthService
       const token = await window.electronAPI.auth.login(useRedirectFlow);
       setAuthToken(token);
-      const currentUser = await window.electronAPI.auth.getCurrentUser();
-      setUser(currentUser);
+      const currentUser = await window.electronAPI.auth.getCurrentUser();      setUser(currentUser);
       setError(null);
       
-      // Check if any LLM (local or cloud) is available for chat functionality
-      const anyLlmAvailable = await window.electronAPI.llm.isAvailable();
-      setChatAvailable(anyLlmAvailable);
-      
-      // Add welcome message if authentication successful and any LLM is available
-      if (token && anyLlmAvailable) {
+      // Force a check of LLM availability
+      forceLLMCheck();
+        // Add welcome message if authentication successful and any LLM is available
+      if (token && chatAvailable) {
         const welcomeMessage: ChatMessage = {
           id: 'welcome',
           role: 'assistant',
@@ -269,9 +268,17 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
   const handleCloseProfileDropdown = () => {
     setProfileDropdownAnchor(null);
   };
-
   const handleSendMessage = async () => {
     if (!inputMessage.trim() || isLoading) return;
+
+    // Force check LLM availability before sending
+    await forceLLMCheck();
+    
+    // Verify LLM is available after the check
+    if (!chatAvailable) {
+      setError("No LLM service is currently available. Please check your configuration or ensure your local LLM is running.");
+      return;
+    }
 
     const userMessage: ChatMessage = {
       id: Date.now().toString(),
@@ -283,7 +290,7 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
     setMessages(prev => [...prev, userMessage]);
     setInputMessage('');
     setIsLoading(true);
-    setError(null);    try {
+    setError(null);try {
       // Send message to enhanced LLM service
       const enhancedResponse = await window.electronAPI.llm.chat([...messages, userMessage]);
       
@@ -564,9 +571,8 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
               }
               label="Use redirect flow (mobile-friendly)"
             />
-          </Box>
-            <Typography variant="caption" align="center" sx={{ mt: 1 }}>
-            By signing in, you agree to our terms of service and privacy policy.
+          </Box>            <Typography variant="caption" align="center" sx={{ mt: 1 }}>
+            By signing in, you acknowledge this app only accesses and processes data based on your permissions in your tenant. See About (Info).
           </Typography>
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5, mt: 1 }}>
             <ShieldIcon sx={{ fontSize: 14, color: 'primary.main' }} />
@@ -606,14 +612,24 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
                 ({user.tenantDisplayName})
               </Typography>
             )}
-          </Box>
-
-          {/* Local LLM Status */}
-          <Chip 
-            label={llmAvailable ? "Local LLM Online" : "Local LLM Offline"} 
-            color={llmAvailable ? "success" : "warning"} 
-            size="small" 
-          />
+          </Box>          {/* Local LLM Status with real-time updates */}
+          <Tooltip title={llmLastChecked ? `Last checked: ${llmLastChecked.toLocaleTimeString()}` : "Checking status..."}>
+            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+              <Chip 
+                label={llmAvailable ? "Local LLM Online" : "Local LLM Offline"} 
+                color={llmAvailable ? "success" : "warning"} 
+                size="small" 
+              />
+              <IconButton 
+                size="small" 
+                onClick={forceLLMCheck}
+                aria-label="Refresh LLM status"
+                sx={{ ml: 0.5 }}
+              >
+                <RefreshIcon fontSize="small" />
+              </IconButton>
+            </Box>
+          </Tooltip>
           
           {/* Cloud LLM Provider and Model */}
           {defaultCloudProvider && (

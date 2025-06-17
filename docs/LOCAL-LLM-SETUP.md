@@ -49,7 +49,32 @@ Invoke-RestMethod -Uri "http://localhost:11434/api/generate" -Method Post -Body 
 docker exec -it ollama ollama list
 ```
 
-Should show `codellama:13b` in the installed models list.
+## Using with EntraPulse Lite
+
+EntraPulse Lite integrates seamlessly with your local Ollama instance:
+
+1. **Automatic Detection**: The application automatically detects your running Ollama instance
+2. **Real-time Status Monitoring**: The app continuously checks for local LLM availability
+3. **Dynamic Switching**: If Ollama becomes unavailable during use, EntraPulse Lite will notify you and can fall back to cloud providers if configured
+4. **Status Indicator**: The LLM status is displayed in the UI with real-time updates
+
+To use your local Ollama instance:
+1. Ensure Ollama is running (see steps above)
+2. Launch EntraPulse Lite
+3. In Settings, ensure "Use Local LLM if available" is enabled
+4. The status indicator will show "Local LLM Online" when connected successfully
+
+If you start or stop Ollama after launching EntraPulse Lite, the application will detect the change automatically through its background status monitoring.
+
+## Troubleshooting
+
+### Local LLM Not Detected
+1. Verify Ollama is running: `docker ps`
+2. Check API access: `Invoke-RestMethod -Uri "http://localhost:11434/api/version" -Method Get`
+3. Use the "Refresh" button on the LLM status indicator to force an immediate check
+4. Restart EntraPulse Lite if needed
+
+For more information on real-time LLM status monitoring, see [LOCAL-LLM-STATUS-MONITORING.md](LOCAL-LLM-STATUS-MONITORING.md).
 
 ## API Usage in Applications
 

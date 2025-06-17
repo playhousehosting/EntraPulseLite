@@ -7,6 +7,10 @@ contextBridge.exposeInMainWorld('electron', {
   // Asset handling
   getAssetPath: (assetName) => {
     return ipcRenderer.invoke('app:getAssetPath', assetName);
+  },
+  // Open external links
+  openExternal: (url) => {
+    return ipcRenderer.invoke('shell:openExternal', url);
   }
 });
 

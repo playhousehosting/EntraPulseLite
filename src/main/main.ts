@@ -1,5 +1,5 @@
 // Main Electron process for EntraPulse Lite
-import { app, BrowserWindow, ipcMain, Menu, globalShortcut } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, globalShortcut, shell } from 'electron';
 import * as path from 'path';
 import { AuthService } from '../auth/AuthService';
 import { GraphService } from '../shared/GraphService';
@@ -154,25 +154,33 @@ class EntraPulseLiteApp {
     });    app.on('window-all-closed', () => {
       if (process.platform !== 'darwin') app.quit();
     });
+      // Flag to track if cleanup has been completed
+    let cleanupDone = false;
     
     app.on('will-quit', async (event) => {
-      // Prevent default quit to clean up properly
-      event.preventDefault();
-      
-      try {
-        // Unregister all global shortcuts
-        globalShortcut.unregisterAll();
-        console.log('Global shortcuts unregistered');
+      // Prevent default quit and perform cleanup only once
+      if (!cleanupDone) {
+        event.preventDefault();
         
-        // Stop all MCP servers gracefully before quitting
-        await this.mcpClient.stopAllServers();
-        console.log('MCP servers stopped');
-        
-        // Now quit for real
-        app.quit();
-      } catch (error) {
-        console.error('Error during cleanup:', error);
-        app.quit();
+        try {
+          // Unregister all global shortcuts
+          globalShortcut.unregisterAll();
+          console.log('Global shortcuts unregistered');
+          
+          // Stop all MCP servers gracefully before quitting
+          await this.mcpClient.stopAllServers();
+          console.log('MCP servers stopped');
+          
+          // Set the flag to avoid repeated cleanup
+          cleanupDone = true;
+          
+          // Continue with the quit process
+          app.exit();
+        } catch (error) {
+          console.error('Error during cleanup:', error);
+          cleanupDone = true;
+          app.exit();
+        }
       }
     });
   }
@@ -751,6 +759,29 @@ class EntraPulseLiteApp {
       } catch (error) {
         console.error(`Get ${provider} models failed:`, error);
         return [];
+      }
+    });
+
+    // Shell handlers for external links
+    ipcMain.handle('shell:openExternal', async (event, url) => {
+      try {
+        // Only allow specific URLs to be opened for security
+        const allowedDomains = [
+          'https://github.com', 
+          'https://learn.microsoft.com',
+          'https://docs.microsoft.com'
+        ];
+        
+        if (allowedDomains.some(domain => url.startsWith(domain))) {
+          await shell.openExternal(url);
+          return true;
+        } else {
+          console.warn('Blocked attempt to open disallowed URL:', url);
+          return false;
+        }
+      } catch (error) {
+        console.error('Failed to open external URL:', error);
+        return false;
       }
     });
   }

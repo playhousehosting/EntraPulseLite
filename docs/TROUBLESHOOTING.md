@@ -2,6 +2,68 @@
 
 ## 🔍 Common Issues and Solutions
 
+### LLM Status Monitoring Issues
+
+#### Issue: Local LLM Status Shows Offline Despite Running LLM
+
+**Symptoms**:
+- LLM status indicator shows "Local LLM Offline" when Ollama/LM Studio is running
+- Unable to use local LLM despite it being available
+- Chat requests failing with LLM connectivity errors
+
+**Solutions**:
+1. **Force Status Check**:
+   - Click the refresh button on the LLM status indicator
+   - This triggers an immediate check of LLM availability
+
+2. **Verify LLM Service**:
+   ```powershell
+   # For Ollama
+   Invoke-RestMethod -Uri "http://localhost:11434/api/version" -Method Get
+   
+   # For LM Studio
+   Invoke-RestMethod -Uri "http://localhost:1234/v1/models" -Method Get
+   ```
+
+3. **Check Network Configuration**:
+   - Ensure no firewall is blocking communication on port 11434 (Ollama) or 1234 (LM Studio)
+   - Verify the LLM service is bound to localhost or 0.0.0.0, not 127.0.0.1 only
+
+4. **Restart Application**:
+   - Close and reopen EntraPulse Lite
+   - This reinitializes all IPC handlers and status monitors
+
+5. **Review Application Logs**:
+   - Open DevTools (Ctrl+Shift+I)
+   - Check console for LLM connection errors
+   - Look for errors in the IPC communication
+
+#### Issue: False Positive LLM Status
+
+**Symptoms**:
+- LLM status shows "Online" but chat messages fail
+- Status indicator doesn't update when LLM becomes unavailable
+
+**Solutions**:
+1. **Increase Polling Frequency**:
+   - Edit the LLMStatusProvider configuration to reduce the polling interval
+   ```tsx
+   // In src/renderer/App.tsx
+   <LLMStatusProvider pollingInterval={2000}> {/* 2 seconds */}
+     <App />
+   </LLMStatusProvider>
+   ```
+
+2. **Clear Cache and Restart**:
+   - Clear application cache
+   - Restart both EntraPulse Lite and the LLM service
+
+3. **Force Connection Test**:
+   ```typescript
+   // In DevTools console
+   await window.electronAPI.llm.isLocalAvailable();
+   ```
+
 ### Authentication Issues
 
 #### Issue: Authentication Fails with "AADSTS" Error Codes
@@ -457,8 +519,8 @@ grep "api:error" logs/main.log
 
 ### Self-Service Resources
 1. **Check Documentation**: [docs/](../docs/)
-2. **Search Issues**: [GitHub Issues](https://github.com/yourusername/EntrapulseLite/issues)
-3. **Community Discussions**: [GitHub Discussions](https://github.com/yourusername/EntrapulseLite/discussions)
+2. **Search Issues**: [GitHub Issues](https://github.com/darrenjrobinson/EntraPulseLite/issues)
+3. **Community Discussions**: [GitHub Discussions](https://github.com/darrenjrobinson/EntraPulseLite/discussions)
 
 ### Reporting Issues
 

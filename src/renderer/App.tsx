@@ -1,18 +1,23 @@
 // Main App component for EntraPulse Lite
 import React, { useState, useEffect } from 'react';
-import { Box, AppBar, Toolbar, Typography, IconButton, Switch, FormControlLabel } from '@mui/material';
-import { Settings as SettingsIcon, Brightness4, Brightness7 } from '@mui/icons-material';
+import { Box, AppBar, Toolbar, Typography, IconButton, Switch, FormControlLabel, Tooltip } from '@mui/material';
+import { Settings as SettingsIcon, Brightness4, Brightness7, Info as InfoIcon } from '@mui/icons-material';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { ChatComponent } from './components/ChatComponent';
 import { AppIcon } from './components/AppIcon';
 import { SettingsDialog } from './components/SettingsDialog';
 import { EnhancedSettingsDialog } from './components/EnhancedSettingsDialog';
+import { AboutDialog } from './components/AboutDialog';
 import { LLMConfig } from '../types';
+import { VERSION } from '../shared/version';
+import { LLMStatusProvider } from './context/LLMStatusContext';
 
 export const App: React.FC = () => {
   const [darkMode, setDarkMode] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);  const [llmConfig, setLlmConfig] = useState<LLMConfig>({
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
+  const [llmConfig, setLlmConfig] = useState<LLMConfig>({
     provider: 'openai', // Default to cloud for better initial experience
     model: 'gpt-4o-mini',
     temperature: 0.7,
@@ -75,6 +80,15 @@ export const App: React.FC = () => {
   const handleSettings = () => {
     setSettingsOpen(true);
   };
+
+  const handleAboutOpen = () => {
+    setAboutOpen(true);
+  };
+
+  const handleAboutClose = () => {
+    setAboutOpen(false);
+  };
+
   const handleSaveSettings = async (newConfig: LLMConfig) => {
     try {
       console.log('[App] handleSaveSettings - Received config:', {
@@ -100,21 +114,36 @@ export const App: React.FC = () => {
       console.error('Failed to save LLM configuration:', error);
     }
   };
-
   return (
-    <ThemeProvider theme={theme}>
-      <Box sx={{ 
-        display: 'flex', 
-        flexDirection: 'column', 
-        height: '100vh',
-        bgcolor: 'background.default' 
-      }}>        {/* App Bar */}        <AppBar position="static" elevation={1}>
-          <Toolbar>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+    <LLMStatusProvider pollingInterval={5000}> {/* Poll every 5 seconds */}
+      <ThemeProvider theme={theme}>
+        <Box sx={{ 
+          display: 'flex', 
+          flexDirection: 'column', 
+          height: '100vh',
+          bgcolor: 'background.default' 
+        }}>{/* App Bar */}        <AppBar position="static" elevation={1}>
+          <Toolbar>            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <AppIcon size={32} sx={{ marginRight: 1 }} />
-              <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-                EntraPulse Lite
-              </Typography>
+              <Box>
+                <Typography variant="h6" component="div">
+                  EntraPulse Lite
+                </Typography>
+                <Tooltip title="Application Version">
+                  <Typography 
+                    variant="caption" 
+                    sx={{ 
+                      opacity: 0.7, 
+                      fontSize: '0.6rem',
+                      lineHeight: 1,
+                      display: 'block',
+                      marginTop: '-3px'
+                    }}
+                  >
+                    v{VERSION}
+                  </Typography>
+                </Tooltip>
+              </Box>
             </Box>
             
             <Box sx={{ flexGrow: 1 }} />
@@ -140,6 +169,16 @@ export const App: React.FC = () => {
             >
               <SettingsIcon />
             </IconButton>
+            
+            <IconButton
+              size="large"
+              edge="end"
+              color="inherit"
+              onClick={() => setAboutOpen(true)}
+              sx={{ ml: 1 }}
+            >
+              <InfoIcon />
+            </IconButton>
           </Toolbar>
         </AppBar>        {/* Main Content */}
         <Box sx={{ flex: 1, overflow: 'hidden' }}>
@@ -150,8 +189,12 @@ export const App: React.FC = () => {
           onClose={() => setSettingsOpen(false)}
           currentConfig={llmConfig}
           onSave={handleSaveSettings}
-        />
+        />        {/* About Dialog */}
+        <AboutDialog
+          open={aboutOpen}
+          onClose={handleAboutClose}        />
       </Box>
     </ThemeProvider>
+    </LLMStatusProvider>
   );
 };
