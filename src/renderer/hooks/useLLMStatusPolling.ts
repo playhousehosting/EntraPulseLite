@@ -11,10 +11,17 @@ export const useLLMStatusPolling = (pollingInterval = 10000) => {
   const [anyLLMAvailable, setAnyLLMAvailable] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [lastChecked, setLastChecked] = useState<Date | null>(null);
-
+  const [isChecking, setIsChecking] = useState<boolean>(false); // Prevent concurrent checks
   // Function to check LLM availability
   const checkLLMAvailability = async () => {
+    // Prevent concurrent checks
+    if (isChecking) {
+      console.log('LLM availability check already in progress, skipping...');
+      return;
+    }
+    
     try {
+      setIsChecking(true);
       setIsLoading(true);
       
       // Check for local LLM availability
@@ -31,6 +38,7 @@ export const useLLMStatusPolling = (pollingInterval = 10000) => {
       console.error('Failed to check LLM availability:', error);
     } finally {
       setIsLoading(false);
+      setIsChecking(false);
     }
   };
 

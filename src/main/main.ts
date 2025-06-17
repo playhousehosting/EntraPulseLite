@@ -141,17 +141,19 @@ class EntraPulseLiteApp {
     // Set application ID for Windows taskbar
     if (process.platform === 'win32') {
       app.setAppUserModelId('com.increment.entrapulselite');
-    }
-      app.whenReady().then(() => {
+    }    app.whenReady().then(async () => {
       this.createWindow();
       this.setupMenu();
       this.setupIpcHandlers();
       this.setupGlobalShortcuts();
+      
+      // Check for existing authentication session after everything is set up
+      await this.initializeAuthenticationState();
 
       app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) this.createWindow();
       });
-    });    app.on('window-all-closed', () => {
+    });app.on('window-all-closed', () => {
       if (process.platform !== 'darwin') app.quit();
     });
       // Flag to track if cleanup has been completed
@@ -307,16 +309,43 @@ class EntraPulseLiteApp {
     // Authentication handlers
     ipcMain.handle('auth:login', async (_, useRedirectFlow = false) => {
       try {
-        return await this.authService.login(useRedirectFlow);
+        const result = await this.authService.login(useRedirectFlow);
+          // After successful login, reinitialize LLM service with full configuration
+        if (result) {
+          console.log('🔐 Login successful, reloading LLM configuration...');
+          
+          // CRITICAL: Set authentication verification flag first
+          this.configService.setAuthenticationVerified(true);
+          
+          // Set authentication context to allow access to sensitive config
+          this.configService.setAuthenticationContext('client-credentials');
+          
+          // Get the full LLM configuration now that we're authenticated
+          const fullLLMConfig = this.configService.getLLMConfig();
+          console.log('🔧 Reloading LLM service with full configuration including cloud providers');
+          
+          // Reinitialize LLM service with full config
+          this.llmService = new EnhancedLLMService(fullLLMConfig, this.authService, this.mcpClient);
+          
+          // Notify renderer that configuration is now available
+          if (this.mainWindow) {
+            this.mainWindow.webContents.send('auth:configurationAvailable', { source: 'post-login' });
+          }
+        }
+        
+        return result;
       } catch (error) {
         console.error('Login failed:', error);
         throw error;
       }
-    });
-
-    ipcMain.handle('auth:logout', async () => {
+    });    ipcMain.handle('auth:logout', async () => {
       try {
         await this.authService.logout();
+        
+        // Reset authentication verification flag on logout
+        this.configService.setAuthenticationVerified(false);
+        
+        return true;
       } catch (error) {
         console.error('Logout failed:', error);
         throw error;
@@ -784,6 +813,47 @@ class EntraPulseLiteApp {
         return false;
       }
     });
+  }
+
+  /**
+   * Check if user is already authenticated from a previous session
+   * and set up authentication context accordingly
+   */
+  private async initializeAuthenticationState(): Promise<void> {
+    try {
+      console.log('🔍 Checking for existing authentication session...');
+      
+      // Check if user is already authenticated
+      const authInfo = await this.authService.getAuthenticationInfoWithToken();
+      
+      if (authInfo.isAuthenticated) {
+        console.log('✅ Found existing authentication session');
+        
+        // Set authentication verification flag
+        this.configService.setAuthenticationVerified(true);
+        
+        // Set authentication context  
+        this.configService.setAuthenticationContext('client-credentials');
+        
+        // Reload LLM service with full configuration
+        const fullLLMConfig = this.configService.getLLMConfig();
+        console.log('🔧 Initializing LLM service with full configuration from existing session');
+        
+        this.llmService = new EnhancedLLMService(fullLLMConfig, this.authService, this.mcpClient);
+        
+        console.log('🎉 Authentication state initialized successfully');
+      } else {
+        console.log('❌ No existing authentication session found');
+        
+        // Make sure authentication verification is false
+        this.configService.setAuthenticationVerified(false);
+      }
+    } catch (error) {
+      console.warn('Failed to check authentication state:', error);
+      
+      // On error, ensure authentication verification is false
+      this.configService.setAuthenticationVerified(false);
+    }
   }
 }
 

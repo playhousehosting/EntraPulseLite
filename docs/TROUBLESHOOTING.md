@@ -578,3 +578,148 @@ console.log('Diagnostic Report:', JSON.stringify(diagnostics, null, 2));
 4. **Stack Overflow**: Tag questions with `entrapulse-lite`
 
 Remember to sanitize any sensitive information (API keys, tokens, personal data) before sharing diagnostic information.
+
+### Authentication and UI State Issues
+
+#### Issue: UI Shows "No LLM Configured" After Successful Authentication
+
+**Symptoms**:
+- User successfully completes Microsoft authentication
+- Backend logs show configuration is loaded correctly
+- LLM Settings dialog displays correct cloud provider configuration
+- Main UI still shows "No LLM configured" message
+- Chat input remains disabled
+
+**Root Cause**: UI state synchronization failure between authentication and configuration loading.
+
+**Solution**: This was a critical issue that required multiple fixes:
+
+1. **IPC Security Configuration Fix** (CRITICAL):
+   - The `auth:configurationAvailable` event was not included in the `validChannels` array in `preload.js`
+   - This prevented the renderer process from listening to authentication state changes
+   - **Reference**: See `CRITICAL-UI-STATE-FIX.md` for complete implementation details
+
+2. **Event-Driven Configuration Reload**:
+   - Added `auth:configurationAvailable` event emission after authentication verification
+   - App.tsx now listens for this event and reloads LLM configuration
+   - LLMStatusContext forces immediate status check when authentication is verified
+
+3. **Two-Phase Configuration Loading**:
+   - Phase 1: Basic, non-sensitive configuration during startup
+   - Phase 2: Full configuration with sensitive data after authentication
+
+**Quick Fix**:
+```typescript
+// Force configuration reload in DevTools console
+await window.electronAPI.config.getLLMConfig();
+// Then manually refresh the page
+location.reload();
+```
+
+#### Issue: Infinite Loop During Authentication
+
+**Symptoms**:
+- Application freezes during login transition
+- Excessive console logging creating cascade effects
+- Multiple concurrent LLM availability checks causing timeouts
+- UI becomes completely unresponsive
+
+**Root Cause**: Multiple event listeners triggering recursive configuration calls.
+
+**Solution**: Emergency fixes were applied:
+
+1. **Added Debouncing Protection**:
+   ```typescript
+   // 1-second debounce to prevent rapid-fire events
+   debounceTimeout = setTimeout(() => {
+     forceCheck();
+   }, 1000);
+   ```
+
+2. **Concurrent Check Protection**:
+   ```typescript
+   // Prevent multiple overlapping availability checks
+   if (isChecking) {
+     return; // Skip if already checking
+   }
+   ```
+
+3. **Reduced Polling Frequency**:
+   - Changed from 5-second to 15-second polling interval
+   - Prevents system overload during authentication
+
+4. **Event Notification Control**:
+   - Added `configurationAvailabilityNotified` flag
+   - Ensures `auth:configurationAvailable` event is emitted only once per session
+
+**Reference**: See `EMERGENCY-FIX-INFINITE-LOOP.md` and `INFINITE-LOOP-FIX-COMPLETE.md` for complete technical details.
+
+#### Issue: Sensitive Configuration Exposed Before Authentication
+
+**Symptoms**:
+- API keys and cloud provider credentials visible in console logs during startup
+- Configuration loaded before user authentication
+- Security violation of least privilege principle
+
+**Root Cause**: Services were initializing with full configuration during application startup.
+
+**Solution**: Implemented two-phase security model:
+
+1. **Authentication Verification Flag**:
+   ```typescript
+   // ConfigService only exposes sensitive data after verification
+   private isAuthenticationVerified: boolean = false;
+   ```
+
+2. **Safe Default Configuration**:
+   - Modified `getDefaultUserConfig()` to return safe defaults only
+   - Removed cloud provider configurations from startup config
+   - Set `preferLocal: true` for initial security
+
+3. **IPC Handler Security**:
+   - Added authentication checks to sensitive configuration handlers
+   - Blocks access to `getLLMConfig`, `getConfiguredCloudProviders` before auth
+
+**Reference**: See the "Sensitive Configuration Exposed Before Authentication" section above for complete security implementation details.
+
+#### Issue: LLM Configuration Not Persisting
+
+**Symptoms**:
+- Azure OpenAI URL gets truncated during save/load cycles
+- Cloud provider configuration appears to save but doesn't persist
+- Settings dialog shows empty or incomplete configuration
+
+**Solution**: Enhanced settings dialog to include current cloud provider configs when saving.
+
+**Test Scripts Available**:
+- `scripts/test-azure-openai-persistence.js` - Tests full configuration persistence
+- `scripts/test-simple-persistence.js` - Tests basic persistence logic
+
+#### Recovery Procedures
+
+If you encounter authentication or UI state issues:
+
+1. **Clear Application State**:
+   ```typescript
+   // In DevTools console
+   await window.electronAPI.auth.logout();
+   await window.electronAPI.config.clearCache();
+   ```
+
+2. **Force Configuration Reload**:
+   ```typescript
+   // Force reload configuration
+   await window.electronAPI.config.getLLMConfig();
+   ```
+
+3. **Reset Authentication Context**:
+   - Restart the application
+   - Complete the authentication flow again
+   - Verify UI updates correctly after login
+
+4. **Debug Authentication State**:
+   ```typescript
+   // Check authentication status
+   const authStatus = await window.electronAPI.auth.getStatus();
+   console.log('Auth Status:', authStatus);
+   ```

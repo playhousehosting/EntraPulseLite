@@ -11,33 +11,59 @@ export class UnifiedLLMService {
   private localService?: LLMService;
   private cloudService?: CloudLLMService | null;
   private config: LLMConfig;
-  private mcpClient?: MCPClient;
-
-  constructor(config: LLMConfig, mcpClient?: MCPClient) {
+  private mcpClient?: MCPClient;  constructor(config: LLMConfig, mcpClient?: MCPClient) {
     this.config = config;
     this.mcpClient = mcpClient;
+    
+    console.log(`[UnifiedLLMService] Constructor called with provider: ${config.provider}`);
+    console.log(`[UnifiedLLMService] Config has cloudProviders:`, !!config.cloudProviders);
+    if (config.cloudProviders) {
+      console.log(`[UnifiedLLMService] Available cloudProviders:`, Object.keys(config.cloudProviders));
+    }
     
     // Initialize appropriate service based on provider
     if (config.provider === 'ollama' || config.provider === 'lmstudio') {
       if (!config.baseUrl) {
         throw new Error(`baseUrl is required for ${config.provider}`);
       }
-      this.localService = new LLMService(config);    } else if (config.provider === 'openai' || config.provider === 'anthropic' || config.provider === 'gemini' || config.provider === 'azure-openai') {
-      // Get the cloud provider specific configuration
-      const cloudProviderConfig = this.getCloudProviderConfig(config, config.provider);
+      this.localService = new LLMService(config);
+    } else if (config.provider === 'openai' || config.provider === 'anthropic' || config.provider === 'gemini' || config.provider === 'azure-openai') {
+      // First try to get the cloud provider specific configuration for the requested provider
+      let cloudProviderConfig = this.getCloudProviderConfig(config, config.provider);
+      console.log(`[UnifiedLLMService] Primary provider config result:`, cloudProviderConfig ? 'found' : 'not found');
+        // If the configured provider isn't available, try to find any available cloud provider
+      if (!cloudProviderConfig || !cloudProviderConfig.apiKey || cloudProviderConfig.apiKey.trim() === '') {
+        console.log(`[UnifiedLLMService] Configured provider '${config.provider}' not available, searching for alternative cloud providers...`);
+        cloudProviderConfig = this.findBestAvailableCloudProvider(config);
+        
+        if (cloudProviderConfig) {
+          console.log(`[UnifiedLLMService] Found alternative cloud provider: ${cloudProviderConfig.provider}`);
+          // Update the main config to reflect the actually available provider
+          this.config = {
+            ...this.config,
+            provider: cloudProviderConfig.provider,
+            model: cloudProviderConfig.model,
+            apiKey: cloudProviderConfig.apiKey,
+            baseUrl: cloudProviderConfig.baseUrl
+          };
+          console.log(`[UnifiedLLMService] Updated main config to use ${cloudProviderConfig.provider}`);
+        } else {
+          console.log(`[UnifiedLLMService] No alternative cloud providers found`);
+        }
+      }
       
       if (!cloudProviderConfig) {
-        console.warn(`⚠️  ${config.provider} provider selected but no cloud provider configuration found. Service will be unavailable.`);
+        console.warn(`⚠️  No cloud provider configuration found. Service will be unavailable.`);
         this.cloudService = null;
       } else if (!cloudProviderConfig.apiKey || cloudProviderConfig.apiKey.trim() === '') {
-        console.warn(`⚠️  ${config.provider} provider selected but no API key configured. Service will be unavailable until API key is provided.`);
+        console.warn(`⚠️  ${cloudProviderConfig.provider} provider found but no API key configured. Service will be unavailable until API key is provided.`);
         this.cloudService = null; // Will be initialized when API key is provided
-      } else if (config.provider === 'azure-openai' && (!cloudProviderConfig.baseUrl || cloudProviderConfig.baseUrl.trim() === '')) {
-        console.warn(`⚠️  Azure OpenAI provider selected but no baseUrl configured. Service will be unavailable until baseUrl is provided.`);
+      } else if (cloudProviderConfig.provider === 'azure-openai' && (!cloudProviderConfig.baseUrl || cloudProviderConfig.baseUrl.trim() === '')) {
+        console.warn(`⚠️  Azure OpenAI provider found but no baseUrl configured. Service will be unavailable until baseUrl is provided.`);
         this.cloudService = null;
       } else {
         // Pass MCP client to CloudLLMService for enhanced model discovery
-        console.log(`[UnifiedLLMService] Initializing CloudLLMService with ${config.provider} config:`, {
+        console.log(`[UnifiedLLMService] Initializing CloudLLMService with ${cloudProviderConfig.provider} config:`, {
           provider: cloudProviderConfig.provider,
           model: cloudProviderConfig.model,
           hasApiKey: !!cloudProviderConfig.apiKey,
@@ -350,26 +376,40 @@ export class UnifiedLLMService {
 
   /**
    * Get the reason why the service is not ready (if applicable)
-   */  getServiceStatus(): { ready: boolean; reason?: string } {
+   */  getServiceStatus(): { ready: boolean; reason?: string; provider?: string } {
     if (this.localService) {
-      return { ready: true };
+      return { ready: true, provider: this.config.provider };
     } else if (this.cloudService) {
-      return { ready: true };
+      return { ready: true, provider: this.config.provider };
     } else {
       // Provide specific error messages based on what's missing
       if (this.isCloudProvider()) {
+        // Check if we have any cloud providers configured
+        if (!this.config.cloudProviders || Object.keys(this.config.cloudProviders).length === 0) {
+          return { ready: false, reason: 'No cloud providers are configured', provider: this.config.provider };
+        }
+        
+        // Check if any cloud provider has an API key
+        const hasAnyApiKey = Object.values(this.config.cloudProviders).some(provider => 
+          provider && provider.apiKey && provider.apiKey.trim() !== ''
+        );
+        
+        if (!hasAnyApiKey) {
+          return { ready: false, reason: 'No cloud provider API keys are configured', provider: this.config.provider };
+        }
+        
         if (!this.config.apiKey || this.config.apiKey.trim() === '') {
-          return { ready: false, reason: `${this.config.provider} API key is not configured` };
+          return { ready: false, reason: `${this.config.provider} API key is not configured`, provider: this.config.provider };
         } else if (this.config.provider === 'azure-openai' && (!this.config.baseUrl || this.config.baseUrl.trim() === '')) {
-          return { ready: false, reason: `${this.config.provider} baseUrl is not configured` };
+          return { ready: false, reason: `${this.config.provider} baseUrl is not configured`, provider: this.config.provider };
         } else {
-          return { ready: false, reason: `${this.config.provider} service failed to initialize` };
+          return { ready: false, reason: `${this.config.provider} service failed to initialize`, provider: this.config.provider };
         }
       } else {
         if (this.isLocalProvider() && (!this.config.baseUrl || this.config.baseUrl.trim() === '')) {
-          return { ready: false, reason: `${this.config.provider} baseUrl is not configured` };
+          return { ready: false, reason: `${this.config.provider} baseUrl is not configured`, provider: this.config.provider };
         } else {
-          return { ready: false, reason: `${this.config.provider} service failed to initialize` };
+          return { ready: false, reason: `${this.config.provider} service failed to initialize`, provider: this.config.provider };
         }
       }
     }
@@ -444,6 +484,38 @@ export class UnifiedLLMService {
     }
     
     console.warn(`[UnifiedLLMService] No configuration found for ${provider}`);
+    return null;
+  }
+  /**
+   * Find the best available cloud provider from the cloudProviders configuration
+   */
+  private findBestAvailableCloudProvider(config: LLMConfig): any | null {
+    if (!config.cloudProviders) {
+      return null;
+    }
+
+    // Priority order for cloud providers
+    const providerPriority: Array<'azure-openai' | 'openai' | 'anthropic' | 'gemini'> = [
+      'azure-openai', 'openai', 'anthropic', 'gemini'
+    ];
+
+    for (const provider of providerPriority) {
+      const providerConfig = config.cloudProviders[provider];
+      if (providerConfig && providerConfig.apiKey && providerConfig.apiKey.trim() !== '') {
+        // Additional validation for Azure OpenAI
+        if (provider === 'azure-openai' && (!providerConfig.baseUrl || providerConfig.baseUrl.trim() === '')) {
+          continue; // Skip this provider if baseUrl is missing
+        }
+        
+        console.log(`[UnifiedLLMService] Found available cloud provider: ${provider}`);
+        // Return the config with the provider name explicitly set
+        return {
+          ...providerConfig,
+          provider: provider
+        };
+      }
+    }
+
     return null;
   }
 

@@ -33,7 +33,10 @@ interface AppConfigSchema {
 export class ConfigService {
   private store: any; // Use any to avoid type conflicts with electron-store
   private currentAuthMode: 'client-credentials' | 'interactive' = 'client-credentials';
-  private currentUserKey?: string;  constructor() {
+  private currentUserKey?: string;
+  private isAuthenticationVerified: boolean = false; // Security flag to prevent data exposure
+
+  constructor() {
     this.store = new Store({
       name: 'entrapulse-lite-config',
       encryptionKey: 'entrapulse-lite-secret-key-2025', // In production, this should be generated or from env
@@ -59,16 +62,29 @@ export class ConfigService {
     this.currentAuthMode = this.store.get('currentAuthMode');
     this.currentUserKey = this.store.get('currentUserKey');
   }
+  /**
+   * Verify that authentication has occurred before exposing sensitive data
+   * @param isAuthenticated True if user is authenticated
+   */
+  setAuthenticationVerified(isAuthenticated: boolean): void {
+    this.isAuthenticationVerified = isAuthenticated;
+    console.log(`[ConfigService] Authentication verified set to: ${isAuthenticated}`);
+  }
 
   /**
    * Set the authentication context
    * @param mode Authentication mode (client-credentials for admin, interactive for users)
    * @param userInfo User information for interactive mode
-   */  setAuthenticationContext(mode: 'client-credentials' | 'interactive', userInfo?: { id: string, email?: string }) {
+   */
+  setAuthenticationContext(mode: 'client-credentials' | 'interactive', userInfo?: { id: string, email?: string }) {
     console.log(`[ConfigService] setAuthenticationContext called - Mode: ${mode}, UserInfo:`, userInfo ? 'Yes' : 'No');
     console.log(`[ConfigService] Previous context - Mode: ${this.currentAuthMode}, UserKey: ${this.currentUserKey}`);
     
-    this.currentAuthMode = mode;
+    // Only allow setting authentication context if authentication is verified
+    if (!this.isAuthenticationVerified) {
+      console.log(`[ConfigService] 🔒 Authentication context change blocked - authentication not verified`);
+      return;
+    }this.currentAuthMode = mode;
     this.store.set('currentAuthMode', mode);
 
     if (mode === 'interactive' && userInfo) {
@@ -107,6 +123,12 @@ export class ConfigService {
     try {
       console.log(`[ConfigService] getCurrentContext - Mode: ${this.currentAuthMode}, UserKey: ${this.currentUserKey}`);
       
+      // Security check: If authentication is not verified, return safe defaults
+      if (!this.isAuthenticationVerified) {
+        console.log(`[ConfigService] 🔒 Authentication not verified - returning safe defaults`);
+        return this.getDefaultUserConfig();
+      }
+      
       if (this.currentAuthMode === 'client-credentials') {
         const config = this.store.get('application');
         console.log(`[ConfigService] Using application config - Has cloudProviders:`, !!config?.llm?.cloudProviders);
@@ -132,19 +154,21 @@ export class ConfigService {
       return this.getDefaultUserConfig();
     }
   }
-
   /**
-   * Get default user configuration
+   * Get default user configuration - safe defaults with no sensitive data
    */
-  private getDefaultUserConfig(): UserConfigSchema {    return {
+  private getDefaultUserConfig(): UserConfigSchema {
+    return {
       llm: {
-        provider: 'anthropic',
+        provider: 'anthropic' as const,
         model: 'claude-3-5-sonnet-20241022',
-        apiKey: '',
+        apiKey: '', // Always empty for security
         baseUrl: '',
         temperature: 0.2,
         maxTokens: 4096,
-        organization: ''
+        organization: '',
+        preferLocal: true, // Prefer local for security
+        // No cloudProviders - prevents exposure of sensitive data
       },
       lastUsedProvider: 'anthropic',
       modelCache: {}

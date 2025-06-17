@@ -15,6 +15,8 @@ This directory contains development utilities, debugging tools, and standalone t
 
 ### Configuration Testing
 - **`test-config-system.js`** - Standalone test for context-aware configuration system
+- **`test-azure-openai-persistence.js`** - Test Azure OpenAI URL persistence in configuration
+- **`test-simple-persistence.js`** - Simple logic test for configuration persistence without Electron dependencies
 
 ### MCP Integration Testing
 - **`test-lokka-integration.js`** - Standalone Lokka MCP server integration test

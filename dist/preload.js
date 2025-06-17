@@ -1,1 +1,95 @@
-const{contextBridge,ipcRenderer}=require("electron");contextBridge.exposeInMainWorld("electron",{getAssetPath:e=>ipcRenderer.invoke("app:getAssetPath",e),openExternal:e=>ipcRenderer.invoke("shell:openExternal",e)}),contextBridge.exposeInMainWorld("electronAPI",{auth:{login:(e=!1)=>ipcRenderer.invoke("auth:login",e),logout:()=>ipcRenderer.invoke("auth:logout"),getToken:()=>ipcRenderer.invoke("auth:getToken"),getCurrentUser:()=>ipcRenderer.invoke("auth:getCurrentUser"),getIdTokenClaims:()=>ipcRenderer.invoke("auth:getIdTokenClaims"),requestPermissions:e=>ipcRenderer.invoke("auth:requestPermissions",e),getTokenWithPermissions:e=>ipcRenderer.invoke("auth:getTokenWithPermissions",e),getAuthenticationInfo:()=>ipcRenderer.invoke("auth:getAuthenticationInfo"),clearTokenCache:()=>ipcRenderer.invoke("auth:clearTokenCache"),forceReauthentication:()=>ipcRenderer.invoke("auth:forceReauthentication")},graph:{query:(e,i,r)=>ipcRenderer.invoke("graph:query",e,i,r),getUserPhoto:e=>ipcRenderer.invoke("graph:getUserPhoto",e)},llm:{chat:e=>ipcRenderer.invoke("llm:chat",e),isAvailable:()=>ipcRenderer.invoke("llm:isAvailable"),isLocalAvailable:()=>ipcRenderer.invoke("llm:isLocalAvailable"),testConnection:e=>ipcRenderer.invoke("llm:testConnection",e),getAvailableModels:e=>ipcRenderer.invoke("llm:getAvailableModels",e),testProviderConnection:(e,i)=>ipcRenderer.invoke("llm:testProviderConnection",e,i),getProviderModels:(e,i)=>ipcRenderer.invoke("llm:getProviderModels",e,i)},mcp:{call:(e,i,r)=>ipcRenderer.invoke("mcp:call",e,i,r),listServers:()=>ipcRenderer.invoke("mcp:listServers"),listTools:e=>ipcRenderer.invoke("mcp:listTools",e)},config:{get:()=>ipcRenderer.invoke("config:get"),update:e=>ipcRenderer.invoke("config:update",e),getLLMConfig:()=>ipcRenderer.invoke("config:getLLMConfig"),saveLLMConfig:e=>ipcRenderer.invoke("config:saveLLMConfig",e),clearModelCache:e=>ipcRenderer.invoke("config:clearModelCache",e),getCachedModels:e=>ipcRenderer.invoke("config:getCachedModels",e),saveCloudProviderConfig:(e,i)=>ipcRenderer.invoke("config:saveCloudProviderConfig",e,i),getCloudProviderConfig:e=>ipcRenderer.invoke("config:getCloudProviderConfig",e),getConfiguredCloudProviders:()=>ipcRenderer.invoke("config:getConfiguredCloudProviders"),setDefaultCloudProvider:e=>ipcRenderer.invoke("config:setDefaultCloudProvider",e),getDefaultCloudProvider:()=>ipcRenderer.invoke("config:getDefaultCloudProvider"),removeCloudProviderConfig:e=>ipcRenderer.invoke("config:removeCloudProviderConfig",e)},on:(e,i)=>{["auth-status-changed","chat-message","graph-api-call","config:defaultCloudProviderChanged"].includes(e)&&ipcRenderer.on(e,i)},removeListener:(e,i)=>{["auth-status-changed","chat-message","graph-api-call","config:defaultCloudProviderChanged"].includes(e)&&ipcRenderer.removeListener(e,i)},removeAllListeners:e=>{["auth-status-changed","chat-message","graph-api-call","config:defaultCloudProviderChanged"].includes(e)&&ipcRenderer.removeAllListeners(e)}});
+// Preload script for EntraPulse Lite - Electron security bridge
+const { contextBridge, ipcRenderer } = require('electron');
+
+// Expose protected methods that allow the renderer process to use
+// the ipcRenderer without exposing the entire object
+contextBridge.exposeInMainWorld('electron', {
+  // Asset handling
+  getAssetPath: (assetName) => {
+    return ipcRenderer.invoke('app:getAssetPath', assetName);
+  },
+  // Open external links
+  openExternal: (url) => {
+    return ipcRenderer.invoke('shell:openExternal', url);
+  }
+});
+
+contextBridge.exposeInMainWorld('electronAPI', {
+  // Authentication methods
+  auth: {
+    login: (useRedirectFlow = false) => ipcRenderer.invoke('auth:login', useRedirectFlow),
+    logout: () => ipcRenderer.invoke('auth:logout'),
+    getToken: () => ipcRenderer.invoke('auth:getToken'),
+    getCurrentUser: () => ipcRenderer.invoke('auth:getCurrentUser'),
+    getIdTokenClaims: () => ipcRenderer.invoke('auth:getIdTokenClaims'),
+    requestPermissions: (permissions) => ipcRenderer.invoke('auth:requestPermissions', permissions),
+    getTokenWithPermissions: (permissions) => ipcRenderer.invoke('auth:getTokenWithPermissions', permissions),
+    getAuthenticationInfo: () => ipcRenderer.invoke('auth:getAuthenticationInfo'),
+    clearTokenCache: () => ipcRenderer.invoke('auth:clearTokenCache'),
+    forceReauthentication: () => ipcRenderer.invoke('auth:forceReauthentication'),
+  },
+
+  // Microsoft Graph methods
+  graph: {
+    query: (endpoint, method, data) => ipcRenderer.invoke('graph:query', endpoint, method, data),
+    getUserPhoto: (userId) => ipcRenderer.invoke('graph:getUserPhoto', userId),
+  },
+
+  // Local LLM methods
+  llm: {
+    chat: (messages) => ipcRenderer.invoke('llm:chat', messages),
+    isAvailable: () => ipcRenderer.invoke('llm:isAvailable'),
+    isLocalAvailable: () => ipcRenderer.invoke('llm:isLocalAvailable'),
+    testConnection: (config) => ipcRenderer.invoke('llm:testConnection', config),
+    getAvailableModels: (config) => ipcRenderer.invoke('llm:getAvailableModels', config),
+    testProviderConnection: (provider, config) => ipcRenderer.invoke('llm:testProviderConnection', provider, config),
+    getProviderModels: (provider, config) => ipcRenderer.invoke('llm:getProviderModels', provider, config),
+  },
+
+  // MCP methods
+  mcp: {
+    call: (server, toolName, arguments_) => ipcRenderer.invoke('mcp:call', server, toolName, arguments_),
+    listServers: () => ipcRenderer.invoke('mcp:listServers'),
+    listTools: (server) => ipcRenderer.invoke('mcp:listTools', server),
+  },
+
+  // Configuration methods
+  config: {
+    get: () => ipcRenderer.invoke('config:get'),
+    update: (config) => ipcRenderer.invoke('config:update', config),
+    getLLMConfig: () => ipcRenderer.invoke('config:getLLMConfig'),
+    saveLLMConfig: (config) => ipcRenderer.invoke('config:saveLLMConfig', config),
+    clearModelCache: (provider) => ipcRenderer.invoke('config:clearModelCache', provider),
+    getCachedModels: (provider) => ipcRenderer.invoke('config:getCachedModels', provider),
+    saveCloudProviderConfig: (provider, config) => ipcRenderer.invoke('config:saveCloudProviderConfig', provider, config),
+    getCloudProviderConfig: (provider) => ipcRenderer.invoke('config:getCloudProviderConfig', provider),
+    getConfiguredCloudProviders: () => ipcRenderer.invoke('config:getConfiguredCloudProviders'),
+    setDefaultCloudProvider: (provider) => ipcRenderer.invoke('config:setDefaultCloudProvider', provider),
+    getDefaultCloudProvider: () => ipcRenderer.invoke('config:getDefaultCloudProvider'),
+    removeCloudProviderConfig: (provider) => ipcRenderer.invoke('config:removeCloudProviderConfig', provider),
+  },
+
+  // Event listeners for real-time updates
+  on: (channel, callback) => {
+    const validChannels = ['auth-status-changed', 'chat-message', 'graph-api-call', 'config:defaultCloudProviderChanged', 'auth:configurationAvailable'];
+    if (validChannels.includes(channel)) {
+      ipcRenderer.on(channel, callback);
+    }
+  },
+
+  // Remove specific event listener
+  removeListener: (channel, callback) => {
+    const validChannels = ['auth-status-changed', 'chat-message', 'graph-api-call', 'config:defaultCloudProviderChanged', 'auth:configurationAvailable'];
+    if (validChannels.includes(channel)) {
+      ipcRenderer.removeListener(channel, callback);
+    }
+  },
+
+  // Remove event listeners
+  removeAllListeners: (channel) => {
+    const validChannels = ['auth-status-changed', 'chat-message', 'graph-api-call', 'config:defaultCloudProviderChanged', 'auth:configurationAvailable'];
+    if (validChannels.includes(channel)) {
+      ipcRenderer.removeAllListeners(channel);
+    }
+  },
+});

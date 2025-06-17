@@ -1,5 +1,5 @@
 // LLM Status Context for making LLM availability state globally available
-import React, { createContext, useContext, ReactNode } from 'react';
+import React, { createContext, useContext, ReactNode, useEffect } from 'react';
 import { useLLMStatusPolling } from '../hooks/useLLMStatusPolling';
 
 // Define the context type

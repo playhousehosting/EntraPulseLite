@@ -165,21 +165,10 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
         }      } else {
         console.log('❌ No authentication info available');
       }
-      
-      // Force a check of LLM availability through the hook
+        // Force a check of LLM availability through the hook
       forceLLMCheck();
       
-      // Add welcome message if authenticated and any LLM is available
-      if (token && chatAvailable) {
-        const welcomeMessage: ChatMessage = {
-          id: 'welcome',
-          role: 'assistant',
-          content: `Welcome to EntraPulse Lite! I'm your Microsoft Entra assistant. I can help you query your Microsoft Graph data, understand identity concepts, and analyze your directory structure. What would you like to explore?`,
-          timestamp: new Date(),
-        };
-        setMessages([welcomeMessage]);
-        console.log('✅ Welcome message added');
-      }
+      // Welcome message will be added by useEffect when both auth and LLM are available
     } catch (error) {
       console.error('❌ Failed to initialize app:', error);
       setError('Failed to initialize application');
@@ -193,20 +182,10 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
       setAuthToken(token);
       const currentUser = await window.electronAPI.auth.getCurrentUser();      setUser(currentUser);
       setError(null);
-      
-      // Force a check of LLM availability
+        // Force a check of LLM availability
       forceLLMCheck();
-        // Add welcome message if authentication successful and any LLM is available
-      if (token && chatAvailable) {
-        const welcomeMessage: ChatMessage = {
-          id: 'welcome',
-          role: 'assistant',
-          content: `Welcome to EntraPulse Lite! I'm your Microsoft Entra assistant. I can help you query your Microsoft Graph data, understand identity concepts, and analyze your directory structure. What would you like to explore?`,
-          timestamp: new Date(),
-        };
-        setMessages([welcomeMessage]);
-        console.log('✅ Welcome message added after login');
-      }
+      
+      // Welcome message will be added by useEffect when both auth and LLM are available
       
       // Load authentication information and permissions after successful login
       const authInfo = await window.electronAPI.auth.getAuthenticationInfo();
@@ -227,8 +206,11 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
           console.log('⚠️ No permissions found, using default');
           setCurrentPermissions(['User.Read']);
           setPermissionSource('default');
-        }
-      }
+        }      }
+      
+      // Now that user is authenticated, reload cloud provider configuration
+      // This will now have access to the secure configuration
+      await loadDefaultCloudProvider();
       
       // Note: No need to explicitly call fetchUserPhoto here, as it will be triggered by the useEffect
     } catch (error) {
@@ -478,6 +460,21 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
       throw error; // Re-throw to let the caller handle it
     }
   };
+
+  // Add welcome message when authentication and LLM become available
+  useEffect(() => {
+    if (authToken && chatAvailable && messages.length === 0) {
+      console.log('🎉 Adding welcome message: authToken=true, chatAvailable=true, messages.length=0');
+      const welcomeMessage: ChatMessage = {
+        id: 'welcome',
+        role: 'assistant',
+        content: `Welcome to EntraPulse Lite! I'm your Microsoft Entra assistant. I can help you query your Microsoft Graph data, understand identity concepts, and analyze your directory structure. What would you like to explore?`,
+        timestamp: new Date(),
+      };
+      setMessages([welcomeMessage]);
+      console.log('✅ Welcome message added via useEffect');
+    }
+  }, [authToken, chatAvailable, messages.length]);
 
   if (!authToken) {
     return (
@@ -797,7 +794,13 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
                           remarkPlugins={[remarkGfm]}
                           components={{
                             // Override code component to ensure proper wrapping
-                            code: ({node, inline, className, children, ...props}) => {
+                            code: ({node, inline, className, children, ...props}: {
+                              node?: any;
+                              inline?: boolean;
+                              className?: string;
+                              children?: React.ReactNode;
+                              [key: string]: any;
+                            }) => {
                               const match = /language-(\w+)/.exec(className || '')
                               return !inline && match ? (
                                 <pre style={{ overflowX: 'auto', maxWidth: '100%' }}>

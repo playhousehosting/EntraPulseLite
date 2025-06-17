@@ -565,3 +565,46 @@ The following items represent potential enhancements and features that could be 
 - [Troubleshooting](TROUBLESHOOTING.md)
 
 ### Development Documentation
+
+## 🚨 Critical Issues Fixed - Quick Reference
+
+This project has undergone several critical fixes for authentication, UI state synchronization, and security issues. Use this index to quickly find the relevant documentation:
+
+### Authentication & UI State Issues
+| Issue | Document | Description |
+|-------|----------|-------------|
+| **UI doesn't update after auth** | `CRITICAL-UI-STATE-FIX.md` | Missing IPC security configuration preventing event handling |
+| **Infinite loop during login** | `EMERGENCY-FIX-INFINITE-LOOP.md` | Event cascade causing UI freeze and excessive logging |
+| **Infinite loop (complete fix)** | `INFINITE-LOOP-FIX-COMPLETE.md` | Final solution with event notification control |
+| **UI state synchronization** | `UI-STATE-SYNCHRONIZATION-FIX.md` | Comprehensive data flow fix between components |
+
+### Security Issues
+| Issue | Document | Description |
+|-------|----------|-------------|
+| **Config exposed before auth** | `TROUBLESHOOTING.md` | Prevented sensitive data exposure during startup |
+| **Additional security issues** | `SECURITY-FIX-UPDATE.md` | Extended fixes for ConfigService and polling security |
+
+### Testing & Validation
+| Purpose | Script | Description |
+|---------|--------|-------------|
+| **Configuration persistence** | `scripts/test-azure-openai-persistence.js` | Tests Azure OpenAI URL persistence |
+| **Basic persistence logic** | `scripts/test-simple-persistence.js` | Tests configuration serialization logic |
+
+### Quick Recovery Commands
+
+If you encounter issues during development:
+
+```typescript
+// Clear authentication and reload
+await window.electronAPI.auth.logout();
+await window.electronAPI.config.getLLMConfig();
+
+// Force LLM status check
+await window.electronAPI.llm.isLocalAvailable();
+
+// Reset all configuration
+await window.electronAPI.config.clearCache();
+location.reload();
+```
+
+See `TROUBLESHOOTING.md` for comprehensive issue resolution guide.

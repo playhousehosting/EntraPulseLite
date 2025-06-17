@@ -10,9 +10,10 @@ import { EnhancedSettingsDialog } from './components/EnhancedSettingsDialog';
 import { AboutDialog } from './components/AboutDialog';
 import { LLMConfig } from '../types';
 import { VERSION } from '../shared/version';
-import { LLMStatusProvider } from './context/LLMStatusContext';
+import { LLMStatusProvider, useLLMStatus } from './context/LLMStatusContext';
 
-export const App: React.FC = () => {
+// Inner App component that uses LLM status context
+const AppContent: React.FC = () => {
   const [darkMode, setDarkMode] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -25,6 +26,9 @@ export const App: React.FC = () => {
     apiKey: '',
     preferLocal: false
   });
+
+  // Access LLM status context
+  const { forceCheck } = useLLMStatus();
 
   // Create dynamic theme based on mode
   const theme = createTheme({
@@ -44,13 +48,33 @@ export const App: React.FC = () => {
     typography: {
       fontFamily: 'Segoe UI, system-ui, sans-serif',
     },
-  });
-  useEffect(() => {
+  });  useEffect(() => {
     // Check authentication status on app load
     checkAuthStatus();
     // Load saved LLM configuration
-    loadLLMConfig();
-  }, []);
+    loadLLMConfig();    // Listen for authentication configuration availability
+    const handleConfigurationAvailable = (event: any, data: any) => {
+      console.log('🔄 [App.tsx] Configuration available - reloading LLM config and forcing status check');
+      // Reload configuration now that authentication is verified
+      loadLLMConfig();
+      // Also update authentication status
+      checkAuthStatus();
+      // Force LLM status check through the context
+      forceCheck();
+    };
+
+    // Add the IPC listener using the exposed API
+    const electronAPI = window.electronAPI as any;
+    if (electronAPI?.on) {
+      electronAPI.on('auth:configurationAvailable', handleConfigurationAvailable);
+    }
+
+    // Cleanup function to remove the listener
+    return () => {
+      if (electronAPI?.removeListener) {
+        electronAPI.removeListener('auth:configurationAvailable', handleConfigurationAvailable);      }
+    };
+  }, [forceCheck]);
 
   const checkAuthStatus = async () => {
     try {
@@ -60,16 +84,14 @@ export const App: React.FC = () => {
       console.log('Not authenticated:', error);
       setIsAuthenticated(false);
     }
-  };
-
-  const loadLLMConfig = async () => {
+  };  const loadLLMConfig = async () => {
     try {
       const savedConfig = await window.electronAPI?.config?.getLLMConfig();
       if (savedConfig) {
         setLlmConfig(savedConfig);
-      }
-    } catch (error) {
-      console.log('No saved LLM config, using defaults:', error);
+        console.log('🔍 [App.tsx] LLM config updated:', savedConfig?.provider);
+      }    } catch (error) {
+      console.log('🔍 [App.tsx] No LLM config available:', error);
     }
   };
 
@@ -112,18 +134,20 @@ export const App: React.FC = () => {
       });
     } catch (error) {
       console.error('Failed to save LLM configuration:', error);
-    }
-  };
+    }  };
+  
   return (
-    <LLMStatusProvider pollingInterval={5000}> {/* Poll every 5 seconds */}
-      <ThemeProvider theme={theme}>
-        <Box sx={{ 
-          display: 'flex', 
-          flexDirection: 'column', 
-          height: '100vh',
-          bgcolor: 'background.default' 
-        }}>{/* App Bar */}        <AppBar position="static" elevation={1}>
-          <Toolbar>            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+    <ThemeProvider theme={theme}>
+      <Box sx={{ 
+        display: 'flex', 
+        flexDirection: 'column', 
+        height: '100vh',
+        bgcolor: 'background.default' 
+      }}>
+        {/* App Bar */}
+        <AppBar position="static" elevation={1}>
+          <Toolbar>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <AppIcon size={32} sx={{ marginRight: 1 }} />
               <Box>
                 <Typography variant="h6" component="div">
@@ -180,21 +204,36 @@ export const App: React.FC = () => {
               <InfoIcon />
             </IconButton>
           </Toolbar>
-        </AppBar>        {/* Main Content */}
+        </AppBar>
+
+        {/* Main Content */}
         <Box sx={{ flex: 1, overflow: 'hidden' }}>
           <ChatComponent />
-        </Box>        {/* Settings Dialog */}
+        </Box>
+
+        {/* Settings Dialog */}
         <EnhancedSettingsDialog
           open={settingsOpen}
           onClose={() => setSettingsOpen(false)}
           currentConfig={llmConfig}
           onSave={handleSaveSettings}
-        />        {/* About Dialog */}
+        />
+
+        {/* About Dialog */}
         <AboutDialog
           open={aboutOpen}
-          onClose={handleAboutClose}        />
+          onClose={handleAboutClose}
+        />
       </Box>
     </ThemeProvider>
+  );
+};
+
+// Main App component that provides LLM status context
+export const App: React.FC = () => {
+  return (
+    <LLMStatusProvider pollingInterval={15000}> {/* Poll every 15 seconds to prevent overload */}
+      <AppContent />
     </LLMStatusProvider>
   );
 };
