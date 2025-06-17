@@ -158,7 +158,7 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
       } else {
         console.log('❌ No authentication info available');
       }      // Check LLM availability - specifically check local LLM for the status indicator
-      const localAvailable = await window.electronAPI.llm.isLocalAvailable();
+      const localAvailable = await (window.electronAPI.llm as any).isLocalAvailable();
       setLlmAvailable(localAvailable);
       console.log('🤖 Local LLM availability:', localAvailable);
 
@@ -182,7 +182,7 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
       console.error('❌ Failed to initialize app:', error);
       setError('Failed to initialize application');
     }
-  };const handleLogin = async () => {
+  };  const handleLogin = async () => {
     try {
       setIsLoading(true);
       // Pass the redirect flow preference to the login function
@@ -193,6 +193,44 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
       setUser(currentUser);
       setError(null);
       
+      // Check if any LLM (local or cloud) is available for chat functionality
+      const anyLlmAvailable = await window.electronAPI.llm.isAvailable();
+      setChatAvailable(anyLlmAvailable);
+      
+      // Add welcome message if authentication successful and any LLM is available
+      if (token && anyLlmAvailable) {
+        const welcomeMessage: ChatMessage = {
+          id: 'welcome',
+          role: 'assistant',
+          content: `Welcome to EntraPulse Lite! I'm your Microsoft Entra assistant. I can help you query your Microsoft Graph data, understand identity concepts, and analyze your directory structure. What would you like to explore?`,
+          timestamp: new Date(),
+        };
+        setMessages([welcomeMessage]);
+        console.log('✅ Welcome message added after login');
+      }
+      
+      // Load authentication information and permissions after successful login
+      const authInfo = await window.electronAPI.auth.getAuthenticationInfo();
+      if (authInfo) {
+        console.log('📋 Authentication Info received after login:', authInfo);
+        setAuthMode(authInfo.mode);
+        
+        // Set permissions based on authentication mode and what's available
+        if (authInfo.actualPermissions && authInfo.actualPermissions.length > 0) {
+          console.log('✅ Using actual permissions from token:', authInfo.actualPermissions);
+          setCurrentPermissions(authInfo.actualPermissions);
+          setPermissionSource('actual');
+        } else if (authInfo.permissions && authInfo.permissions.length > 0) {
+          console.log('⚠️ Using configured permissions (no actual permissions found):', authInfo.permissions);
+          setCurrentPermissions(authInfo.permissions);
+          setPermissionSource('configured');
+        } else {
+          console.log('⚠️ No permissions found, using default');
+          setCurrentPermissions(['User.Read']);
+          setPermissionSource('default');
+        }
+      }
+      
       // Note: No need to explicitly call fetchUserPhoto here, as it will be triggered by the useEffect
     } catch (error) {
       console.error('Login failed:', error);
@@ -200,7 +238,7 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
     } finally {
       setIsLoading(false);
     }
-  };  const handleLogout = async () => {
+  };const handleLogout = async () => {
     try {
       if (authMode === 'client-credentials') {
         // For client credentials, just clear the UI state

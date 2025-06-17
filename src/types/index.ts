@@ -10,6 +10,7 @@ export interface User {
   jobTitle?: string;
   department?: string;
   photoUrl?: string;
+  tenantDisplayName?: string;
 }
 
 export interface AuthToken {
