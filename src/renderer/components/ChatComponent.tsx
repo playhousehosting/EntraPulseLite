@@ -389,8 +389,7 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
         return;
       }      // Make the Graph API call
       const result = await window.electronAPI.graph.query(endpoint, 'GET');
-      
-      const systemMessage: ChatMessage = {
+        const systemMessage: ChatMessage = {
         id: Date.now().toString(),
         role: 'assistant',
         content: `Successfully queried ${endpoint}:\n\`\`\`json\n${JSON.stringify(result, null, 2)}\n\`\`\``,
@@ -399,12 +398,14 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
       setMessages(prev => [...prev, systemMessage]);
       
     } catch (error: any) {
-      console.error('Graph query failed:', error);
-      const errorMessage: ChatMessage = {
+      console.error('Graph query failed:', error);      const errorMessage: ChatMessage = {
         id: Date.now().toString(),
         role: 'assistant',
         content: `Failed to query ${endpoint}: ${error.message}`,
         timestamp: new Date(),
+        metadata: {
+          isError: true // Flag to identify error messages for special styling
+        }
       };
       setMessages(prev => [...prev, errorMessage]);
     } finally {
@@ -656,9 +657,9 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
         </Box>
       </Box>      {/* Messages */}
       <Box sx={{ flex: 1, overflow: 'auto', p: 2, pb: 8, minHeight: 0 }}>
-        <List>
+        <List sx={{ width: '100%', maxWidth: '100%' }}>
           {messages.map((message) => (
-            <ListItem key={message.id} alignItems="flex-start" sx={{ mb: 2 }}>              <Box sx={{ mr: 2, mt: 0.5 }}>
+            <ListItem key={message.id} alignItems="flex-start" sx={{ mb: 2, width: '100%', maxWidth: '100%' }}><Box sx={{ mr: 2, mt: 0.5 }}>
                 {message.role === 'user' ? 
                   (user ? 
                     <UserProfileAvatar user={user} size={40} showName={false} /> : 
@@ -667,7 +668,7 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
                   <Avatar sx={{ bgcolor: 'secondary.main' }}><BotIcon /></Avatar>
                 }
               </Box>
-              <Box sx={{ flex: 1 }}>                <ListItemText
+              <Box sx={{ flex: 1, width: 'calc(100% - 56px)', maxWidth: 'calc(100% - 56px)' }}>                <ListItemText
                   primary={
                     <Box display="flex" alignItems="center" gap={1} mb={1}>
                       <Typography variant="subtitle2">
@@ -714,6 +715,15 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
                         sx={{ 
                           whiteSpace: 'pre-wrap', 
                           wordBreak: 'break-word',
+                          overflowWrap: 'anywhere', // Add better text wrapping
+                          width: '100%', // Ensure box takes full container width
+                          maxWidth: '100%', // Constrain maximum width to parent
+                          ...(message.metadata?.isError && {
+                            backgroundColor: 'rgba(211, 47, 47, 0.05)',
+                            border: '1px solid rgba(211, 47, 47, 0.1)',
+                            borderRadius: '4px',
+                            padding: '8px',
+                          }),
                           '& h1, & h2, & h3, & h4, & h5, & h6': {
                             marginTop: '1rem',
                             marginBottom: '0.5rem',
@@ -739,6 +749,8 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
                             borderRadius: '0.25rem',
                             fontSize: '0.875rem',
                             fontFamily: 'Monaco, Menlo, "Ubuntu Mono", monospace',
+                            overflowWrap: 'anywhere', // Add text wrapping for code
+                            maxWidth: '100%', // Ensure code doesn't overflow
                           },
                           '& pre': {
                             backgroundColor: 'rgba(175, 184, 193, 0.1)',
@@ -746,10 +758,12 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
                             borderRadius: '0.5rem',
                             overflow: 'auto',
                             marginBottom: '0.75rem',
+                            maxWidth: '100%', // Ensure pre doesn't overflow
                           },
                           '& pre code': {
                             backgroundColor: 'transparent',
                             padding: 0,
+                            overflowWrap: 'anywhere', // Add text wrapping for code blocks
                           },
                           '& blockquote': {
                             borderLeft: '4px solid #1976d2',
@@ -779,8 +793,38 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
                             fontStyle: 'italic',
                           },
                         }}
-                      >
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      >                        <ReactMarkdown 
+                          remarkPlugins={[remarkGfm]}
+                          components={{
+                            // Override code component to ensure proper wrapping
+                            code: ({node, inline, className, children, ...props}) => {
+                              const match = /language-(\w+)/.exec(className || '')
+                              return !inline && match ? (
+                                <pre style={{ overflowX: 'auto', maxWidth: '100%' }}>
+                                  <code 
+                                    className={className} 
+                                    style={{ 
+                                      wordBreak: 'break-all', 
+                                      overflowWrap: 'anywhere',
+                                      whiteSpace: 'pre-wrap'
+                                    }}
+                                    {...props}
+                                  >
+                                    {children}
+                                  </code>
+                                </pre>
+                              ) : (
+                                <code 
+                                  className={className} 
+                                  style={{ wordBreak: 'break-all', overflowWrap: 'anywhere' }}
+                                  {...props}
+                                >
+                                  {children}
+                                </code>
+                              )
+                            }
+                          }}
+                        >
                           {message.content}
                         </ReactMarkdown>
                       </Box>

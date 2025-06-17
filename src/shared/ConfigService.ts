@@ -232,19 +232,51 @@ export class ConfigService {
       hasExistingCloudProviders: !!preservedCloudProviders,
       existingProviderKeys: preservedCloudProviders ? Object.keys(preservedCloudProviders) : 'none',
       existingDefaultProvider: preservedDefaultCloudProvider
-    });
-
-    // Merge cloud providers: prioritize incoming config over existing config
-    let finalCloudProviders;
+    });    // Merge cloud providers: prioritize incoming config over existing config
+    let finalCloudProviders: LLMConfig['cloudProviders'] = {};
+    
     if (config.cloudProviders && Object.keys(config.cloudProviders).length > 0) {
       // If incoming config has cloud providers, use them (preserving existing ones that aren't overwritten)
-      finalCloudProviders = {
-        ...preservedCloudProviders,  // Start with existing
-        ...config.cloudProviders     // Override with new ones
-      };
+      
+      // First add preserved configs
+      if (preservedCloudProviders) {
+        Object.entries(preservedCloudProviders).forEach(([key, value]) => {
+          if (value) {
+            const providerKey = key as 'openai' | 'anthropic' | 'gemini' | 'azure-openai';
+            // Use JSON stringify/parse for deep copy to avoid reference issues
+            finalCloudProviders![providerKey] = JSON.parse(JSON.stringify(value));
+          }
+        });
+      }
+      
+      // Then add new configs (overriding existing ones)
+      Object.entries(config.cloudProviders).forEach(([key, value]) => {
+        if (value) {
+          const providerKey = key as 'openai' | 'anthropic' | 'gemini' | 'azure-openai';
+          // Use JSON stringify/parse for deep copy to avoid reference issues
+          finalCloudProviders![providerKey] = JSON.parse(JSON.stringify(value));
+            // Special handling for Azure OpenAI
+          if (key === 'azure-openai' && value.baseUrl && finalCloudProviders && finalCloudProviders[providerKey]) {
+            // Explicitly set the baseUrl again to ensure it's preserved exactly as provided
+            finalCloudProviders[providerKey].baseUrl = value.baseUrl;
+            console.log(`[ConfigService] saveLLMConfig - Azure OpenAI URL being preserved: ${finalCloudProviders[providerKey].baseUrl}`);
+          }
+        }
+      });
     } else {
-      // If incoming config has no cloud providers, preserve existing ones
-      finalCloudProviders = preservedCloudProviders;
+      // If incoming config has no cloud providers, create a deep copy of existing ones
+      if (preservedCloudProviders) {
+        Object.entries(preservedCloudProviders).forEach(([key, value]) => {
+          if (value) {
+            const providerKey = key as 'openai' | 'anthropic' | 'gemini' | 'azure-openai';
+            // Use JSON stringify/parse for deep copy to avoid reference issues
+            finalCloudProviders![providerKey] = JSON.parse(JSON.stringify(value));
+          }
+        });
+      } else {
+        // If there are no cloud providers at all, set to undefined
+        finalCloudProviders = undefined;
+      }
     }
 
     // Determine the final default cloud provider
@@ -358,11 +390,9 @@ export class ConfigService {
    */
   getLastUsedProvider(): string {
     return this.getCurrentContext().lastUsedProvider;
-  }
-  /**
+  }  /**
    * Save a cloud provider configuration
-   */
-  saveCloudProviderConfig(provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai', config: CloudLLMProviderConfig): void {
+   */  saveCloudProviderConfig(provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai', config: CloudLLMProviderConfig): void {
     console.log(`[ConfigService] Saving cloud provider config for ${provider}:`, {
       hasApiKey: !!config.apiKey,
       model: config.model,
@@ -371,6 +401,19 @@ export class ConfigService {
       userKey: this.currentUserKey
     });
     
+    // Special handling for Azure OpenAI to ensure the full URL is saved
+    if (provider === 'azure-openai' && config.baseUrl) {
+      // Make sure we're saving the complete URL (not just the base)
+      console.log(`[ConfigService] Azure OpenAI URL before save: "${config.baseUrl}"`);
+      
+      // Validate the URL has the essential components
+      if (!config.baseUrl.includes('/chat/completions') || 
+          !config.baseUrl.includes('api-version=') ||
+          !config.baseUrl.includes('/deployments/')) {
+        console.warn(`[ConfigService] Warning: Azure OpenAI URL may not be complete: ${config.baseUrl}`);
+      }
+    }
+    
     const currentConfig = this.getLLMConfig();
     
     // Initialize cloudProviders if it doesn't exist
@@ -378,8 +421,27 @@ export class ConfigService {
       currentConfig.cloudProviders = {};
     }
     
-    // Save the cloud provider config
-    currentConfig.cloudProviders[provider] = config;
+    // Create a deep copy of the config to avoid potential reference issues
+    const configCopy: CloudLLMProviderConfig = JSON.parse(JSON.stringify({
+      ...config,
+      provider: config.provider,
+      model: config.model,
+      apiKey: config.apiKey,
+      baseUrl: config.baseUrl,
+      temperature: config.temperature,
+      maxTokens: config.maxTokens,
+      organization: config.organization
+    }));
+    
+    // Extra protection for Azure OpenAI URL to ensure it's not truncated
+    if (provider === 'azure-openai' && config.baseUrl) {
+      // Explicitly set the baseUrl again to ensure it's preserved exactly as provided
+      configCopy.baseUrl = config.baseUrl;
+      console.log(`[ConfigService] Azure OpenAI URL explicitly preserved as: "${configCopy.baseUrl}"`);
+    }
+    
+    // Save the cloud provider config - ensure it's a completely new object
+    currentConfig.cloudProviders[provider] = configCopy;
     
     // If this is the first cloud provider or no default is set, make it the default
     if (!currentConfig.defaultCloudProvider) {
@@ -389,16 +451,27 @@ export class ConfigService {
     console.log(`[ConfigService] Before saving, cloudProviders:`, Object.keys(currentConfig.cloudProviders));
     console.log(`[ConfigService] Default provider:`, currentConfig.defaultCloudProvider);
     
+    if (provider === 'azure-openai' && currentConfig.cloudProviders[provider]) {
+      console.log(`[ConfigService] Azure OpenAI config being saved:`, {
+        baseUrl: currentConfig.cloudProviders[provider].baseUrl,
+        model: currentConfig.cloudProviders[provider].model,
+        hasApiKey: !!currentConfig.cloudProviders[provider].apiKey
+      });
+    }
+    
     this.saveLLMConfig(currentConfig);
     
     // Verify the save
     const savedConfig = this.getLLMConfig();
     console.log(`[ConfigService] After saving, verification - cloudProviders:`, Object.keys(savedConfig.cloudProviders || {}));
     console.log(`[ConfigService] After saving, verification - ${provider} config exists:`, !!savedConfig.cloudProviders?.[provider]);
-  }  /**
+    
+    if (provider === 'azure-openai' && savedConfig.cloudProviders?.[provider]) {
+      console.log(`[ConfigService] Azure OpenAI verified saved URL: "${savedConfig.cloudProviders[provider].baseUrl}"`);
+    }
+  }/**
    * Get a specific cloud provider configuration
-   */
-  getCloudProviderConfig(provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai'): CloudLLMProviderConfig | null {
+   */  getCloudProviderConfig(provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai'): CloudLLMProviderConfig | null {
     console.log(`[ConfigService] Getting cloud provider config for ${provider}`);
     
     const config = this.getLLMConfig();
@@ -411,24 +484,63 @@ export class ConfigService {
         model: result.model,
         baseUrl: result.baseUrl
       });
+      
+      // Add enhanced logging for Azure OpenAI endpoint URL
+      if (result.baseUrl) {
+        console.log(`[ConfigService] Azure OpenAI loaded full URL: "${result.baseUrl}"`);
+        
+        // Check URL format
+        if (!result.baseUrl.includes('/chat/completions')) {
+          console.warn('[ConfigService] Warning: Azure OpenAI URL is missing /chat/completions path');
+        }
+        if (!result.baseUrl.includes('api-version=')) {
+          console.warn('[ConfigService] Warning: Azure OpenAI URL is missing api-version parameter');
+        }
+        if (!result.baseUrl.includes('/deployments/')) {
+          console.warn('[ConfigService] Warning: Azure OpenAI URL is missing /deployments/ path');
+        }
+      } else {
+        console.warn('[ConfigService] Warning: Azure OpenAI config missing baseUrl');
+      }
     }
     
-    return result;
+    // Create a deep copy to avoid reference issues
+    return result ? { ...result } : null;
   }
   /**
    * Get all configured cloud providers
-   */
-  getConfiguredCloudProviders(): Array<{ provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai'; config: CloudLLMProviderConfig }> {
+   */  getConfiguredCloudProviders(): Array<{ provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai'; config: CloudLLMProviderConfig }> {
     const config = this.getLLMConfig();
     const providers: Array<{ provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai'; config: CloudLLMProviderConfig }> = [];
     
     if (config.cloudProviders) {
       Object.entries(config.cloudProviders).forEach(([provider, providerConfig]) => {
         if (providerConfig) {
+          // Create a deep copy of the config
+          const configCopy: CloudLLMProviderConfig = {
+            ...providerConfig,
+            provider: providerConfig.provider,
+            model: providerConfig.model,
+            apiKey: providerConfig.apiKey,
+            baseUrl: providerConfig.baseUrl,
+            temperature: providerConfig.temperature,
+            maxTokens: providerConfig.maxTokens,
+            organization: providerConfig.organization
+          };
+          
           providers.push({
             provider: provider as 'openai' | 'anthropic' | 'gemini' | 'azure-openai',
-            config: providerConfig
+            config: configCopy
           });
+          
+          // Special debug logging for Azure OpenAI
+          if (provider === 'azure-openai') {
+            console.log(`[ConfigService] getConfiguredCloudProviders - Azure OpenAI loaded:`, {
+              baseUrl: configCopy.baseUrl,
+              model: configCopy.model,
+              hasApiKey: !!configCopy.apiKey
+            });
+          }
         }
       });
     }

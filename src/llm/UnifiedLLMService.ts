@@ -23,15 +23,27 @@ export class UnifiedLLMService {
         throw new Error(`baseUrl is required for ${config.provider}`);
       }
       this.localService = new LLMService(config);    } else if (config.provider === 'openai' || config.provider === 'anthropic' || config.provider === 'gemini' || config.provider === 'azure-openai') {
-      if (!config.apiKey || config.apiKey.trim() === '') {
+      // Get the cloud provider specific configuration
+      const cloudProviderConfig = this.getCloudProviderConfig(config, config.provider);
+      
+      if (!cloudProviderConfig) {
+        console.warn(`⚠️  ${config.provider} provider selected but no cloud provider configuration found. Service will be unavailable.`);
+        this.cloudService = null;
+      } else if (!cloudProviderConfig.apiKey || cloudProviderConfig.apiKey.trim() === '') {
         console.warn(`⚠️  ${config.provider} provider selected but no API key configured. Service will be unavailable until API key is provided.`);
         this.cloudService = null; // Will be initialized when API key is provided
-      } else if (config.provider === 'azure-openai' && (!config.baseUrl || config.baseUrl.trim() === '')) {
+      } else if (config.provider === 'azure-openai' && (!cloudProviderConfig.baseUrl || cloudProviderConfig.baseUrl.trim() === '')) {
         console.warn(`⚠️  Azure OpenAI provider selected but no baseUrl configured. Service will be unavailable until baseUrl is provided.`);
         this.cloudService = null;
       } else {
         // Pass MCP client to CloudLLMService for enhanced model discovery
-        this.cloudService = new CloudLLMService(config as any, this.mcpClient);
+        console.log(`[UnifiedLLMService] Initializing CloudLLMService with ${config.provider} config:`, {
+          provider: cloudProviderConfig.provider,
+          model: cloudProviderConfig.model,
+          hasApiKey: !!cloudProviderConfig.apiKey,
+          baseUrl: cloudProviderConfig.baseUrl
+        });
+        this.cloudService = new CloudLLMService(cloudProviderConfig as any, this.mcpClient);
       }
     } else {
       throw new Error(`Unsupported LLM provider: ${config.provider}`);
@@ -379,19 +391,60 @@ export class UnifiedLLMService {
   updateApiKey(apiKey: string): void {
     if (!this.isCloudProvider()) {
       throw new Error('updateApiKey() is only available for cloud providers');
-    }
-
-    // Update the config
+    }    // Update the config
     this.config.apiKey = apiKey;
 
     // Reinitialize the cloud service
     if (apiKey && apiKey.trim() !== '') {
-      this.cloudService = new CloudLLMService(this.config as any, this.mcpClient);
-      console.log(`✅ ${this.config.provider} service initialized with API key`);
+      // Get the cloud provider specific configuration
+      const cloudProviderConfig = this.getCloudProviderConfig(this.config, this.config.provider);
+      
+      if (cloudProviderConfig) {
+        // Update the API key in the cloud provider config
+        cloudProviderConfig.apiKey = apiKey;
+        this.cloudService = new CloudLLMService(cloudProviderConfig as any, this.mcpClient);
+        console.log(`✅ ${this.config.provider} service initialized with API key`);
+      } else {
+        this.cloudService = null;
+        console.warn(`⚠️  No cloud provider configuration found for ${this.config.provider}`);
+      }
     } else {
       this.cloudService = null;
       console.warn(`⚠️  Empty API key provided for ${this.config.provider}`);
+    }}
+  /**
+   * Get cloud provider specific configuration
+   */
+  private getCloudProviderConfig(config: LLMConfig, provider: string): any | null {
+    // If cloudProviders section exists, get config from there
+    if (config.cloudProviders) {
+      const providerKey = provider as 'openai' | 'anthropic' | 'gemini' | 'azure-openai';
+      const providerConfig = config.cloudProviders[providerKey];
+      
+      if (providerConfig) {
+        console.log(`[UnifiedLLMService] Found cloud provider config for ${provider}:`, {
+          provider: providerConfig.provider,
+          model: providerConfig.model,
+          hasApiKey: !!providerConfig.apiKey,
+          baseUrl: providerConfig.baseUrl
+        });
+        return providerConfig;
+      }
     }
+    
+    // Fallback to root-level config (legacy compatibility)
+    if (config.apiKey) {
+      console.log(`[UnifiedLLMService] Using legacy root-level config for ${provider}:`, {
+        provider: config.provider,
+        model: config.model,
+        hasApiKey: !!config.apiKey,
+        baseUrl: config.baseUrl
+      });
+      return config;
+    }
+    
+    console.warn(`[UnifiedLLMService] No configuration found for ${provider}`);
+    return null;
   }
 
   /**

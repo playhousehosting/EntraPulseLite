@@ -41,6 +41,7 @@ export interface ChatMessage {
       timing: Record<string, number>;
       errors?: string[];
     };
+    isError?: boolean; // Flag to identify error messages for special styling
   };
 }
 

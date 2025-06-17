@@ -75,13 +75,66 @@ export const EnhancedSettingsDialog: React.FC<EnhancedSettingsDialogProps> = ({
       
       setDefaultCloudProvider(defaultProvider?.provider || null);
       
-      const providers: CloudProviderState[] = configured.map((item: { provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai'; config: CloudLLMProviderConfig }) => ({
-        provider: item.provider,
-        config: item.config,
-        isDefault: item.provider === defaultProvider?.provider
-      }));
+      console.log('📋 [CloudProviders] Loading configured providers:', configured.map((p: { provider: string }) => p.provider));
+      
+      const providers: CloudProviderState[] = configured.map((item: { provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai'; config: CloudLLMProviderConfig }) => {
+        // Make a deep copy of the config
+        const configCopy = { ...item.config };
+        
+        // Add enhanced logging for Azure OpenAI
+        if (item.provider === 'azure-openai') {
+          const baseUrl = item.config.baseUrl || '';
+          console.log('🔍 [Azure OpenAI Debug] Loaded config:', {
+            baseUrl: baseUrl,
+            model: item.config.model,
+            hasApiKey: !!item.config.apiKey,
+            isValid: baseUrl.includes('/chat/completions') && baseUrl.includes('api-version=') && baseUrl.includes('/deployments/')
+          });
+          
+          // Check URL format completeness
+          const issues = [];
+          if (!baseUrl.includes('/chat/completions')) {
+            issues.push('missing /chat/completions path');
+          }
+          if (!baseUrl.includes('api-version=')) {
+            issues.push('missing api-version parameter');
+          }
+          if (!baseUrl.includes('/deployments/')) {
+            issues.push('missing /deployments/ path');
+          }
+          
+          if (issues.length > 0) {
+            console.warn(`⚠️ [Azure OpenAI Debug] URL has issues: ${issues.join(', ')}`);
+          } else {
+            console.log('✅ [Azure OpenAI Debug] URL format is correct');
+          }
+        }
+        
+        return {
+          provider: item.provider,
+          config: configCopy,
+          isDefault: item.provider === defaultProvider?.provider
+        };
+      });
       
       setCloudProviders(providers);
+      
+      // Add additional check for Azure OpenAI provider
+      const azureOpenAIProvider = providers.find(p => p.provider === 'azure-openai');
+      if (azureOpenAIProvider) {
+        console.log('🔁 [Azure OpenAI Debug] Provider found in state after loading:', {
+          baseUrl: azureOpenAIProvider.config.baseUrl,
+          model: azureOpenAIProvider.config.model
+        });
+        
+        // Additional validation for loaded URL
+        if (azureOpenAIProvider.config.baseUrl) {
+          const url = azureOpenAIProvider.config.baseUrl;
+          console.log(`📝 [Azure OpenAI Debug] Full URL loaded: "${url}"`);
+        } else {
+          console.warn('⚠️ [Azure OpenAI Debug] No baseUrl found for Azure OpenAI provider');
+        }
+      }
     } catch (error) {
       console.error('Failed to load cloud providers:', error);
     }
@@ -136,9 +189,80 @@ export const EnhancedSettingsDialog: React.FC<EnhancedSettingsDialogProps> = ({
     }
   };  const handleSaveCloudProvider = async (provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai', providerConfig: CloudLLMProviderConfig) => {
     try {
-      console.log('🔄 Saving cloud provider config:', { provider, config: { ...providerConfig, apiKey: '[REDACTED]' } });
+      // Enhanced logging for Azure OpenAI
+      if (provider === 'azure-openai') {
+        console.log('🔄 [Azure OpenAI Debug] Saving Azure OpenAI config:', { 
+          baseUrl: providerConfig.baseUrl,
+          model: providerConfig.model,
+          hasApiKey: !!providerConfig.apiKey,
+          hasCorrectUrlFormat: providerConfig.baseUrl?.includes('/chat/completions') && providerConfig.baseUrl?.includes('api-version=')
+        });
+      } else {
+        console.log('🔄 Saving cloud provider config:', { provider, config: { ...providerConfig, apiKey: '[REDACTED]' } });
+      }
       
-      const electronAPI = window.electronAPI as any; // Temporary type assertion
+      const electronAPI = window.electronAPI as any; // Temporary type assertion      // For Azure OpenAI, enforce URL format before saving
+      if (provider === 'azure-openai') {
+        // Validate and fix URL if needed
+        if (providerConfig.baseUrl) {
+          // Trim whitespace and normalize URL
+          const cleanUrl = providerConfig.baseUrl.trim();
+          console.log(`🔍 [Azure OpenAI Debug] Processing URL for save: "${cleanUrl}"`);
+          
+          // Check if URL has all required components
+          const hasDeploymentPath = cleanUrl.includes('/deployments/');
+          const hasChatCompletions = cleanUrl.includes('/chat/completions');
+          const hasApiVersion = cleanUrl.includes('api-version=');
+          const isAzureUrl = cleanUrl.includes('openai.azure.com');
+          
+          if (!isAzureUrl) {
+            alert('Invalid Azure OpenAI URL. Must contain "openai.azure.com"');
+            return;
+          }
+          
+          // If URL is incomplete, build complete URL
+          if (!hasDeploymentPath || !hasChatCompletions || !hasApiVersion) {
+            console.log(`🔧 [Azure OpenAI Debug] URL is incomplete, building complete version...`);
+            
+            // Start with base URL (remove trailing slashes)
+            let baseEndpoint = cleanUrl.replace(/\/+$/, '');
+            
+            // Remove any existing incomplete paths to start fresh
+            if (baseEndpoint.includes('/openai/deployments/')) {
+              baseEndpoint = baseEndpoint.split('/openai/deployments/')[0];
+            } else if (baseEndpoint.includes('/openai/')) {
+              baseEndpoint = baseEndpoint.split('/openai/')[0];
+            }
+            
+            // Build complete URL with all required components
+            const completeUrl = `${baseEndpoint}/openai/deployments/${providerConfig.model}/chat/completions?api-version=2025-01-01-preview`;
+            
+            console.log(`🔧 [Azure OpenAI Debug] Built complete URL: "${completeUrl}"`);
+            
+            // Confirm with user
+            const userConfirm = confirm(`To ensure proper functionality, the Azure OpenAI endpoint URL will be formatted as:\n\n${completeUrl}\n\nContinue with this URL?`);
+            
+            if (!userConfirm) {
+              console.log(`❌ [Azure OpenAI Debug] User cancelled URL modification`);
+              return;
+            }
+            
+            // Update the URL with complete version
+            providerConfig.baseUrl = completeUrl;
+          } else {
+            console.log(`✅ [Azure OpenAI Debug] URL is already correctly formatted: ${cleanUrl}`);
+            // Ensure we use the cleaned URL
+            providerConfig.baseUrl = cleanUrl;
+          }
+          
+          // Final verification log
+          console.log(`✅ [Azure OpenAI Debug] Final URL being saved: "${providerConfig.baseUrl}"`);
+        } else {
+          alert('Azure OpenAI endpoint URL is required');
+          return;
+        }
+      }
+      
       await electronAPI.config.saveCloudProviderConfig(provider, providerConfig);
       
       console.log('✅ Cloud provider config saved successfully');
@@ -149,7 +273,7 @@ export const EnhancedSettingsDialog: React.FC<EnhancedSettingsDialogProps> = ({
       // Auto-fetch models if API key is provided
       if (providerConfig.apiKey) {
         await fetchAvailableModels(provider, providerConfig.apiKey);
-      }    } catch (error) {
+      }} catch (error) {
       console.error('❌ Failed to save cloud provider config:', error);
       const errorMessage = error instanceof Error ? error.message : String(error);
       alert(`Failed to save ${provider} configuration: ${errorMessage}`);
@@ -218,7 +342,7 @@ export const EnhancedSettingsDialog: React.FC<EnhancedSettingsDialogProps> = ({
       case 'azure-openai': return 'gpt-4o';
       default: return '';
     }
-  };  const handleSave = () => {
+  };  const handleSave = async () => {
     let finalConfig = { ...config };
     
     console.log('[EnhancedSettingsDialog] handleSave - Original config:', {
@@ -226,7 +350,24 @@ export const EnhancedSettingsDialog: React.FC<EnhancedSettingsDialogProps> = ({
       temperature: config.temperature,
       maxTokens: config.maxTokens,
       preferLocal: config.preferLocal,
-      model: config.model
+      model: config.model,
+      hasCloudProviders: !!config.cloudProviders,
+      cloudProviderKeys: config.cloudProviders ? Object.keys(config.cloudProviders) : 'none'
+    });
+    
+    // Get current cloud provider configurations to include in final config
+    const electronAPI = window.electronAPI as any;
+    const currentCloudProviders = await electronAPI.config.getConfiguredCloudProviders();
+    
+    // Convert to the cloudProviders format
+    const cloudProvidersConfig: Record<string, CloudLLMProviderConfig> = {};
+    currentCloudProviders.forEach((item: { provider: string; config: CloudLLMProviderConfig }) => {
+      cloudProvidersConfig[item.provider] = { ...item.config };
+    });
+    
+    console.log('[EnhancedSettingsDialog] handleSave - Current cloud providers:', {
+      providers: Object.keys(cloudProvidersConfig),
+      azureOpenAIUrl: cloudProvidersConfig['azure-openai']?.baseUrl
     });
     
     // For local providers (ollama, lmstudio), use the config as-is
@@ -236,27 +377,26 @@ export const EnhancedSettingsDialog: React.FC<EnhancedSettingsDialogProps> = ({
         // Ensure these values are preserved for local providers
         temperature: config.temperature || 0.2,
         maxTokens: config.maxTokens || 4096,
-        preferLocal: config.preferLocal || false
+        preferLocal: config.preferLocal || false,
+        // Include current cloud providers
+        cloudProviders: cloudProvidersConfig
       };
     } else {
-      // For cloud providers, merge with cloud provider configuration but prioritize user settings
-      if (defaultCloudProvider && config.provider === defaultCloudProvider) {
-        const cloudProviderConfig = cloudProviders.find(p => p.provider === defaultCloudProvider)?.config;
-        if (cloudProviderConfig) {
-          finalConfig = {
-            ...finalConfig,
-            // Use cloud provider credentials
-            apiKey: cloudProviderConfig.apiKey,
-            baseUrl: cloudProviderConfig.baseUrl,
-            organization: cloudProviderConfig.organization,
-            // Prioritize user-modified values, fallback to cloud provider or defaults
-            model: config.model || cloudProviderConfig.model,
-            temperature: config.temperature !== undefined ? config.temperature : (cloudProviderConfig.temperature || 0.2),
-            maxTokens: config.maxTokens !== undefined ? config.maxTokens : (cloudProviderConfig.maxTokens || 4096),
-            preferLocal: config.preferLocal !== undefined ? config.preferLocal : false
-          };
-        }
-      }
+      // For cloud providers, DON'T set root-level baseUrl/apiKey
+      // The cloud provider configs should remain in the cloudProviders section
+      finalConfig = {
+        ...config,
+        // Remove any root-level cloud provider credentials
+        baseUrl: undefined,
+        apiKey: undefined,
+        organization: undefined,
+        // Keep user settings
+        temperature: config.temperature || 0.2,
+        maxTokens: config.maxTokens || 4096,
+        preferLocal: config.preferLocal || false,
+        // Include current cloud providers
+        cloudProviders: cloudProvidersConfig
+      };
     }
 
     // Always include the current default cloud provider
@@ -270,7 +410,12 @@ export const EnhancedSettingsDialog: React.FC<EnhancedSettingsDialogProps> = ({
       maxTokens: finalConfig.maxTokens,
       preferLocal: finalConfig.preferLocal,
       model: finalConfig.model,
-      defaultCloudProvider: finalConfig.defaultCloudProvider
+      defaultCloudProvider: finalConfig.defaultCloudProvider,
+      hasRootLevelBaseUrl: !!finalConfig.baseUrl,
+      hasRootLevelApiKey: !!finalConfig.apiKey,
+      hasCloudProviders: !!finalConfig.cloudProviders,
+      cloudProviderKeys: finalConfig.cloudProviders ? Object.keys(finalConfig.cloudProviders) : 'none',
+      azureOpenAIUrl: finalConfig.cloudProviders?.['azure-openai']?.baseUrl
     });
 
     onSave(finalConfig);
@@ -550,16 +695,29 @@ const CloudProviderCard: React.FC<CloudProviderCardProps> = ({
       case 'azure-openai': return 'Azure OpenAI';
       default: return provider;
     }
-  };
-  const handleSave = () => {
+  };  const handleSave = () => {
     // Validation for Azure OpenAI
     if (provider === 'azure-openai') {
       if (!localConfig.baseUrl || localConfig.baseUrl.trim() === '') {
         alert('Azure OpenAI endpoint URL is required');
         return;
       }
+      
+      // Validate the URL has the correct format
       if (!localConfig.baseUrl.includes('openai.azure.com')) {
         alert('Please enter a valid Azure OpenAI endpoint URL (should contain "openai.azure.com")');
+        return;
+      }
+      
+      // Validate it has the required chat/completions path and API version
+      if (!localConfig.baseUrl.includes('/chat/completions') || !localConfig.baseUrl.includes('api-version=')) {
+        alert('Please enter the full Azure OpenAI endpoint URL including deployment name and API version.\n\nFormat: https://your-resource.openai.azure.com/openai/deployments/your-deployment-name/chat/completions?api-version=2025-01-01-preview');
+        return;
+      }
+      
+      // Validate it has the deployment name
+      if (!localConfig.baseUrl.includes('/deployments/')) {
+        alert('Please enter a valid Azure OpenAI endpoint URL with deployment name.\n\nFormat: https://your-resource.openai.azure.com/openai/deployments/your-deployment-name/chat/completions?api-version=2025-01-01-preview');
         return;
       }
     }
@@ -569,8 +727,77 @@ const CloudProviderCard: React.FC<CloudProviderCardProps> = ({
       alert('API Key is required');
       return;
     }
+      // For Azure OpenAI, make a final check and fix of the URL
+    if (provider === 'azure-openai' && localConfig.baseUrl) {
+      // Add deep logging
+      console.log(`🔍 [Azure OpenAI Debug] Final save - processing URL: "${localConfig.baseUrl}"`);
+      
+      // Always trim the URL to avoid whitespace issues
+      const cleanUrl = localConfig.baseUrl.trim();
+      
+      // Validate URL format
+      const isAzureUrl = cleanUrl.includes('openai.azure.com');
+      const hasDeploymentPath = cleanUrl.includes('/deployments/');
+      const hasChatCompletions = cleanUrl.includes('/chat/completions');
+      const hasApiVersion = cleanUrl.includes('api-version=');
+      
+      if (!isAzureUrl) {
+        alert('Invalid Azure OpenAI URL. Must contain "openai.azure.com"');
+        return;
+      }
+      
+      // Ensure URL is complete
+      if (!hasDeploymentPath || !hasChatCompletions || !hasApiVersion) {
+        console.log(`🔧 [Azure OpenAI Debug] URL needs completion during final save`);
+        
+        // Start with base URL (remove trailing slashes)
+        let baseEndpoint = cleanUrl.replace(/\/+$/, '');
+        
+        // Remove any existing incomplete paths to start fresh
+        if (baseEndpoint.includes('/openai/deployments/')) {
+          baseEndpoint = baseEndpoint.split('/openai/deployments/')[0];
+        } else if (baseEndpoint.includes('/openai/')) {
+          baseEndpoint = baseEndpoint.split('/openai/')[0];
+        }
+        
+        // Build complete URL
+        const completeUrl = `${baseEndpoint}/openai/deployments/${localConfig.model}/chat/completions?api-version=2025-01-01-preview`;
+        
+        console.log(`🔧 [Azure OpenAI Debug] Final save - built complete URL: "${completeUrl}"`);
+        
+        // Ask user to confirm modified URL
+        const userConfirm = confirm(`To ensure proper functionality, the endpoint URL will be formatted as:\n\n${completeUrl}\n\nContinue with this URL?`);
+        
+        if (!userConfirm) {
+          console.log('❌ [Azure OpenAI Debug] User cancelled URL modification in final save');
+          return;
+        }
+        
+        // Update the URL
+        localConfig.baseUrl = completeUrl;
+      } else {
+        // URL is already complete, just ensure it's clean
+        localConfig.baseUrl = cleanUrl;
+      }
+      
+      // Create a deep copy to ensure we're not saving a reference
+      const configToSave = JSON.parse(JSON.stringify({
+        provider: localConfig.provider,
+        model: localConfig.model,
+        apiKey: localConfig.apiKey,
+        baseUrl: localConfig.baseUrl,
+        temperature: localConfig.temperature,
+        maxTokens: localConfig.maxTokens,
+        organization: localConfig.organization
+      }));
+      
+      console.log(`✅ [Azure OpenAI Debug] Final URL being saved in main save: "${configToSave.baseUrl}"`);
+      onSave(configToSave);
+      return;
+    }
     
-    onSave(localConfig);
+    // For non-Azure OpenAI providers
+    onSave({...localConfig});
   };
   const handleApiKeyChange = (apiKey: string) => {
     setLocalConfig({ ...localConfig, apiKey });
@@ -649,19 +876,49 @@ const CloudProviderCard: React.FC<CloudProviderCardProps> = ({
             size="small"
             sx={{ mb: 1 }}
           />
-        )}
-
-        {provider === 'azure-openai' && (
+        )}        {provider === 'azure-openai' && (
           <TextField
             fullWidth
             label="Azure OpenAI Endpoint"
             value={localConfig.baseUrl || ''}
-            onChange={(e) => setLocalConfig({ ...localConfig, baseUrl: e.target.value })}
-            placeholder="https://your-resource.openai.azure.com/"
+            onChange={(e) => {
+              const newUrl = e.target.value;
+              console.log(`🔍 [Azure OpenAI Debug] URL input changed: "${newUrl}"`);
+              setLocalConfig({ ...localConfig, baseUrl: newUrl });
+            }}
+            onBlur={(e) => {
+              // Validate and auto-correct URL on blur
+              const url = e.target.value.trim();
+              if (url && !url.includes('/chat/completions')) {
+                console.log(`⚠️ [Azure OpenAI Debug] Incomplete URL detected on blur: "${url}"`);
+                
+                // Auto-suggest complete URL format
+                const isAzureUrl = url.includes('openai.azure.com');
+                if (isAzureUrl && localConfig.model) {
+                  let correctedUrl = url.replace(/\/+$/, ''); // Remove trailing slashes
+                  
+                  // Add missing components
+                  if (!correctedUrl.includes('/deployments/')) {
+                    correctedUrl = `${correctedUrl}/openai/deployments/${localConfig.model}`;
+                  }
+                  if (!correctedUrl.includes('/chat/completions')) {
+                    correctedUrl = `${correctedUrl}/chat/completions`;
+                  }
+                  if (!correctedUrl.includes('api-version=')) {
+                    const separator = correctedUrl.includes('?') ? '&' : '?';
+                    correctedUrl = `${correctedUrl}${separator}api-version=2025-01-01-preview`;
+                  }
+                  
+                  console.log(`🔧 [Azure OpenAI Debug] Auto-correcting URL to: "${correctedUrl}"`);
+                  setLocalConfig({ ...localConfig, baseUrl: correctedUrl });
+                }
+              }
+            }}
+            placeholder="https://your-resource.openai.azure.com/openai/deployments/your-deployment-name/chat/completions?api-version=2025-01-01-preview"
             size="small"
             sx={{ mb: 1 }}
             required
-            helperText="Your Azure OpenAI resource endpoint URL"
+            helperText="Full Azure OpenAI endpoint URL including deployment name and api-version (e.g., https://your-resource.openai.azure.com/openai/deployments/gpt-4o/chat/completions?api-version=2025-01-01-preview)"
           />
         )}
 

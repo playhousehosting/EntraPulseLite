@@ -1,5 +1,5 @@
 // Cloud LLM service for OpenAI/Anthropic integration
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
 import { LLMConfig, ChatMessage } from '../types';
 import { MCPClient } from '../mcp/clients';
 import { StandardizedPrompts } from '../shared/StandardizedPrompts';
@@ -20,13 +20,95 @@ interface CloudLLMConfig extends LLMConfig {
   organization?: string; // For OpenAI
 }
 
+interface RetryOptions {
+  maxRetries: number;
+  baseDelay: number; // in milliseconds
+  maxDelay: number; // in milliseconds
+  backoffFactor: number;
+}
+
 export class CloudLLMService {
   private config: CloudLLMConfig;
   private mcpClient?: MCPClient;
+  private defaultRetryOptions: RetryOptions = {
+    maxRetries: 3,
+    baseDelay: 1000, // 1 second
+    maxDelay: 10000, // 10 seconds
+    backoffFactor: 2
+  };
 
   constructor(config: CloudLLMConfig, mcpClient?: MCPClient) {
     this.config = config;
     this.mcpClient = mcpClient;
+  }
+
+  /**
+   * Helper method to execute a function with retry logic and exponential backoff
+   */
+  private async retryWithBackoff<T>(
+    operation: () => Promise<T>,
+    context: string,
+    options: RetryOptions = this.defaultRetryOptions
+  ): Promise<T> {
+    let lastError: Error;
+    
+    for (let attempt = 0; attempt <= options.maxRetries; attempt++) {
+      try {
+        return await operation();
+      } catch (error) {
+        lastError = error as Error;
+        
+        // Check if this is a retryable error
+        const isRetryable = this.isRetryableError(error);
+        
+        if (!isRetryable || attempt === options.maxRetries) {
+          console.error(`${context} failed after ${attempt + 1} attempts:`, error);
+          throw lastError;
+        }
+        
+        // Calculate delay with exponential backoff
+        const delay = Math.min(
+          options.baseDelay * Math.pow(options.backoffFactor, attempt),
+          options.maxDelay
+        );
+        
+        console.warn(`${context} attempt ${attempt + 1} failed, retrying in ${delay}ms:`, error instanceof Error ? error.message : error);
+        
+        // Wait before retrying
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+    
+    throw lastError!;
+  }
+
+  /**
+   * Determine if an error is retryable (network issues, timeouts, etc.)
+   */
+  private isRetryableError(error: any): boolean {
+    if (axios.isAxiosError(error)) {
+      // Network errors (connection refused, timeout, etc.)
+      if (error.code === 'ECONNRESET' || 
+          error.code === 'ECONNREFUSED' || 
+          error.code === 'ETIMEDOUT' ||
+          error.code === 'ENOTFOUND' ||
+          error.message.includes('socket hang up') ||
+          error.message.includes('timeout')) {
+        return true;
+      }
+      
+      // Server errors (5xx) are often retryable
+      if (error.response && error.response.status >= 500) {
+        return true;
+      }
+      
+      // Rate limiting (429) is retryable
+      if (error.response && error.response.status === 429) {
+        return true;
+      }
+    }
+    
+    return false;
   }
   async chat(messages: ChatMessage[]): Promise<string> {
     try {
@@ -85,20 +167,45 @@ export class CloudLLMService {
           },
           timeout: 10000,
         });
-        return response.status === 200;
-      } else if (this.config.provider === 'azure-openai') {
-        // Test Azure OpenAI with a simple chat completion call
+        return response.status === 200;      } else if (this.config.provider === 'azure-openai') {
+        // Test Azure OpenAI with a simple connectivity check
         if (!this.config.baseUrl) {
-          console.error('Azure OpenAI requires baseUrl');
+          console.error('Azure OpenAI requires full endpoint URL');
           return false;
         }
-        const response = await axios.get(`${this.config.baseUrl}/openai/models?api-version=2024-02-01`, {
-          headers: {
-            'api-key': this.config.apiKey
-          },
-          timeout: 5000,
-        });
-        return response.status === 200;
+
+        try {
+          // Extract the base URL from the full endpoint
+          const urlObj = new URL(this.config.baseUrl);
+          const baseEndpoint = `${urlObj.protocol}//${urlObj.hostname}`;
+          
+          console.log(`Testing Azure OpenAI connectivity with base endpoint: ${baseEndpoint}`);
+          console.log(`Full URL provided: ${this.config.baseUrl}`);
+          
+          // Always check models endpoint for availability, regardless of the chat URL format
+          const modelsEndpoint = `${baseEndpoint}/openai/models?api-version=2025-01-01-preview`;
+          console.log(`Checking Azure OpenAI models at: ${modelsEndpoint}`);
+          
+          const response = await axios.get(modelsEndpoint, {
+            headers: {
+              'api-key': this.config.apiKey
+            },
+            timeout: 5000,
+          });
+          
+          console.log(`Azure OpenAI models check successful: Status ${response.status}`);
+          
+          // Validate that the full URL follows the expected format for chat completions
+          if (!this.config.baseUrl.includes('/chat/completions')) {
+            console.warn(`⚠️ Azure OpenAI URL may be incomplete. The URL should include '/chat/completions' and an API version.`);
+            console.warn(`Example format: https://your-endpoint.openai.azure.com/openai/deployments/your-deployment-name/chat/completions?api-version=2024-02-01`);
+          }
+          
+          return response.status === 200;
+        } catch (error) {
+          console.error(`Azure OpenAI availability check failed with URL ${this.config.baseUrl}:`, error);
+          return false;
+        }
       }
       return false;
     } catch (error) {
@@ -118,8 +225,7 @@ export class CloudLLMService {
       
       return false;
     }
-  }
-  private async chatWithOpenAI(messages: ChatMessage[]): Promise<string> {
+  }  private async chatWithOpenAI(messages: ChatMessage[]): Promise<string> {
     const openaiMessages = messages.map(msg => ({
       role: msg.role,
       content: msg.content,
@@ -132,48 +238,135 @@ export class CloudLLMService {
     if (hasSystemPrompt) {
       // Use the provided system prompt (from EnhancedLLMService)
       fullMessages = openaiMessages;
-    } else {      // Use standardized system prompt for direct calls
-      const systemPrompt = StandardizedPrompts.getSystemPrompt(this.config.provider);      fullMessages = [
+    } else {
+      // Use standardized system prompt for direct calls
+      const systemPrompt = StandardizedPrompts.getSystemPrompt(this.config.provider);
+      fullMessages = [
         { role: 'system', content: systemPrompt },
         ...openaiMessages
       ];
-    }const response = await axios.post('https://api.openai.com/v1/chat/completions', {
-      model: this.config.model || 'gpt-4o-mini',
-      messages: fullMessages,
-      temperature: this.config.temperature || 0.1,
-      max_tokens: this.config.maxTokens || 2048,
-    }, {
-      headers: {
-        'Authorization': `Bearer ${this.config.apiKey}`,
-        'Content-Type': 'application/json',
-        'OpenAI-Organization': this.config.organization
-      }
-    });
+    }
 
-    return response.data.choices[0].message.content;
+    // Use retry logic for the actual request
+    return await this.retryWithBackoff(async () => {
+      console.log(`Making OpenAI request with model: ${this.config.model || 'gpt-4o-mini'}, temperature: ${this.config.temperature || 0.1}, max_tokens: ${this.config.maxTokens || 2048}`);
+      
+      const response = await axios.post('https://api.openai.com/v1/chat/completions', {
+        model: this.config.model || 'gpt-4o-mini',
+        messages: fullMessages,
+        temperature: this.config.temperature || 0.1,
+        max_tokens: this.config.maxTokens || 2048,
+      }, {
+        headers: {
+          'Authorization': `Bearer ${this.config.apiKey}`,
+          'Content-Type': 'application/json',
+          'OpenAI-Organization': this.config.organization
+        },
+        timeout: 30000 // 30 second timeout
+      });
+
+      console.log(`OpenAI response received with status: ${response.status}`);
+      
+      if (!response.data?.choices?.[0]?.message?.content) {
+        console.warn('OpenAI response format unexpected:', response.data);
+        throw new Error('Unexpected OpenAI response format. Check the console for details.');
+      }
+      
+      return response.data.choices[0].message.content;
+    }, 'OpenAI chat request').catch((error) => {
+      // Enhanced error handling for OpenAI
+      console.error(`OpenAI chat request failed:`, error);
+      
+      if (axios.isAxiosError(error) && error.response) {
+        console.error(`Status: ${error.response.status}, Error:`, error.response.data);
+        
+        if (error.response.status === 401) {
+          throw new Error('OpenAI authentication failed (401). Please verify your API key.');
+        } else if (error.response.status === 400) {
+          throw new Error(`OpenAI bad request (400). ${error.response.data?.error?.message || 'Check your request parameters.'}`);
+        } else if (error.response.status === 429) {
+          throw new Error('OpenAI rate limit exceeded (429). Please try again later.');
+        }
+      }
+      
+      // For network errors, provide helpful guidance
+      if (axios.isAxiosError(error) && (
+        error.code === 'ECONNRESET' || 
+        error.message.includes('socket hang up') ||
+        error.message.includes('timeout')
+      )) {
+        throw new Error(`OpenAI network error: ${error.message}. This may be due to network connectivity issues or server overload. The request was retried ${this.defaultRetryOptions.maxRetries} times.`);
+      }      
+      // Re-throw the original error with enhanced message
+      throw new Error(`OpenAI request failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    });
   }
+
   private async chatWithAnthropic(messages: ChatMessage[]): Promise<string> {
     const anthropicMessages = messages.filter(msg => msg.role !== 'system').map(msg => ({
       role: msg.role,
       content: msg.content,
-    }));    // Check if messages already contain an enhanced system prompt, if so use it
+    }));
+    
+    // Check if messages already contain an enhanced system prompt, if so use it
     const systemMessage = messages.find(msg => msg.role === 'system');
     const systemPrompt = systemMessage?.content || StandardizedPrompts.getSystemPrompt(this.config.provider);
 
-    const response = await axios.post('https://api.anthropic.com/v1/messages', {
-      model: this.config.model || 'claude-3-5-sonnet-20241022', // Use latest stable model as default
-      max_tokens: this.config.maxTokens || 2048,
-      temperature: this.config.temperature || 0.1,
-      system: systemPrompt,
-      messages: anthropicMessages}, {
-      headers: {
-        'x-api-key': this.config.apiKey,
-        'Content-Type': 'application/json',
-        'anthropic-version': '2023-06-01'
-      }
-    });
+    // Use retry logic for the actual request
+    return await this.retryWithBackoff(async () => {
+      console.log(`Making Anthropic request with model: ${this.config.model || 'claude-3-5-sonnet-20241022'}, temperature: ${this.config.temperature || 0.1}, max_tokens: ${this.config.maxTokens || 2048}`);
+      
+      const response = await axios.post('https://api.anthropic.com/v1/messages', {
+        model: this.config.model || 'claude-3-5-sonnet-20241022', // Use latest stable model as default
+        max_tokens: this.config.maxTokens || 2048,
+        temperature: this.config.temperature || 0.1,
+        system: systemPrompt,
+        messages: anthropicMessages
+      }, {
+        headers: {
+          'x-api-key': this.config.apiKey,
+          'Content-Type': 'application/json',
+          'anthropic-version': '2023-06-01'
+        },
+        timeout: 30000 // 30 second timeout
+      });
 
-    return response.data.content[0].text;
+      console.log(`Anthropic response received with status: ${response.status}`);
+      
+      if (!response.data?.content?.[0]?.text) {
+        console.warn('Anthropic response format unexpected:', response.data);
+        throw new Error('Unexpected Anthropic response format. Check the console for details.');
+      }
+      
+      return response.data.content[0].text;
+    }, 'Anthropic chat request').catch((error) => {
+      // Enhanced error handling for Anthropic
+      console.error(`Anthropic chat request failed:`, error);
+      
+      if (axios.isAxiosError(error) && error.response) {
+        console.error(`Status: ${error.response.status}, Error:`, error.response.data);
+        
+        if (error.response.status === 401) {
+          throw new Error('Anthropic authentication failed (401). Please verify your API key.');
+        } else if (error.response.status === 400) {
+          throw new Error(`Anthropic bad request (400). ${error.response.data?.error?.message || 'Check your request parameters.'}`);
+        } else if (error.response.status === 429) {
+          throw new Error('Anthropic rate limit exceeded (429). Please try again later.');
+        }
+      }
+      
+      // For network errors, provide helpful guidance
+      if (axios.isAxiosError(error) && (
+        error.code === 'ECONNRESET' || 
+        error.message.includes('socket hang up') ||
+        error.message.includes('timeout')
+      )) {
+        throw new Error(`Anthropic network error: ${error.message}. This may be due to network connectivity issues or server overload. The request was retried ${this.defaultRetryOptions.maxRetries} times.`);
+      }
+      
+      // Re-throw the original error with enhanced message
+      throw new Error(`Anthropic request failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    });
   }
 
   private async chatWithGemini(messages: ChatMessage[]): Promise<string> {
@@ -201,9 +394,7 @@ export class CloudLLMService {
         key: this.config.apiKey
       }
     });    return response.data.candidates[0].content.parts[0].text;
-  }
-
-  private async chatWithAzureOpenAI(messages: ChatMessage[]): Promise<string> {
+  }  private async chatWithAzureOpenAI(messages: ChatMessage[]): Promise<string> {
     const openaiMessages = messages.map(msg => ({
       role: msg.role,
       content: msg.content,
@@ -215,25 +406,93 @@ export class CloudLLMService {
 
     const fullMessages = [
       { role: 'system', content: systemPrompt },
-      ...openaiMessages
+      ...openaiMessages.filter(msg => msg.role !== 'system')
     ];
-
+    
     if (!this.config.baseUrl) {
-      throw new Error('Azure OpenAI requires baseUrl');
+      console.error('Azure OpenAI requires full endpoint URL');
+      throw new Error('Azure OpenAI requires a full endpoint URL. Please configure a valid endpoint in the settings.');
     }
 
-    const response = await axios.post(`${this.config.baseUrl}/openai/deployments/${this.config.model}/chat/completions?api-version=2024-02-01`, {
-      messages: fullMessages,
-      temperature: this.config.temperature || 0.1,
-      max_tokens: this.config.maxTokens || 2048,
-    }, {
-      headers: {
-        'api-key': this.config.apiKey,
-        'Content-Type': 'application/json'
-      }
-    });
+    // Validate the URL format to ensure it's properly formatted for chat completions
+    const urlLower = this.config.baseUrl.toLowerCase();
+    
+    const hasPath = urlLower.includes('/chat/completions');
+    const hasApiVersion = urlLower.includes('api-version=');
+    const hasDeployment = urlLower.includes('/deployments/');
+    
+    // Log what's missing for debugging
+    const missingComponents = [];
+    if (!hasPath) missingComponents.push('/chat/completions path');
+    if (!hasApiVersion) missingComponents.push('api-version parameter');
+    if (!hasDeployment) missingComponents.push('/deployments/ path');
+    
+    if (!hasPath || !hasApiVersion || !hasDeployment) {
+      console.error(`Invalid Azure OpenAI URL format: ${this.config.baseUrl}`);
+      console.error(`Missing components: ${missingComponents.join(', ')}`);
+      throw new Error(`Azure OpenAI URL is incomplete. The complete URL should include: ${missingComponents.join(', ')}.\n\nPlease use the format: https://your-resource.openai.azure.com/openai/deployments/your-deployment/chat/completions?api-version=2024-02-01`);
+    }
 
-    return response.data.choices[0].message.content;
+    // Extract deployment name for logging
+    const deploymentMatch = urlLower.match(/\/deployments\/([^\/]+)/);
+    const deploymentName = deploymentMatch ? deploymentMatch[1] : 'unknown';
+    console.log(`Azure OpenAI sending request to endpoint: ${this.config.baseUrl}`);
+    console.log(`Using deployment: ${deploymentName}`);
+    
+    // Use retry logic for the actual request
+    return await this.retryWithBackoff(async () => {
+      console.log(`Making Azure OpenAI request with temperature: ${this.config.temperature || 0.1}, max_tokens: ${this.config.maxTokens || 2048}`);
+      
+      const response = await axios.post(this.config.baseUrl!, {
+        messages: fullMessages,
+        temperature: this.config.temperature || 0.1,
+        max_tokens: this.config.maxTokens || 2048,
+      }, {
+        headers: {
+          'api-key': this.config.apiKey,
+          'Content-Type': 'application/json'
+        },
+        timeout: 30000 // 30 second timeout
+      });
+
+      console.log(`Azure OpenAI response received with status: ${response.status}`);
+      
+      if (!response.data?.choices?.[0]?.message?.content) {
+        console.warn('Azure OpenAI response format unexpected:', response.data);
+        throw new Error('Unexpected Azure OpenAI response format. Check the console for details.');
+      }
+      
+      return response.data.choices[0].message.content;
+    }, 'Azure OpenAI chat request').catch((error) => {
+      // Enhanced error handling for Azure OpenAI
+      console.error(`Azure OpenAI chat request failed:`, error);
+      
+      if (axios.isAxiosError(error) && error.response) {
+        console.error(`Status: ${error.response.status}, Error:`, error.response.data);
+        
+        if (error.response.status === 404) {
+          throw new Error(`Azure OpenAI endpoint not found (404). Please verify your endpoint URL format:\n${this.config.baseUrl}\n\nMake sure it includes the correct deployment name and API version.`);
+        } else if (error.response.status === 401) {
+          throw new Error('Azure OpenAI authentication failed (401). Please verify your API key.');
+        } else if (error.response.status === 403) {
+          throw new Error('Azure OpenAI access denied (403). Please check if your API key has access to this deployment.');
+        } else if (error.response.status === 400) {
+          throw new Error(`Azure OpenAI bad request (400). ${error.response.data?.error?.message || 'Check your endpoint configuration or model parameters.'}`);
+        }
+      }
+      
+      // For network errors, provide helpful guidance
+      if (axios.isAxiosError(error) && (
+        error.code === 'ECONNRESET' || 
+        error.message.includes('socket hang up') ||
+        error.message.includes('timeout')
+      )) {
+        throw new Error(`Azure OpenAI network error: ${error.message}. This may be due to network connectivity issues or server overload. The request was retried ${this.defaultRetryOptions.maxRetries} times.`);
+      }
+      
+      // Re-throw the original error with enhanced message
+      throw new Error(`Azure OpenAI request failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    });
   }
 
   async getAvailableModels(): Promise<string[]> {
@@ -351,19 +610,44 @@ export class CloudLLMService {
       console.warn('Failed to fetch Gemini models from API:', error);      return this.getFallbackGeminiModels();
     }
   }
-
   /**
    * Fetch Azure OpenAI models from the deployment
-   */
-  private async getAzureOpenAIModels(): Promise<string[]> {
+   */  private async getAzureOpenAIModels(): Promise<string[]> {
     try {
       if (!this.config.baseUrl) {
-        console.warn('Azure OpenAI requires baseUrl');
+        console.warn('Azure OpenAI requires full endpoint URL');
         return this.getFallbackAzureOpenAIModels();
       }
 
-      console.log('Fetching Azure OpenAI models...');
-      const response = await axios.get(`${this.config.baseUrl}/openai/models?api-version=2024-02-01`, {
+      console.log(`Fetching Azure OpenAI models using URL: ${this.config.baseUrl}`);
+      
+      // Extract the base URL from the full endpoint
+      const urlObj = new URL(this.config.baseUrl);
+      const baseEndpoint = `${urlObj.protocol}//${urlObj.hostname}`;
+      
+      console.log(`Using base endpoint for models API: ${baseEndpoint}`);
+      
+      // Validate that the full URL looks like a chat completions URL
+      const urlLower = this.config.baseUrl.toLowerCase();
+      const isValidChatEndpoint = urlLower.includes('/chat/completions') && urlLower.includes('api-version=');
+      
+      if (!isValidChatEndpoint) {
+        console.warn(`⚠️ Azure OpenAI URL may not be correctly formatted for chat completions.`);
+        console.warn(`The expected format is: https://your-endpoint.openai.azure.com/openai/deployments/your-deployment-name/chat/completions?api-version=2024-02-01`);
+      }
+      
+      // Extract the deployment name if possible
+      let deploymentName = '';
+      const deploymentMatch = urlLower.match(/\/deployments\/([^\/]+)/);
+      if (deploymentMatch && deploymentMatch[1]) {
+        deploymentName = deploymentMatch[1];
+        console.log(`Detected deployment name from URL: ${deploymentName}`);
+      }
+      
+      const modelsEndpoint = `${baseEndpoint}/openai/models?api-version=2025-01-01-preview`;
+      console.log(`Querying models API at: ${modelsEndpoint}`);
+      
+      const response = await axios.get(modelsEndpoint, {
         headers: {
           'api-key': this.config.apiKey
         },
@@ -377,6 +661,13 @@ export class CloudLLMService {
           .sort();
 
         console.log('Successfully retrieved Azure OpenAI models:', models);
+        
+        // If we extracted a deployment name, check if it matches any of the models
+        if (deploymentName && !models.includes(deploymentName)) {
+          console.warn(`⚠️ The deployment name '${deploymentName}' from your URL doesn't match any of the available models.`);
+          console.warn(`This might be expected if your deployment has a custom name different from the model ID.`);
+        }
+        
         return models;
       }
 
@@ -518,14 +809,17 @@ export class CloudLLMService {
   }
 
   /**
-   * Fallback Azure OpenAI models (updated as of June 2025)
-   */  private getFallbackAzureOpenAIModels(): string[] {
+   * Fallback Azure OpenAI models (updated as of June 2025)   */  private getFallbackAzureOpenAIModels(): string[] {
+    // Return a list of common Azure OpenAI models available as of 2025
     return [
       'gpt-4o',
       'gpt-4o-mini',
+      'gpt-4-1106-preview',
       'gpt-4-turbo',
       'gpt-4',
-      'gpt-35-turbo'
+      'gpt-35-turbo',
+      'gpt-35-turbo-16k',
+      'text-embedding-ada-002'
     ];
   }
 
