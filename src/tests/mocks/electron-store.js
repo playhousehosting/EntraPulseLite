@@ -97,3 +97,6 @@ class MockStore {
 
 module.exports = MockStore;
 module.exports.default = MockStore;
+
+// Additional compatibility for ES modules
+Object.defineProperty(module.exports, '__esModule', { value: true });

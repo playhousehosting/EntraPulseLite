@@ -4,10 +4,22 @@
 import { FetchMCPServer } from '../../mcp/servers/fetch';
 import { MCPServerConfig } from '../../mcp/types';
 import fs from 'fs';
+import path from 'path';
 import axios from 'axios';
 
 // Mock axios to avoid actual network requests
 jest.mock('axios');
+
+// Define paths for test fixtures and output
+const FIXTURES_DIR = path.join(__dirname, '../fixtures');
+const OUTPUT_DIR = path.join(__dirname, '../output');
+const ENTITLEMENT_HTML_FIXTURE = path.join(FIXTURES_DIR, 'entitlement-management-permission.html');
+const ENTITLEMENT_LIVE_HTML_FIXTURE = path.join(FIXTURES_DIR, 'entitlement-live.html');
+
+// Ensure output directory exists
+if (!fs.existsSync(OUTPUT_DIR)) {
+  fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+}
 
 describe('FetchMCPServer - EntitlementManagement.Read.All permission', () => {
   // Create server config for fetch MCP
@@ -17,24 +29,25 @@ describe('FetchMCPServer - EntitlementManagement.Read.All permission', () => {
     port: 8080,
     enabled: true,
   };
-  
-  let fetchServer: FetchMCPServer;
-    beforeEach(() => {
+    let fetchServer: FetchMCPServer;
+
+  beforeEach(() => {
     // Initialize the server with the fetch config
     fetchServer = new FetchMCPServer(fetchConfig);
     
     // Reset mocks
     jest.clearAllMocks();
     
-    // Load the HTML from the entitlement-management-permission.html file
-    const html = fs.readFileSync('entitlement-management-permission.html', 'utf8');
+    // Load the HTML from the test fixtures
+    const html = fs.readFileSync(ENTITLEMENT_HTML_FIXTURE, 'utf8');
     
     // Mock axios response
     (axios.get as jest.Mock).mockResolvedValue({
       data: html
     });
   });
-    test('should process EntitlementManagement.Read.All permission correctly', async () => {
+
+  test('should process EntitlementManagement.Read.All permission correctly', async () => {
     // Create a request for the permission
     const request = {
       id: '123',
@@ -48,12 +61,12 @@ describe('FetchMCPServer - EntitlementManagement.Read.All permission', () => {
       }
     };
     
-    console.log('Testing with HTML input file length:', fs.readFileSync('entitlement-management-permission.html', 'utf8').length);
+    console.log('Testing with HTML input file length:', fs.readFileSync(ENTITLEMENT_HTML_FIXTURE, 'utf8').length);
     
     // Intercept the axios call to log what's happening
     (axios.get as jest.Mock).mockImplementation((url) => {
       console.log(`Mocked axios.get called with URL: ${url}`);
-      const html = fs.readFileSync('entitlement-management-permission.html', 'utf8');
+      const html = fs.readFileSync(ENTITLEMENT_HTML_FIXTURE, 'utf8');
       console.log(`Returning HTML content of length: ${html.length}`);
       return Promise.resolve({ data: html });
     });
@@ -64,13 +77,12 @@ describe('FetchMCPServer - EntitlementManagement.Read.All permission', () => {
     console.log('Got response:', JSON.stringify(response, null, 2).substring(0, 200) + '...');
     
     // Write the full response to a file for inspection
-    fs.writeFileSync('entitlement-response.json', JSON.stringify(response, null, 2));
-      // Also save the axios mock calls
+    fs.writeFileSync(path.join(OUTPUT_DIR, 'entitlement-response.json'), JSON.stringify(response, null, 2));    // Also save the axios mock calls
     const axiosMock = axios.get as jest.Mock;
-    fs.writeFileSync('axios-calls.json', JSON.stringify(axiosMock.mock.calls, null, 2));
+    fs.writeFileSync(path.join(OUTPUT_DIR, 'axios-calls.json'), JSON.stringify(axiosMock.mock.calls, null, 2));
     
     // Extract the HTML structure from our input file to verify it matches what we expect
-    const html = fs.readFileSync('entitlement-management-permission.html', 'utf8');
+    const html = fs.readFileSync(ENTITLEMENT_HTML_FIXTURE, 'utf8');
       // Look for key elements
     const hasTitle = /<h1[^>]*>EntitlementManagement\.Read\.All<\/h1>/i.test(html);
     console.log('Has title element:', hasTitle);
@@ -106,7 +118,7 @@ describe('FetchMCPServer - EntitlementManagement.Read.All permission', () => {
     if (response.result && response.result.content) {
       const textContent = response.result.content.find((item: any) => item.type === 'text');
       if (textContent) {
-        fs.writeFileSync('entitlement-content.md', textContent.text);
+        fs.writeFileSync(path.join(OUTPUT_DIR, 'entitlement-content.md'), textContent.text);
         console.log('Markdown content length:', textContent.text.length);
         console.log('Markdown content preview:', textContent.text.substring(0, 200) + '...');
       }
@@ -133,21 +145,19 @@ describe('FetchMCPServer - EntitlementManagement.Read.All permission', () => {
     // Currently we'll relax this expectation
     
     // Log test completion
-    console.log('Test completed successfully. Files created:');
-    console.log('- entitlement-response.json - Full response object');
-    console.log('- entitlement-content.md - Formatted markdown text');
-    console.log('- axios-calls.json - Axios mock calls');
+    console.log('Test completed successfully. Files created:');    console.log('- src/tests/output/entitlement-response.json - Full response object');
+    console.log('- src/tests/output/entitlement-content.md - Formatted markdown text');
+    console.log('- src/tests/output/axios-calls.json - Axios mock calls');
   });
-
   test('should process EntitlementManagement.Read.All permission with live HTML structure', async () => {
     // If we don't have the live HTML file, skip this test
-    if (!fs.existsSync('entitlement-live.html')) {
+    if (!fs.existsSync(ENTITLEMENT_LIVE_HTML_FIXTURE)) {
       console.log('Skipping live HTML test as entitlement-live.html is not available');
       return;
     }
 
     // Load the HTML from the live captured file
-    const liveHtml = fs.readFileSync('entitlement-live.html', 'utf8');
+    const liveHtml = fs.readFileSync(ENTITLEMENT_LIVE_HTML_FIXTURE, 'utf8');
     
     // Override the mock for this test
     (axios.get as jest.Mock).mockResolvedValue({
@@ -173,7 +183,7 @@ describe('FetchMCPServer - EntitlementManagement.Read.All permission', () => {
     const response = await fetchServer.handleRequest(request);
     
     // Write the response to a file for inspection
-    fs.writeFileSync('entitlement-live-response.json', JSON.stringify(response, null, 2));
+    fs.writeFileSync(path.join(OUTPUT_DIR, 'entitlement-live-response.json'), JSON.stringify(response, null, 2));
     
     // Basic validations
     expect(response).toBeDefined();
@@ -186,7 +196,7 @@ describe('FetchMCPServer - EntitlementManagement.Read.All permission', () => {
     expect(textContent).toBeDefined();
     
     // Save the formatted content
-    fs.writeFileSync('entitlement-live-test-output.md', textContent.text);
+    fs.writeFileSync(path.join(OUTPUT_DIR, 'entitlement-live-test-output.md'), textContent.text);
     
     // Check for key content elements
     expect(textContent.text).toContain('EntitlementManagement.Read.All');
@@ -200,8 +210,7 @@ describe('FetchMCPServer - EntitlementManagement.Read.All permission', () => {
     expect(textContent.text).toContain('Resources');
     expect(textContent.text.toLowerCase()).toContain('accesspackage');
     
-    console.log('Live HTML test completed successfully. Files created:');
-    console.log('- entitlement-live-response.json - Full response from live HTML');
-    console.log('- entitlement-live-test-output.md - Formatted output from live HTML');
+    console.log('Live HTML test completed successfully. Files created:');    console.log('- src/tests/output/entitlement-live-response.json - Full response from live HTML');
+    console.log('- src/tests/output/entitlement-live-test-output.md - Formatted output from live HTML');
   });
 });
