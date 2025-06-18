@@ -141,7 +141,10 @@ export interface ElectronAPI {
   };  graph: {
     query: (endpoint: string, method?: string, data?: any) => Promise<any>;
     getUserPhoto: (userId?: string) => Promise<string | null>;
-  };  llm: {
+    clearPhotoCache: () => Promise<{ success: boolean; error?: string }>;
+    clearUserPhotoCache: (userId: string) => Promise<{ success: boolean; error?: string }>;
+    getPhotoCacheStats: () => Promise<{ size: number; maxSize: number; entries: Array<{ userId: string; hasPhoto: boolean; age: number }> } | null>;
+  };llm: {
     chat: (messages: ChatMessage[]) => Promise<string>;
     isAvailable: () => Promise<boolean>;
     testConnection: (config: LLMConfig) => Promise<boolean>;

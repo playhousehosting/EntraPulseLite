@@ -64,10 +64,12 @@ interface Window {
         clientId: string;
         tenantId: string;
       }>;
-    };
-    graph: {
+    };    graph: {
       query: (endpoint: string, method?: string, data?: any) => Promise<any>;
       getUserPhoto: (userId?: string) => Promise<any>;
+      clearPhotoCache: () => Promise<{ success: boolean; error?: string }>;
+      clearUserPhotoCache: (userId: string) => Promise<{ success: boolean; error?: string }>;
+      getPhotoCacheStats: () => Promise<{ size: number; maxSize: number; entries: Array<{ userId: string; hasPhoto: boolean; age: number }> } | null>;
     };
     llm: {
       chat: (messages: any[]) => Promise<any>;

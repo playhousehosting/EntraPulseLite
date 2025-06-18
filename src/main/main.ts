@@ -801,6 +801,34 @@ class EntraPulseLiteApp {
         console.error('Get user photo failed:', error);
         return null;
       }
+    });    // Photo cache management handlers
+    ipcMain.handle('graph:clearPhotoCache', async () => {
+      try {
+        this.graphService.clearPhotoCache();
+        return { success: true };
+      } catch (error) {
+        console.error('Clear photo cache failed:', error);
+        return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+      }
+    });
+
+    ipcMain.handle('graph:clearUserPhotoCache', async (event, userId: string) => {
+      try {
+        this.graphService.clearUserPhotoCache(userId);
+        return { success: true };
+      } catch (error) {
+        console.error('Clear user photo cache failed:', error);
+        return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+      }
+    });
+
+    ipcMain.handle('graph:getPhotoCacheStats', async () => {
+      try {
+        return this.graphService.getPhotoCacheStats();
+      } catch (error) {
+        console.error('Get photo cache stats failed:', error);
+        return null;
+      }
     });
 
     // LLM handlers

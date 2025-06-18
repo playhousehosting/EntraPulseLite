@@ -34,6 +34,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   graph: {
     query: (endpoint, method, data) => ipcRenderer.invoke('graph:query', endpoint, method, data),
     getUserPhoto: (userId) => ipcRenderer.invoke('graph:getUserPhoto', userId),
+    clearPhotoCache: () => ipcRenderer.invoke('graph:clearPhotoCache'),
+    clearUserPhotoCache: (userId) => ipcRenderer.invoke('graph:clearUserPhotoCache', userId),
+    getPhotoCacheStats: () => ipcRenderer.invoke('graph:getPhotoCacheStats'),
   },
 
   // Local LLM methods

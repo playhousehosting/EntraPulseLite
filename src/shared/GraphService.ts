@@ -173,6 +173,19 @@ export class GraphService {
     return this.profilePhotoService.getUserPhoto(userId);
   }
 
+  // Photo cache management methods
+  clearPhotoCache(): void {
+    this.profilePhotoService.clearCache();
+  }
+
+  clearUserPhotoCache(userId: string): void {
+    this.profilePhotoService.clearUserCache(userId);
+  }
+
+  getPhotoCacheStats() {
+    return this.profilePhotoService.getCacheStats();
+  }
+
   async getUsers(filter?: string): Promise<any> {
     const endpoint = filter ? `/users?$filter=${encodeURIComponent(filter)}` : '/users';
     return this.query(endpoint);

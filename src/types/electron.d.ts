@@ -17,6 +17,9 @@ interface AuthAPI {
 interface GraphAPI {
   query(endpoint: string, method: string, data?: any): Promise<any>;
   getUserPhoto(userId?: string): Promise<string | null>;
+  clearPhotoCache(): Promise<{ success: boolean; error?: string }>;
+  clearUserPhotoCache(userId: string): Promise<{ success: boolean; error?: string }>;
+  getPhotoCacheStats(): Promise<{ size: number; maxSize: number; entries: Array<{ userId: string; hasPhoto: boolean; age: number }> } | null>;
 }
 
 interface LLMAPI {
