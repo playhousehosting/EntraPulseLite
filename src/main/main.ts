@@ -128,60 +128,49 @@ class EntraPulseLiteApp {
     console.log('Initializing MCP client with server configs:', this.config.mcpServers);
     this.mcpServerManager = new MCPServerManager(this.config.mcpServers, mcpAuthService);
       // Initialize MCP client with auth service
-    this.mcpClient = new MCPClient(this.config.mcpServers, mcpAuthService);
-      // Get the default cloud provider configuration for LLM service
-    const defaultCloudProvider = this.configService.getDefaultCloudProvider();
+    this.mcpClient = new MCPClient(this.config.mcpServers, mcpAuthService);      // Determine LLM configuration based on preferences
     let llmConfig = this.config.llm;
+    const preferLocal = this.config.llm.preferLocal;
+    const hasLocalProvider = (this.config.llm.provider === 'ollama' || this.config.llm.provider === 'lmstudio') && 
+                            this.config.llm.baseUrl && this.config.llm.model;
     
-    console.log('[Main] Default cloud provider debug:', {
-      defaultCloudProvider: defaultCloudProvider,
-      currentLLMConfig: {
-        provider: this.config.llm.provider,
-        model: this.config.llm.model,
-        hasCloudProviders: !!this.config.llm.cloudProviders,
-        cloudProviderKeys: this.config.llm.cloudProviders ? Object.keys(this.config.llm.cloudProviders) : [],
-        defaultCloudProviderField: this.config.llm.defaultCloudProvider
-      }
+    console.log('[Main] LLM provider selection debug:', {
+      preferLocal,
+      currentProvider: this.config.llm.provider,
+      currentModel: this.config.llm.model,
+      currentBaseUrl: this.config.llm.baseUrl,
+      hasLocalProvider,
+      hasCloudProviders: !!this.config.llm.cloudProviders,
+      cloudProviderKeys: this.config.llm.cloudProviders ? Object.keys(this.config.llm.cloudProviders) : [],
+      defaultCloudProviderField: this.config.llm.defaultCloudProvider
     });
-      // Check for configuration inconsistency and fix it
-    if (this.config.llm.defaultCloudProvider && this.config.llm.provider !== this.config.llm.defaultCloudProvider) {
-      console.log(`[Main] Configuration inconsistency detected: main provider (${this.config.llm.provider}) != default provider (${this.config.llm.defaultCloudProvider})`);
-      console.log(`[Main] Fixing configuration: setting main provider to match default provider`);
-      
-      // Fix the inconsistency by updating the main provider to match the default
-      const fixedConfig = this.configService.getLLMConfig();
-      const defaultProvider = fixedConfig.defaultCloudProvider;
-      
-      if (defaultProvider) {
-        fixedConfig.provider = defaultProvider as 'openai' | 'anthropic' | 'gemini' | 'azure-openai' | 'ollama' | 'lmstudio';
-        
-        // Update model to match the cloud provider's model if available
-        if (fixedConfig.cloudProviders?.[defaultProvider]?.model) {
-          fixedConfig.model = fixedConfig.cloudProviders[defaultProvider].model;
-        }
-        
-        this.configService.saveLLMConfig(fixedConfig);
-        this.config.llm = fixedConfig; // Update local config object
-        
-        console.log(`[Main] ✅ Configuration fixed: main provider now set to ${fixedConfig.provider}`);
-      }
-    }
     
-    if (defaultCloudProvider) {
-      // Use the default cloud provider configuration
-      llmConfig = {
-        provider: defaultCloudProvider.provider,
-        model: defaultCloudProvider.config.model,
-        apiKey: defaultCloudProvider.config.apiKey,
-        baseUrl: defaultCloudProvider.config.baseUrl,
-        temperature: defaultCloudProvider.config.temperature,
-        maxTokens: defaultCloudProvider.config.maxTokens,
-        organization: defaultCloudProvider.config.organization
-      };
-      console.log('🔄 Using default cloud provider for LLM:', defaultCloudProvider.provider, 'Model:', defaultCloudProvider.config.model);
+    // Check if we should use local LLM (preferLocal is true and local provider is configured)
+    if (preferLocal && hasLocalProvider) {
+      console.log('🔧 Using LOCAL LLM as preferred:', this.config.llm.provider, 'Model:', this.config.llm.model);
+      // Use the existing local configuration
+      llmConfig = this.config.llm;
     } else {
-      console.log('⚠️ No default cloud provider configured, using stored LLM config');
-      console.log('⚠️ This means either defaultCloudProvider is not set or the provider is not in cloudProviders');
+      // Fall back to cloud provider logic
+      const defaultCloudProvider = this.configService.getDefaultCloudProvider();
+      
+      if (defaultCloudProvider) {
+        // Use the default cloud provider configuration
+        llmConfig = {
+          provider: defaultCloudProvider.provider,
+          model: defaultCloudProvider.config.model,
+          apiKey: defaultCloudProvider.config.apiKey,
+          baseUrl: defaultCloudProvider.config.baseUrl,
+          temperature: defaultCloudProvider.config.temperature,
+          maxTokens: defaultCloudProvider.config.maxTokens,
+          organization: defaultCloudProvider.config.organization,
+          preferLocal: this.config.llm.preferLocal // Preserve the preferLocal setting
+        };
+        console.log('🔄 Using default cloud provider for LLM:', defaultCloudProvider.provider, 'Model:', defaultCloudProvider.config.model);
+      } else {
+        console.log('⚠️ No default cloud provider configured, using stored LLM config');
+        console.log('⚠️ This means either defaultCloudProvider is not set or the provider is not in cloudProviders');
+      }
     }
     
     // Initialize LLM service with the appropriate configuration
@@ -365,12 +354,47 @@ class EntraPulseLiteApp {
         console.log('[Main] MCP services reinitialized successfully');
       } catch (error) {
         console.error('[Main] Error starting new MCP servers:', error);
-      }
-        // Get updated LLM configuration
+      }      // Get updated LLM configuration
+      const storedLLMConfig = this.configService.getLLMConfig();
       const defaultCloudProvider = this.configService.getDefaultCloudProvider();
       let llmConfig = this.config.llm;
       
-      if (defaultCloudProvider) {
+      console.log('[Main] LLM Selection Debug:', {
+        storedProvider: storedLLMConfig?.provider,
+        storedPreferLocal: storedLLMConfig?.preferLocal,
+        defaultCloudProvider: defaultCloudProvider?.provider,
+        hasDefaultCloud: !!defaultCloudProvider
+      });
+      
+      // Implement preferLocal logic
+      if (storedLLMConfig) {
+        if (storedLLMConfig.preferLocal && (storedLLMConfig.provider === 'ollama' || storedLLMConfig.provider === 'lmstudio')) {
+          // User prefers local and has configured a local provider
+          console.log('[Main] 🖥️ Using local LLM (preferLocal=true):', storedLLMConfig.provider);
+          llmConfig = storedLLMConfig;
+        } else if (defaultCloudProvider && (storedLLMConfig.provider === 'openai' || storedLLMConfig.provider === 'anthropic' || storedLLMConfig.provider === 'gemini' || storedLLMConfig.provider === 'azure-openai')) {
+          // User has selected a cloud provider or preferLocal is false
+          console.log('[Main] ☁️ Using cloud LLM (default provider):', defaultCloudProvider.provider);
+          llmConfig = {
+            provider: defaultCloudProvider.provider,
+            model: defaultCloudProvider.config.model,
+            apiKey: defaultCloudProvider.config.apiKey,
+            baseUrl: defaultCloudProvider.config.baseUrl,
+            temperature: defaultCloudProvider.config.temperature,
+            maxTokens: defaultCloudProvider.config.maxTokens,
+            organization: defaultCloudProvider.config.organization,
+            preferLocal: storedLLMConfig.preferLocal, // Preserve the preference
+            cloudProviders: storedLLMConfig.cloudProviders, // Preserve cloud providers
+            defaultCloudProvider: storedLLMConfig.defaultCloudProvider // Preserve default
+          };
+        } else {
+          // Use the stored configuration as-is
+          console.log('[Main] 📋 Using stored LLM config:', storedLLMConfig.provider);
+          llmConfig = storedLLMConfig;
+        }
+      } else if (defaultCloudProvider) {
+        // Fallback to default cloud provider if no stored config
+        console.log('[Main] ☁️ Fallback to default cloud provider:', defaultCloudProvider.provider);
         llmConfig = {
           provider: defaultCloudProvider.provider,
           model: defaultCloudProvider.config.model,
@@ -380,16 +404,8 @@ class EntraPulseLiteApp {
           maxTokens: defaultCloudProvider.config.maxTokens,
           organization: defaultCloudProvider.config.organization
         };
-        console.log('[Main] Using default cloud provider for LLM:', defaultCloudProvider.provider);
       } else {
-        // Fallback to stored LLM configuration
-        const storedLLMConfig = this.configService.getLLMConfig();
-        if (storedLLMConfig) {
-          llmConfig = storedLLMConfig;
-          console.log('[Main] No default cloud provider, using stored LLM config:', storedLLMConfig.provider);
-        } else {
-          console.warn('[Main] No LLM configuration available - neither default provider nor stored config');
-        }
+        console.warn('[Main] No LLM configuration available - neither stored config nor default cloud provider');
       }
       
       // Reinitialize LLM service
@@ -1042,10 +1058,12 @@ class EntraPulseLiteApp {
     ipcMain.handle('config:setDefaultCloudProvider', async (event, provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai') => {
       try {
         this.configService.setDefaultCloudProvider(provider);
-        
-        // Reinitialize LLM service with the new default provider
+          // Reinitialize LLM service with the new default provider
         const defaultCloudProvider = this.configService.getDefaultCloudProvider();
         if (defaultCloudProvider) {
+          // Get current LLM config to preserve settings like preferLocal
+          const currentLLMConfig = this.configService.getLLMConfig();
+          
           const llmConfig = {
             provider: defaultCloudProvider.provider,
             model: defaultCloudProvider.config.model,
@@ -1053,7 +1071,12 @@ class EntraPulseLiteApp {
             baseUrl: defaultCloudProvider.config.baseUrl,
             temperature: defaultCloudProvider.config.temperature,
             maxTokens: defaultCloudProvider.config.maxTokens,
-            organization: defaultCloudProvider.config.organization          };
+            organization: defaultCloudProvider.config.organization,
+            // Preserve existing settings
+            preferLocal: currentLLMConfig.preferLocal,
+            cloudProviders: currentLLMConfig.cloudProviders,
+            defaultCloudProvider: currentLLMConfig.defaultCloudProvider
+          };
           
           // DEBUG: Check config before LLM service creation
           const preInitConfig = this.configService.getLLMConfig();
@@ -1160,31 +1183,37 @@ class EntraPulseLiteApp {
         console.error('LLM connection test failed:', error);
         return false;
       }
-    });
-
-    ipcMain.handle('llm:getAvailableModels', async (event, config?: any) => {
+    });    ipcMain.handle('llm:getAvailableModels', async (event, config?: any) => {
       try {
         // If config is provided, use the appropriate service
-        if (config && (config.provider === 'openai' || config.provider === 'anthropic' || config.provider === 'gemini' || config.provider === 'azure-openai') && config.apiKey) {
-          // Check cache first
-          const cachedModels = this.configService.getCachedModels(config.provider);
-          if (cachedModels && cachedModels.length > 0) {
-            console.log(`Using cached models for ${config.provider}:`, cachedModels);
-            return cachedModels;
-          }
+        if (config) {
+          if ((config.provider === 'ollama' || config.provider === 'lmstudio') && config.baseUrl) {
+            // Handle local LLM providers
+            console.log(`Fetching models for local provider ${config.provider} at ${config.baseUrl}...`);
+            const { LLMService } = require('../llm/LLMService');
+            const localService = new LLMService(config);
+            return await localService.getAvailableModels();
+          } else if ((config.provider === 'openai' || config.provider === 'anthropic' || config.provider === 'gemini' || config.provider === 'azure-openai') && config.apiKey) {
+            // Handle cloud LLM providers - check cache first
+            const cachedModels = this.configService.getCachedModels(config.provider);
+            if (cachedModels && cachedModels.length > 0) {
+              console.log(`Using cached models for ${config.provider}:`, cachedModels);
+              return cachedModels;
+            }
 
-          console.log(`Fetching fresh models for ${config.provider}...`);
-          const { CloudLLMService } = require('../llm/CloudLLMService');
-          const cloudService = new CloudLLMService(config, this.mcpClient);
-          const freshModels = await cloudService.getAvailableModels();
-          
-          // Cache the results
-          if (freshModels && freshModels.length > 0) {
-            this.configService.cacheModels(config.provider, freshModels);
-            console.log(`Cached ${freshModels.length} models for ${config.provider}`);
+            console.log(`Fetching fresh models for ${config.provider}...`);
+            const { CloudLLMService } = require('../llm/CloudLLMService');
+            const cloudService = new CloudLLMService(config, this.mcpClient);
+            const freshModels = await cloudService.getAvailableModels();
+            
+            // Cache the results
+            if (freshModels && freshModels.length > 0) {
+              this.configService.cacheModels(config.provider, freshModels);
+              console.log(`Cached ${freshModels.length} models for ${config.provider}`);
+            }
+            
+            return freshModels;
           }
-          
-          return freshModels;
         }
         
         // Otherwise use the default service

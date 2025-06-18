@@ -337,25 +337,32 @@ export class UnifiedLLMService {
     }
   }
 
+  /**
+   * Get available models from the current LLM service
+   */
   async getAvailableModels(): Promise<string[]> {
-    if (!this.isServiceReady()) {
-      console.warn('LLM service not ready:', this.getServiceStatus().reason);
-      return [];
-    }
-    
     try {
-      const service = this.getActiveService();
-      return await service.getAvailableModels();
+      if (this.localService) {
+        return await this.localService.getAvailableModels();
+      } else if (this.cloudService) {
+        return await this.cloudService.getAvailableModels();
+      }
+      return [];
     } catch (error) {
-      console.warn('Error getting available models:', error);
+      console.error('Failed to get available models:', error);
       return [];
     }
-  }
-  private getActiveService(): LLMService | CloudLLMService {
-    if (this.localService) {
+  }  private getActiveService(): LLMService | CloudLLMService {
+    // Check preferLocal setting first
+    if (this.config.preferLocal && this.localService) {
+      console.log('[UnifiedLLMService] Using LOCAL service (preferLocal=true)');
       return this.localService;
     } else if (this.cloudService) {
+      console.log('[UnifiedLLMService] Using CLOUD service');
       return this.cloudService;
+    } else if (this.localService) {
+      console.log('[UnifiedLLMService] Using LOCAL service (fallback)');
+      return this.localService;
     } else {
       throw new Error(`No LLM service available. Provider '${this.config.provider}' is configured but ${this.isCloudProvider() ? 'API key is missing' : 'service failed to initialize'}.`);
     }
@@ -524,5 +531,19 @@ export class UnifiedLLMService {
    */
   getConfig(): LLMConfig {
     return { ...this.config };
+  }
+
+  /**
+   * Update the configuration dynamically (useful when settings change)
+   */
+  updateConfig(newConfig: LLMConfig): void {
+    console.log(`[UnifiedLLMService] Updating config from ${this.config.provider} to ${newConfig.provider}`);
+    console.log(`[UnifiedLLMService] PreferLocal changed from ${this.config.preferLocal} to ${newConfig.preferLocal}`);
+    
+    this.config = newConfig;
+    
+    // Note: This method only updates the config reference. For provider changes,
+    // the service should be recreated via the main process to properly initialize
+    // the correct service instances (local vs cloud).
   }
 }

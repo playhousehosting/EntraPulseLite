@@ -26,15 +26,57 @@ export class LLMService {
   }  async isAvailable(): Promise<boolean> {
     try {
       if (this.config.provider === 'ollama') {
+        // First check if Ollama is running
         const response = await axios.get(`${this.config.baseUrl}/api/tags`, {
           timeout: 5000,
         });
-        return response.status === 200;
+        
+        if (response.status !== 200) {
+          return false;
+        }
+        
+        // Check if the specific model is available
+        if (this.config.model) {
+          const models = response.data.models || [];
+          const modelExists = models.some((model: any) => 
+            model.name === this.config.model || 
+            model.name.startsWith(this.config.model + ':')
+          );
+          
+          if (!modelExists) {
+            console.log(`Model "${this.config.model}" not found in Ollama. Available models:`, 
+              models.map((m: any) => m.name).join(', '));
+            return false;
+          }
+        }
+        
+        return true;
       } else if (this.config.provider === 'lmstudio') {
+        // First check if LM Studio is running
         const response = await axios.get(`${this.config.baseUrl}/v1/models`, {
           timeout: 5000,
         });
-        return response.status === 200;
+        
+        if (response.status !== 200) {
+          return false;
+        }
+        
+        // Check if the specific model is available
+        if (this.config.model) {
+          const models = response.data.data || [];
+          const modelExists = models.some((model: any) => 
+            model.id === this.config.model || 
+            model.id.includes(this.config.model)
+          );
+          
+          if (!modelExists) {
+            console.log(`Model "${this.config.model}" not found in LM Studio. Available models:`, 
+              models.map((m: any) => m.id).join(', '));
+            return false;
+          }
+        }
+        
+        return true;
       }
       return false;
     } catch (error) {
@@ -47,7 +89,7 @@ export class LLMService {
       }
       return false;
     }
-  }  private async chatWithOllama(messages: ChatMessage[]): Promise<string> {
+  }private async chatWithOllama(messages: ChatMessage[]): Promise<string> {
     const ollamaMessages = messages.map(msg => ({
       role: msg.role,
       content: msg.content,
@@ -112,18 +154,31 @@ export class LLMService {
     return response.data.choices[0].message.content;
   }
 
+  /**
+   * Get available models from the local LLM service
+   */
   async getAvailableModels(): Promise<string[]> {
     try {
       if (this.config.provider === 'ollama') {
-        const response = await axios.get(`${this.config.baseUrl}/api/tags`);
-        return response.data.models?.map((model: any) => model.name) || [];
+        const response = await axios.get(`${this.config.baseUrl}/api/tags`, {
+          timeout: 10000,
+        });
+        
+        if (response.status === 200 && response.data.models) {
+          return response.data.models.map((model: any) => model.name);
+        }
       } else if (this.config.provider === 'lmstudio') {
-        const response = await axios.get(`${this.config.baseUrl}/v1/models`);
-        return response.data.data?.map((model: any) => model.id) || [];
+        const response = await axios.get(`${this.config.baseUrl}/v1/models`, {
+          timeout: 10000,
+        });
+        
+        if (response.status === 200 && response.data.data) {
+          return response.data.data.map((model: any) => model.id);
+        }
       }
       return [];
     } catch (error) {
-      console.error('Failed to get available models:', error);
+      console.error('Failed to fetch available models:', error);
       return [];
     }
   }

@@ -90,8 +90,6 @@ if (typeof window !== 'undefined') {
 process.env.MSAL_CLIENT_ID = 'test-client-id';
 process.env.MSAL_TENANT_ID = 'test-tenant-id';
 process.env.MSAL_CLIENT_SECRET = 'test-client-secret';
-process.env.LLM_PROVIDER = 'ollama';
-process.env.OLLAMA_BASE_URL = 'http://localhost:11434';
 
 // Mock console methods in tests
 global.console = {

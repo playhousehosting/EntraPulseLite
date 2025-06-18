@@ -4,16 +4,22 @@ import { useState, useEffect } from 'react';
 /**
  * Custom hook for polling local LLM availability
  * @param pollingInterval Polling interval in milliseconds (default: 10000 - 10 seconds)
+ * @param pausePolling Whether to pause polling (e.g., when settings dialog is open)
  * @returns Object containing current status and availability
  */
-export const useLLMStatusPolling = (pollingInterval = 10000) => {
+export const useLLMStatusPolling = (pollingInterval = 10000, pausePolling = false) => {
   const [localLLMAvailable, setLocalLLMAvailable] = useState<boolean>(false);
   const [anyLLMAvailable, setAnyLLMAvailable] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [lastChecked, setLastChecked] = useState<Date | null>(null);
-  const [isChecking, setIsChecking] = useState<boolean>(false); // Prevent concurrent checks
-  // Function to check LLM availability
+  const [isChecking, setIsChecking] = useState<boolean>(false); // Prevent concurrent checks  // Function to check LLM availability
   const checkLLMAvailability = async () => {
+    // Skip check if polling is paused (e.g., settings dialog is open)
+    if (pausePolling) {
+      console.log('LLM availability check paused (settings dialog open)');
+      return;
+    }
+    
     // Prevent concurrent checks
     if (isChecking) {
       console.log('LLM availability check already in progress, skipping...');
@@ -46,16 +52,21 @@ export const useLLMStatusPolling = (pollingInterval = 10000) => {
   useEffect(() => {
     checkLLMAvailability();
   }, []);
-
   // Set up polling interval
   useEffect(() => {
+    // Don't set up polling if it's paused
+    if (pausePolling) {
+      console.log('LLM status polling paused');
+      return;
+    }
+    
     const intervalId = setInterval(checkLLMAvailability, pollingInterval);
     
     // Clean up interval on unmount
     return () => {
       clearInterval(intervalId);
     };
-  }, [pollingInterval]);
+  }, [pollingInterval, pausePolling]);
 
   // Force a check - can be called externally when needed
   const forceCheck = () => {

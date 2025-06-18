@@ -24,11 +24,13 @@ const LLMStatusContext = createContext<LLMStatusContextType>({
 interface LLMStatusProviderProps {
   children: ReactNode;
   pollingInterval?: number;
+  pausePolling?: boolean;
 }
 
 export const LLMStatusProvider: React.FC<LLMStatusProviderProps> = ({ 
   children, 
-  pollingInterval = 10000 // 10 seconds by default
+  pollingInterval = 10000, // 10 seconds by default
+  pausePolling = false
 }) => {
   // Use the LLM status polling hook
   const { 
@@ -37,7 +39,7 @@ export const LLMStatusProvider: React.FC<LLMStatusProviderProps> = ({
     lastChecked,
     forceCheck,
     isLoading 
-  } = useLLMStatusPolling(pollingInterval);
+  } = useLLMStatusPolling(pollingInterval, pausePolling);
 
   const value = {
     localLLMAvailable,

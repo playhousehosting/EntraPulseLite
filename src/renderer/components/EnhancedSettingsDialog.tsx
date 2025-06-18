@@ -54,11 +54,11 @@ export const EnhancedSettingsDialog: React.FC<EnhancedSettingsDialogProps> = ({
   onClose,
   currentConfig,
   onSave
-}) => {
-  const [config, setConfig] = useState<LLMConfig>(currentConfig);
+}) => {  const [config, setConfig] = useState<LLMConfig>(currentConfig);
   const [cloudProviders, setCloudProviders] = useState<CloudProviderState[]>([]);
   const [isTestingConnection, setIsTestingConnection] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [testResult, setTestResult] = useState<{ success: boolean; error?: string; details?: any } | null>(null);
   const [availableModels, setAvailableModels] = useState<Record<string, string[]>>({});
   const [isLoadingModels, setIsLoadingModels] = useState<Record<string, boolean>>({});
   const [modelFetchError, setModelFetchError] = useState<Record<string, string>>({});
@@ -349,8 +349,7 @@ export const EnhancedSettingsDialog: React.FC<EnhancedSettingsDialogProps> = ({
     } catch (error) {
       console.error('Failed to remove provider:', error);
     }
-  };
-  const handleTestConnection = async (config: CloudLLMProviderConfig): Promise<boolean> => {
+  };  const handleTestConnection = async (config: CloudLLMProviderConfig): Promise<boolean> => {
     try {
       // Create a temporary LLMConfig for testing
       const testConfig = {
@@ -370,6 +369,82 @@ export const EnhancedSettingsDialog: React.FC<EnhancedSettingsDialogProps> = ({
       return false;
     }
   };
+
+  const handleTestLocalConnection = async () => {
+    setIsTestingConnection(true);
+    setConnectionStatus('idle');
+    setTestResult(null);
+    
+    try {
+      // Create a test config for the local LLM
+      const testConfig = {
+        provider: config.provider,
+        model: config.model,
+        baseUrl: config.baseUrl,
+        apiKey: '', // Local LLMs typically don't need API keys
+        temperature: config.temperature,
+        maxTokens: config.maxTokens
+      };
+
+      const success = await window.electronAPI.llm.testConnection(testConfig);
+      
+      if (success) {
+        setConnectionStatus('success');
+        setTestResult({ success: true });
+      } else {
+        setConnectionStatus('error');
+        setTestResult({ 
+          success: false, 
+          error: `Failed to connect to ${config.provider}. Please check that the service is running and the URL is correct.` 
+        });
+      }
+    } catch (error) {
+      console.error('Local LLM connection test failed:', error);
+      setConnectionStatus('error');
+      setTestResult({ 
+        success: false, 
+        error: `Connection failed: ${error instanceof Error ? error.message : 'Unknown error'}` 
+      });    } finally {
+      setIsTestingConnection(false);
+    }
+  };
+
+  const fetchLocalModels = async () => {
+    if (!config.baseUrl) {
+      setModelFetchError({ ...modelFetchError, local: 'Base URL is required to fetch models' });
+      return;
+    }
+
+    setIsLoadingModels({ ...isLoadingModels, local: true });
+    setModelFetchError({ ...modelFetchError, local: '' });
+
+    try {
+      const testConfig = {
+        provider: config.provider,
+        baseUrl: config.baseUrl,
+        model: config.model // This is for the connection test
+      };
+
+      const models = await window.electronAPI.llm.getAvailableModels(testConfig);
+      setAvailableModels({ ...availableModels, local: models });
+      
+      if (models.length === 0) {
+        setModelFetchError({ 
+          ...modelFetchError, 
+          local: `No models found. Make sure ${config.provider} is running and has models installed.` 
+        });
+      }
+    } catch (error) {
+      console.error('Failed to fetch local models:', error);
+      setModelFetchError({ 
+        ...modelFetchError, 
+        local: `Failed to fetch models: ${error instanceof Error ? error.message : 'Unknown error'}` 
+      });
+    } finally {
+      setIsLoadingModels({ ...isLoadingModels, local: false });
+    }
+  };
+  
   const getProviderDisplayName = (provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai') => {
     switch (provider) {
       case 'openai': return 'OpenAI';
@@ -570,9 +645,7 @@ export const EnhancedSettingsDialog: React.FC<EnhancedSettingsDialogProps> = ({
                 </MenuItem>
               )}
             </Select>
-          </FormControl>
-
-          {/* Local LLM Configuration */}
+          </FormControl>          {/* Local LLM Configuration */}
           {isLocalProvider && (
             <Accordion defaultExpanded>
               <AccordionSummary expandIcon={<ExpandMoreIcon />}>
@@ -589,8 +662,7 @@ export const EnhancedSettingsDialog: React.FC<EnhancedSettingsDialogProps> = ({
                       placeholder={config.provider === 'ollama' ? 'http://localhost:11434' : 'http://localhost:1234'}
                       helperText={config.provider === 'ollama' ? 'Default Ollama API endpoint' : 'Default LM Studio API endpoint'}
                     />
-                  </Grid>
-                  <Grid item xs={12}>
+                  </Grid>                  <Grid item xs={12}>
                     <TextField
                       fullWidth
                       label="Model Name"
@@ -599,6 +671,99 @@ export const EnhancedSettingsDialog: React.FC<EnhancedSettingsDialogProps> = ({
                       placeholder={config.provider === 'ollama' ? 'codellama:7b' : 'gpt-4'}
                       helperText="The model name as it appears in your local LLM service"
                     />
+                    
+                    {/* Fetch Models Button */}
+                    <Box sx={{ mt: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        onClick={() => fetchLocalModels()}
+                        disabled={!config.baseUrl || isLoadingModels['local']}
+                        startIcon={isLoadingModels['local'] ? <CircularProgress size={16} /> : undefined}
+                      >
+                        {isLoadingModels['local'] ? 'Fetching...' : 'Fetch Available Models'}
+                      </Button>
+                      
+                      {availableModels['local'] && availableModels['local'].length > 0 && (
+                        <Typography variant="caption" color="textSecondary">
+                          Found {availableModels['local'].length} models
+                        </Typography>
+                      )}
+                    </Box>
+                    
+                    {/* Available Models List */}
+                    {availableModels['local'] && availableModels['local'].length > 0 && (
+                      <Box sx={{ mt: 1 }}>
+                        <Typography variant="caption" color="textSecondary" gutterBottom>
+                          Available models (click to select):
+                        </Typography>
+                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
+                          {availableModels['local'].map((modelName) => (
+                            <Chip
+                              key={modelName}
+                              label={modelName}
+                              size="small"
+                              clickable
+                              color={config.model === modelName ? "primary" : "default"}
+                              onClick={() => setConfig({ ...config, model: modelName })}
+                            />
+                          ))}
+                        </Box>
+                      </Box>
+                    )}
+                    
+                    {modelFetchError['local'] && (
+                      <Alert severity="error" sx={{ mt: 1 }}>
+                        <Typography variant="body2">
+                          {modelFetchError['local']}
+                        </Typography>
+                      </Alert>
+                    )}
+                  </Grid>
+                  
+                  {/* Test Connection for Local LLM */}
+                  <Grid item xs={12}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                      <Button
+                        variant="outlined"
+                        onClick={() => handleTestLocalConnection()}
+                        disabled={isTestingConnection || !config.baseUrl || !config.model}
+                        startIcon={isTestingConnection ? <CircularProgress size={16} /> : undefined}
+                      >
+                        {isTestingConnection ? 'Testing...' : 'Test Connection'}
+                      </Button>
+                      
+                      {connectionStatus === 'success' && (
+                        <Chip label="Connection Successful" color="success" size="small" />
+                      )}
+                      {connectionStatus === 'error' && (
+                        <Chip label="Connection Failed" color="error" size="small" />
+                      )}
+                    </Box>
+                    
+                    {testResult && !testResult.success && testResult.error && (
+                      <Alert severity="error" sx={{ mt: 1 }}>
+                        <Typography variant="body2">
+                          {testResult.error}
+                        </Typography>
+                      </Alert>
+                    )}
+                  </Grid>
+                  
+                  {/* Prefer Local LLM Toggle */}
+                  <Grid item xs={12}>
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={config.preferLocal || false}
+                          onChange={(e) => setConfig({ ...config, preferLocal: e.target.checked })}
+                        />
+                      }
+                      label="Prefer Local LLM when available"
+                    />
+                    <Typography variant="caption" color="textSecondary" sx={{ display: 'block', mt: 1, ml: 4 }}>
+                      Use local models when both local and cloud are configured
+                    </Typography>
                   </Grid>
                 </Grid>
               </AccordionDetails>
@@ -677,8 +842,7 @@ export const EnhancedSettingsDialog: React.FC<EnhancedSettingsDialogProps> = ({
                     onChange={(e) => setConfig({ ...config, maxTokens: parseInt(e.target.value) })}
                     inputProps={{ min: 1, max: 8192 }}
                     helperText="Maximum response length"
-                  />
-                </Grid>                <Grid item xs={12}>
+                  />                </Grid>                <Grid item xs={12}>
                   <FormControlLabel
                     control={
                       <Switch
@@ -689,7 +853,9 @@ export const EnhancedSettingsDialog: React.FC<EnhancedSettingsDialogProps> = ({
                     label="Prefer Local LLM when available"
                   />
                   <Typography variant="caption" color="textSecondary" sx={{ display: 'block', mt: 1, ml: 4 }}>
-                    Use local models when both local and cloud are configured
+                    Use local models when both local and cloud are configured.
+                    {config.provider === 'ollama' || config.provider === 'lmstudio' ? 
+                      ' (Also available in Local LLM Configuration above)' : ''}
                   </Typography>
                 </Grid>
               </Grid>
@@ -1277,3 +1443,39 @@ const EntraConfigForm: React.FC<EntraConfigFormProps> = ({ config, onSave, onCle
     </Grid>
   );
 };
+
+const fetchLocalModels = async () => {
+    if (!config.baseUrl) {
+      setModelFetchError({ ...modelFetchError, local: 'Base URL is required to fetch models' });
+      return;
+    }
+
+    setIsLoadingModels({ ...isLoadingModels, local: true });
+    setModelFetchError({ ...modelFetchError, local: '' });
+
+    try {
+      const testConfig = {
+        provider: config.provider,
+        baseUrl: config.baseUrl,
+        model: config.model // This is for the connection test
+      };
+
+      const models = await window.electronAPI.llm.getAvailableModels(testConfig);
+      setAvailableModels({ ...availableModels, local: models });
+      
+      if (models.length === 0) {
+        setModelFetchError({ 
+          ...modelFetchError, 
+          local: `No models found. Make sure ${config.provider} is running and has models installed.` 
+        });
+      }
+    } catch (error) {
+      console.error('Failed to fetch local models:', error);
+      setModelFetchError({ 
+        ...modelFetchError, 
+        local: `Failed to fetch models: ${error instanceof Error ? error.message : 'Unknown error'}` 
+      });
+    } finally {
+      setIsLoadingModels({ ...isLoadingModels, local: false });
+    }
+  };

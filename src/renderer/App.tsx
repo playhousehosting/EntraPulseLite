@@ -13,9 +13,15 @@ import { VERSION } from '../shared/version';
 import { LLMStatusProvider, useLLMStatus } from './context/LLMStatusContext';
 
 // Inner App component that uses LLM status context
-const AppContent: React.FC = () => {
+interface AppContentProps {
+  settingsOpen: boolean;
+  setSettingsOpen: (open: boolean) => void;
+}
+
+const AppContent: React.FC<AppContentProps> = ({ settingsOpen, setSettingsOpen }) => {
   const [darkMode, setDarkMode] = useState(true);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
   const [aboutOpen, setAboutOpen] = useState(false);
   const [configReloadTimeout, setConfigReloadTimeout] = useState<NodeJS.Timeout | null>(null);
   const [llmConfig, setLlmConfig] = useState<LLMConfig>({
@@ -54,18 +60,22 @@ const AppContent: React.FC = () => {
     // Load saved LLM configuration
     loadLLMConfig();    // Listen for authentication configuration availability
     const handleConfigurationAvailable = (event: any, data: any) => {
-      console.log('🔄 [App.tsx] Configuration available - scheduling LLM config reload and status check');
+      console.log('🔄 [App.tsx] Configuration available - checking if settings dialog is open:', settingsOpen);
+      
+      // If settings dialog is open, skip the configuration reload entirely to prevent interference
+      if (settingsOpen) {
+        console.log('🔄 [App.tsx] Settings dialog is open - skipping configuration reload to prevent form clearing');
+        return;
+      }
       
       // Clear any existing timeout
       if (configReloadTimeout) {
         clearTimeout(configReloadTimeout);
       }
       
-      // If settings dialog is open, delay the reload to avoid interfering with user input
-      const delay = settingsOpen ? 2000 : 100; // 2 second delay if settings are open
-      
+      // Small delay to ensure stability
       const timeoutId = setTimeout(() => {
-        console.log('🔄 [App.tsx] Executing delayed configuration reload');
+        console.log('🔄 [App.tsx] Executing configuration reload');
         // Reload configuration now that authentication is verified
         loadLLMConfig();
         // Also update authentication status
@@ -73,7 +83,7 @@ const AppContent: React.FC = () => {
         // Force LLM status check through the context
         forceCheck();
         setConfigReloadTimeout(null);
-      }, delay);
+      }, 100);
       
       setConfigReloadTimeout(timeoutId);
     };
@@ -252,9 +262,17 @@ const AppContent: React.FC = () => {
 
 // Main App component that provides LLM status context
 export const App: React.FC = () => {
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  
   return (
-    <LLMStatusProvider pollingInterval={15000}> {/* Poll every 15 seconds to prevent overload */}
-      <AppContent />
+    <LLMStatusProvider 
+      pollingInterval={15000} 
+      pausePolling={settingsOpen} // Pause polling when settings dialog is open
+    >
+      <AppContent 
+        settingsOpen={settingsOpen} 
+        setSettingsOpen={setSettingsOpen} 
+      />
     </LLMStatusProvider>
   );
 };

@@ -822,4 +822,17 @@ If you received documentation, summarize the key points accurately.`;
       console.error('Error shutting down MCP servers:', error);
     }
   }
+
+  /**
+   * Update the configuration dynamically
+   */
+  updateConfig(newConfig: LLMConfig): void {
+    console.log(`[EnhancedLLMService] Updating config from ${this.config.provider} to ${newConfig.provider}`);
+    this.config = newConfig;
+    
+    // Update the unified LLM service config as well
+    if (this.unifiedLLM && this.unifiedLLM.updateConfig) {
+      this.unifiedLLM.updateConfig(newConfig);
+    }
+  }
 }
