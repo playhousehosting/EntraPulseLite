@@ -37,6 +37,17 @@ export class CloudLLMService {
     backoffFactor: 2
   };
 
+  // Availability caching to prevent excessive checks
+  private availabilityCache: {
+    isAvailable: boolean;
+    lastChecked: number;
+    cacheValidityMs: number;
+  } = {
+    isAvailable: false,
+    lastChecked: 0,
+    cacheValidityMs: 60000 // 1 minute cache
+  };
+
   constructor(config: CloudLLMConfig, mcpClient?: MCPClient) {
     this.config = config;
     this.mcpClient = mcpClient;
@@ -127,18 +138,26 @@ export class CloudLLMService {
       console.error('Cloud LLM chat failed:', error);
       throw new Error('Failed to communicate with cloud LLM');
     }
-  }
-  async isAvailable(): Promise<boolean> {
+  }  async isAvailable(): Promise<boolean> {
+    // Check cache first to avoid excessive network requests
+    const now = Date.now();
+    if (now - this.availabilityCache.lastChecked < this.availabilityCache.cacheValidityMs) {
+      console.log(`[CloudLLMService] Using cached availability result: ${this.availabilityCache.isAvailable}`);
+      return this.availabilityCache.isAvailable;
+    }
+
     try {
+      let isAvailable = false;
+
       if (this.config.provider === 'openai') {
         const response = await axios.get('https://api.openai.com/v1/models', {
           headers: {
             'Authorization': `Bearer ${this.config.apiKey}`,
             'OpenAI-Organization': this.config.organization
           },
-          timeout: 5000,
+          timeout: 10000, // Increased timeout
         });
-        return response.status === 200;
+        isAvailable = response.status === 200;
       } else if (this.config.provider === 'anthropic') {
         // Test with a simple messages endpoint call
         const response = await axios.post('https://api.anthropic.com/v1/messages', {
@@ -151,9 +170,10 @@ export class CloudLLMService {
             'Content-Type': 'application/json',
             'anthropic-version': '2023-06-01'
           },
-          timeout: 10000,
+          timeout: 15000, // Increased timeout
         });
-        return response.status === 200;      } else if (this.config.provider === 'gemini') {
+        isAvailable = response.status === 200;
+      } else if (this.config.provider === 'gemini') {
         // Test with a simple generate content call
         const response = await axios.post(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent`, {
           contents: [{ role: 'user', parts: [{ text: 'Hi' }] }],
@@ -164,10 +184,10 @@ export class CloudLLMService {
           },
           params: {
             key: this.config.apiKey
-          },
-          timeout: 10000,
+          },          timeout: 15000, // Increased timeout
         });
-        return response.status === 200;      } else if (this.config.provider === 'azure-openai') {
+        isAvailable = response.status === 200;
+      } else if (this.config.provider === 'azure-openai') {
         // Test Azure OpenAI with a simple connectivity check
         if (!this.config.baseUrl) {
           console.error('Azure OpenAI requires full endpoint URL');
@@ -185,12 +205,11 @@ export class CloudLLMService {
           // Always check models endpoint for availability, regardless of the chat URL format
           const modelsEndpoint = `${baseEndpoint}/openai/models?api-version=2025-01-01-preview`;
           console.log(`Checking Azure OpenAI models at: ${modelsEndpoint}`);
-          
-          const response = await axios.get(modelsEndpoint, {
+            const response = await axios.get(modelsEndpoint, {
             headers: {
               'api-key': this.config.apiKey
             },
-            timeout: 5000,
+            timeout: 15000, // Increased timeout for Azure OpenAI availability checks
           });
           
           console.log(`Azure OpenAI models check successful: Status ${response.status}`);
@@ -200,15 +219,28 @@ export class CloudLLMService {
             console.warn(`⚠️ Azure OpenAI URL may be incomplete. The URL should include '/chat/completions' and an API version.`);
             console.warn(`Example format: https://your-endpoint.openai.azure.com/openai/deployments/your-deployment-name/chat/completions?api-version=2024-02-01`);
           }
-          
-          return response.status === 200;
+            isAvailable = response.status === 200;
         } catch (error) {
           console.error(`Azure OpenAI availability check failed with URL ${this.config.baseUrl}:`, error);
-          return false;
+          
+          // For Azure OpenAI, be more lenient with timeout errors since the service might still work
+          if (axios.isAxiosError(error) && error.code === 'ECONNABORTED') {
+            console.warn(`Azure OpenAI timeout occurred, but service may still be functional. Assuming available.`);
+            isAvailable = true; // Assume available for timeout errors
+          } else {
+            isAvailable = false;
+          }
         }
       }
-      return false;
-    } catch (error) {
+
+      // Update cache
+      this.availabilityCache = {
+        isAvailable,
+        lastChecked: now,
+        cacheValidityMs: isAvailable ? 300000 : 30000 // 5 minutes if available, 30 seconds if not
+      };
+
+      return isAvailable;    } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       console.error('Cloud LLM availability check failed:', errorMessage);
       
@@ -222,6 +254,13 @@ export class CloudLLMService {
           console.error('Rate limit exceeded');
         }
       }
+      
+      // Update cache with failure
+      this.availabilityCache = {
+        isAvailable: false,
+        lastChecked: now,
+        cacheValidityMs: 30000 // 30 seconds for failed checks
+      };
       
       return false;
     }

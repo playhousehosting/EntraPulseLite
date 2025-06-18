@@ -65,6 +65,12 @@ export interface CloudLLMProviderConfig {
   maxTokens?: number;
 }
 
+export interface EntraConfig {
+  clientId: string;
+  tenantId: string;
+  clientSecret?: string;
+}
+
 export interface LLMConfig {
   provider: 'ollama' | 'lmstudio' | 'openai' | 'anthropic' | 'gemini' | 'azure-openai';
   baseUrl?: string; // Not required for cloud providers
@@ -131,6 +137,7 @@ export interface ElectronAPI {
     getCurrentUser: () => Promise<User | null>;
     requestPermissions: (permissions: string[]) => Promise<AuthToken | null>;
     getTokenWithPermissions: (permissions: string[]) => Promise<AuthToken | null>;
+    testConfiguration: (config: EntraConfig) => Promise<{ success: boolean; error?: string; details?: any }>;
   };  graph: {
     query: (endpoint: string, method?: string, data?: any) => Promise<any>;
     getUserPhoto: (userId?: string) => Promise<string | null>;
@@ -153,6 +160,9 @@ export interface ElectronAPI {
     setDefaultCloudProvider: (provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai') => Promise<void>;
     getDefaultCloudProvider: () => Promise<{ provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai'; config: CloudLLMProviderConfig } | null>;
     removeCloudProviderConfig: (provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai') => Promise<void>;
+    getEntraConfig: () => Promise<EntraConfig | null>;
+    saveEntraConfig: (config: EntraConfig) => Promise<void>;
+    clearEntraConfig: () => Promise<void>;
   };
 }
 

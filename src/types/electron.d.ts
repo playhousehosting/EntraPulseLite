@@ -11,6 +11,7 @@ interface AuthAPI {
   getAuthenticationInfo(): Promise<any>;
   clearTokenCache(): Promise<void>;
   forceReauthentication(): Promise<any>;
+  testConfiguration(config: any): Promise<{ success: boolean; error?: string; details?: any }>;
 }
 
 interface GraphAPI {
@@ -46,6 +47,9 @@ interface ConfigAPI {
   setDefaultCloudProvider(provider: 'openai' | 'anthropic' | 'gemini'): Promise<void>;
   getDefaultCloudProvider(): Promise<{ provider: 'openai' | 'anthropic' | 'gemini'; config: any } | null>;
   removeCloudProviderConfig(provider: 'openai' | 'anthropic' | 'gemini'): Promise<void>;
+  getEntraConfig(): Promise<any>;
+  saveEntraConfig(config: any): Promise<void>;
+  clearEntraConfig(): Promise<void>;
 }
 
 interface ElectronAPI {

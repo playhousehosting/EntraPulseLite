@@ -12,7 +12,7 @@ import { MCPServerManager } from '../mcp/servers/MCPServerManager';
 import { GraphMCPClient } from '../mcp/clients/GraphMCPClient';
 import { MCPErrorHandler, ErrorCode } from '../mcp/utils';
 import { debugMCP, checkMCPServerHealth } from '../mcp/mcp-debug';
-import { AppConfig } from '../types';
+import { AppConfig, MCPServerConfig } from '../types';
 
 // Set app ID for Windows taskbar integration
 if (process.platform === 'win32') {
@@ -30,10 +30,10 @@ class EntraPulseLiteApp {
   private llmService!: EnhancedLLMService;
   private mcpClient!: MCPClient;
   private mcpServerManager!: MCPServerManager;
-  private config!: AppConfig;
-  constructor() {
-    this.initializeServices();
-    this.setupEventHandlers();
+  private config!: AppConfig;  constructor() {
+    this.initializeServices().then(() => {
+      this.setupEventHandlers();
+    });
   }
 
   private getDefaultModelForProvider(provider: 'ollama' | 'lmstudio' | 'openai' | 'anthropic'): string {
@@ -45,32 +45,48 @@ class EntraPulseLiteApp {
       case 'openai':
         return 'gpt-4o-mini';      case 'anthropic':
         return 'claude-3-haiku-20240307';
-      default:
-        return 'gpt-4o-mini';
+      default:        return 'gpt-4o-mini';
     }
-  }  private initializeServices(): void {    // Initialize configuration service first
+  }
+  private async initializeServices(): Promise<void> {
+    // Initialize configuration service first
     this.configService = new ConfigService();
+      // Get authentication configuration (stored config takes precedence over env vars)
+    const authConfig = await this.getAuthConfiguration();
     
-    // Set initial authentication context (client-credentials mode)
-    this.configService.setAuthenticationContext('client-credentials');
+    // Check if we have Lokka credentials configured for non-interactive authentication
+    const hasLokkaCreds = authConfig.clientSecret && authConfig.clientId && authConfig.tenantId;
+    const useExternalLokka = process.env.USE_EXTERNAL_LOKKA === 'true' || hasLokkaCreds;
+    
+    console.log('[Main] Initial Lokka configuration check:', {
+      hasLokkaCreds,
+      useExternalLokka,
+      clientIdExists: Boolean(authConfig.clientId),
+      tenantIdExists: Boolean(authConfig.tenantId),
+      clientSecretExists: Boolean(authConfig.clientSecret),
+      USE_EXTERNAL_LOKKA: process.env.USE_EXTERNAL_LOKKA
+    });
+      // Set authentication context based on available credentials
+    const authMode = hasLokkaCreds ? 'client-credentials' : 'interactive';
+    console.log(`[Main] Setting initial authentication mode: ${authMode}`);
+    this.configService.setAuthenticationContext(authMode);
+    
+    // Set service-level access for the main process (trusted environment)
+    this.configService.setServiceLevelAccess(true);
+    
+      // Set authentication as verified since we are in the main process
+    this.configService.setAuthenticationVerified(true);
     
     // Initialize configuration using stored config
     const storedLLMConfig = this.configService.getLLMConfig();
-    // Check if we have Lokka credentials configured for non-interactive authentication
-    const hasLokkaCreds = process.env.LOKKA_CLIENT_ID && process.env.LOKKA_TENANT_ID && process.env.LOKKA_CLIENT_SECRET;
-    const useExternalLokka = process.env.USE_EXTERNAL_LOKKA === 'true' || hasLokkaCreds;
     
-    this.config = {
+      this.config = {
       auth: {
-        clientId: process.env.MSAL_CLIENT_ID && process.env.MSAL_CLIENT_ID.trim() !== '' 
-          ? process.env.MSAL_CLIENT_ID 
-          : '14d82eec-204b-4c2f-b7e8-296a70dab67e', // Microsoft Graph PowerShell fallback
-        tenantId: process.env.MSAL_TENANT_ID && process.env.MSAL_TENANT_ID.trim() !== '' 
-          ? process.env.MSAL_TENANT_ID 
-          : 'common',        scopes: hasLokkaCreds 
+        clientId: authConfig.clientId,
+        tenantId: authConfig.tenantId,        scopes: hasLokkaCreds 
           ? ['https://graph.microsoft.com/.default'] // Client credentials flow requires .default scope
           : ['https://graph.microsoft.com/.default'], // Interactive flow using .default to inherit all app registration permissions
-        clientSecret: process.env.MSAL_CLIENT_SECRET || process.env.LOKKA_CLIENT_SECRET, // Only needed for confidential client applications        useClientCredentials: Boolean(hasLokkaCreds), // Use client credentials flow if Lokka creds are configured
+        clientSecret: authConfig.clientSecret, // Only needed for confidential client applications        useClientCredentials: Boolean(hasLokkaCreds), // Use client credentials flow if Lokka creds are configured
       },      llm: storedLLMConfig, // Use stored LLM configuration
       mcpServers: [
         {
@@ -79,11 +95,10 @@ class EntraPulseLiteApp {
           port: parseInt(process.env.EXTERNAL_MCP_LOKKA_PORT || '3003'),
           enabled: (process.env.USE_EXTERNAL_LOKKA === 'true' || Boolean(hasLokkaCreds)), // Enable if explicitly set or if creds exist
           command: 'npx',
-          args: ['-y', '@merill/lokka'],
-          env: {
-            TENANT_ID: process.env.LOKKA_TENANT_ID || process.env.MSAL_TENANT_ID,
-            CLIENT_ID: process.env.LOKKA_CLIENT_ID || process.env.MSAL_CLIENT_ID,
-            CLIENT_SECRET: process.env.LOKKA_CLIENT_SECRET
+          args: ['-y', '@merill/lokka'],          env: {
+            TENANT_ID: authConfig.tenantId,
+            CLIENT_ID: authConfig.clientId,
+            CLIENT_SECRET: authConfig.clientSecret || process.env.LOKKA_CLIENT_SECRET
           }
         },
         {
@@ -92,11 +107,22 @@ class EntraPulseLiteApp {
           port: parseInt(process.env.MCP_DOCS_PORT || '3002'),
           enabled: true,
         },
-      ],
-      features: {
+      ],      features: {
         enablePremiumFeatures: process.env.ENABLE_PREMIUM_FEATURES === 'true',
         enableTelemetry: process.env.ENABLE_TELEMETRY === 'true',
       },    };
+
+    // Log the final Lokka MCP server configuration for debugging
+    const lokkaConfig = this.config.mcpServers.find(server => server.name === 'external-lokka');
+    console.log('[Main] Final Lokka MCP server configuration:', {
+      enabled: lokkaConfig?.enabled,
+      hasEnv: Boolean(lokkaConfig?.env),
+      envKeys: lokkaConfig?.env ? Object.keys(lokkaConfig.env) : [],
+      envValues: lokkaConfig?.env ? Object.keys(lokkaConfig.env).reduce((acc, key) => {
+        acc[key] = Boolean(lokkaConfig.env![key]);
+        return acc;
+      }, {} as Record<string, boolean>) : {}
+    });
 
     // Initialize services
     this.authService = new AuthService(this.config);
@@ -110,10 +136,43 @@ class EntraPulseLiteApp {
     this.mcpServerManager = new MCPServerManager(this.config.mcpServers, mcpAuthService);
       // Initialize MCP client with auth service
     this.mcpClient = new MCPClient(this.config.mcpServers, mcpAuthService);
-    
-    // Get the default cloud provider configuration for LLM service
+      // Get the default cloud provider configuration for LLM service
     const defaultCloudProvider = this.configService.getDefaultCloudProvider();
     let llmConfig = this.config.llm;
+    
+    console.log('[Main] Default cloud provider debug:', {
+      defaultCloudProvider: defaultCloudProvider,
+      currentLLMConfig: {
+        provider: this.config.llm.provider,
+        model: this.config.llm.model,
+        hasCloudProviders: !!this.config.llm.cloudProviders,
+        cloudProviderKeys: this.config.llm.cloudProviders ? Object.keys(this.config.llm.cloudProviders) : [],
+        defaultCloudProviderField: this.config.llm.defaultCloudProvider
+      }
+    });
+      // Check for configuration inconsistency and fix it
+    if (this.config.llm.defaultCloudProvider && this.config.llm.provider !== this.config.llm.defaultCloudProvider) {
+      console.log(`[Main] Configuration inconsistency detected: main provider (${this.config.llm.provider}) != default provider (${this.config.llm.defaultCloudProvider})`);
+      console.log(`[Main] Fixing configuration: setting main provider to match default provider`);
+      
+      // Fix the inconsistency by updating the main provider to match the default
+      const fixedConfig = this.configService.getLLMConfig();
+      const defaultProvider = fixedConfig.defaultCloudProvider;
+      
+      if (defaultProvider) {
+        fixedConfig.provider = defaultProvider as 'openai' | 'anthropic' | 'gemini' | 'azure-openai' | 'ollama' | 'lmstudio';
+        
+        // Update model to match the cloud provider's model if available
+        if (fixedConfig.cloudProviders?.[defaultProvider]?.model) {
+          fixedConfig.model = fixedConfig.cloudProviders[defaultProvider].model;
+        }
+        
+        this.configService.saveLLMConfig(fixedConfig);
+        this.config.llm = fixedConfig; // Update local config object
+        
+        console.log(`[Main] ✅ Configuration fixed: main provider now set to ${fixedConfig.provider}`);
+      }
+    }
     
     if (defaultCloudProvider) {
       // Use the default cloud provider configuration
@@ -129,6 +188,7 @@ class EntraPulseLiteApp {
       console.log('🔄 Using default cloud provider for LLM:', defaultCloudProvider.provider, 'Model:', defaultCloudProvider.config.model);
     } else {
       console.log('⚠️ No default cloud provider configured, using stored LLM config');
+      console.log('⚠️ This means either defaultCloudProvider is not set or the provider is not in cloudProviders');
     }
     
     // Initialize LLM service with the appropriate configuration
@@ -137,6 +197,229 @@ class EntraPulseLiteApp {
     // Log successful initialization
     console.log('Services initialized successfully');
   }
+  /**
+   * Reinitialize services when configuration changes (e.g., Entra config updated)
+   */
+  private async reinitializeServices(): Promise<void> {
+    try {
+      console.log('[Main] Reinitializing services with updated configuration...');
+      
+      // Store current cloud provider configurations before context switch
+      const currentCloudProviders = this.configService.getLLMConfig()?.cloudProviders;
+      const currentDefaultProvider = this.configService.getDefaultCloudProvider();
+      console.log('[Main] Preserving cloud providers during reinitialization:', {
+        hasCloudProviders: !!currentCloudProviders,
+        providerCount: currentCloudProviders ? Object.keys(currentCloudProviders).length : 0,
+        defaultProvider: currentDefaultProvider?.provider
+      });
+      
+      // Get updated authentication configuration
+      const authConfig = await this.getAuthConfiguration();
+      
+      // Check if we have Lokka credentials configured for non-interactive authentication
+      const hasLokkaCreds = authConfig.clientSecret && authConfig.clientId && authConfig.tenantId;
+      const useExternalLokka = process.env.USE_EXTERNAL_LOKKA === 'true' || hasLokkaCreds;      
+      // Update authentication context in ConfigService BEFORE reinitializing other services
+      console.log('[Main] Updating authentication context for configuration mode...');
+      
+      // Determine the new authentication mode
+      const newAuthMode = hasLokkaCreds ? 'client-credentials' : 'interactive';
+      console.log(`[Main] Switching authentication mode to: ${newAuthMode}`);
+      
+      // Set authentication context but preserve existing cloud provider configs
+      this.configService.setAuthenticationContext(newAuthMode);
+      
+      // Restore cloud provider configurations if they exist
+      if (currentCloudProviders && Object.keys(currentCloudProviders).length > 0) {
+        console.log('[Main] Restoring cloud provider configurations after context switch...');
+        const restoredConfig = this.configService.getLLMConfig();
+        restoredConfig.cloudProviders = currentCloudProviders;
+        if (currentDefaultProvider) {
+          restoredConfig.defaultCloudProvider = currentDefaultProvider.provider;
+        }
+        this.configService.saveLLMConfig(restoredConfig);
+        console.log('[Main] Cloud provider configurations restored successfully');
+      }
+      
+      // Update the config object
+      this.config.auth = {
+        clientId: authConfig.clientId,
+        tenantId: authConfig.tenantId,
+        scopes: hasLokkaCreds 
+          ? ['https://graph.microsoft.com/.default'] 
+          : ['https://graph.microsoft.com/.default'],
+        clientSecret: authConfig.clientSecret,
+        useClientCredentials: Boolean(hasLokkaCreds),
+      };      // Update MCP server configuration
+      const lokkaServerIndex = this.config.mcpServers.findIndex(server => server.name === 'external-lokka');
+      if (lokkaServerIndex !== -1) {
+        const updatedLokkaConfig: MCPServerConfig = {
+          name: 'external-lokka',
+          type: 'external-lokka' as const,
+          port: parseInt(process.env.EXTERNAL_MCP_LOKKA_PORT || '3003'),
+          enabled: Boolean(useExternalLokka),
+          command: 'npx',
+          args: ['-y', '@merill/lokka'],
+          env: {
+            TENANT_ID: authConfig.tenantId,
+            CLIENT_ID: authConfig.clientId,
+            CLIENT_SECRET: authConfig.clientSecret || process.env.LOKKA_CLIENT_SECRET
+          }
+        };
+        this.config.mcpServers[lokkaServerIndex] = updatedLokkaConfig;
+        
+        console.log('[Main] Updated Lokka MCP server config:', {
+          enabled: updatedLokkaConfig.enabled,
+          hasTenantId: Boolean(updatedLokkaConfig.env?.TENANT_ID),
+          hasClientId: Boolean(updatedLokkaConfig.env?.CLIENT_ID),
+          hasClientSecret: Boolean(updatedLokkaConfig.env?.CLIENT_SECRET),
+          useExternalLokka,
+          hasLokkaCreds
+        });
+      } else {
+        console.warn('[Main] Lokka server not found in config for update');
+      }
+      
+      // Reinitialize AuthService with new configuration
+      this.authService = new AuthService(this.config);
+      
+      // Update GraphService with new AuthService
+      this.graphService = new GraphService(this.authService);
+        // Reinitialize MCP services
+      const mcpAuthService = new MCPAuthService(this.authService);
+      console.log('[Main] Reinitializing MCP client with updated server configs:', this.config.mcpServers);
+        // Stop existing MCP services gracefully
+      if (this.mcpServerManager) {
+        try {
+          console.log('[Main] Stopping existing MCP server manager...');
+          await this.mcpServerManager.stopAllServers();
+          console.log('[Main] MCP server manager stopped successfully');
+        } catch (error) {
+          console.warn('[Main] Error stopping MCP server manager:', error);
+        }
+      }
+      if (this.mcpClient) {
+        try {
+          console.log('[Main] Stopping existing MCP client...');
+          await this.mcpClient.stopAllServers();
+          console.log('[Main] MCP client stopped successfully');
+        } catch (error) {
+          console.warn('[Main] Error stopping MCP client:', error);
+        }
+      }
+      
+      // Wait a moment for services to fully stop
+      await new Promise(resolve => setTimeout(resolve, 500));
+        // Create new MCP services with updated configuration
+      console.log('[Main] Creating new MCP services with updated configs...');
+      console.log('[Main] MCP server configs for initialization:', 
+        this.config.mcpServers.map(s => ({
+          name: s.name,
+          type: s.type,
+          enabled: s.enabled,
+          hasEnv: Boolean(s.env),
+          envKeys: s.env ? Object.keys(s.env) : []
+        }))
+      );      
+      this.mcpServerManager = new MCPServerManager(this.config.mcpServers, mcpAuthService);
+      this.mcpClient = new MCPClient(this.config.mcpServers, mcpAuthService);
+        
+      // Start the new MCP servers explicitly
+      console.log('[Main] Starting new MCP servers...');
+      try {
+        // The MCPServerManager constructor normally starts the servers, but let's be explicit
+        // and ensure the Lokka MCP server is started if it's enabled
+          // Find the Lokka server config
+        const lokkaConfig = this.config.mcpServers.find(server => server.name === 'external-lokka');
+        
+        if (lokkaConfig && lokkaConfig.enabled) {
+          console.log('[Main] Ensuring Lokka MCP server is started...');
+          
+          try {
+            // Use our new method in MCPClient to start the Lokka server explicitly
+            await this.mcpClient.startServer('external-lokka');
+            console.log('[Main] ✅ Lokka MCP server started explicitly through client');
+          } catch (error) {
+            console.error('[Main] Failed to start Lokka MCP server through client:', error);
+            
+            // Fallback to using server manager directly
+            const lokkaServer = this.mcpServerManager.getServer('external-lokka');
+            if (lokkaServer && lokkaServer.startServer) {
+              console.log('[Main] Attempting to start Lokka MCP server through manager...');
+              try {
+                await lokkaServer.startServer();
+                console.log('[Main] ✅ Lokka MCP server started explicitly through manager');
+              } catch (error) {
+                console.error('[Main] Failed to start Lokka MCP server through manager:', error);
+              }
+            } else {
+              console.warn('[Main] Could not find Lokka server instance in manager');
+            }
+          }
+        } else {
+          console.log('[Main] Lokka server is not enabled, skipping explicit start');
+        }
+        
+        // Wait a moment for servers to fully initialize
+        await new Promise(resolve => setTimeout(resolve, 1000));        // Verify available servers
+        const availableServers = this.mcpClient.getAvailableServers();
+        console.log('[Main] Number of available MCP servers after reinitialization:', availableServers.length);
+        
+        // MCPClient.getAvailableServers() returns string[] of server names
+        const lokkaServerExists = availableServers.includes('external-lokka');
+        if (lokkaServerExists) {
+          console.log('[Main] ✅ External Lokka MCP server is available');
+        } else {
+          console.warn('[Main] ⚠️ External Lokka MCP server is NOT available');
+          console.log('[Main] Available servers:', availableServers);
+        }
+        
+        console.log('[Main] MCP services reinitialized successfully');
+      } catch (error) {
+        console.error('[Main] Error starting new MCP servers:', error);
+      }
+        // Get updated LLM configuration
+      const defaultCloudProvider = this.configService.getDefaultCloudProvider();
+      let llmConfig = this.config.llm;
+      
+      if (defaultCloudProvider) {
+        llmConfig = {
+          provider: defaultCloudProvider.provider,
+          model: defaultCloudProvider.config.model,
+          apiKey: defaultCloudProvider.config.apiKey,
+          baseUrl: defaultCloudProvider.config.baseUrl,
+          temperature: defaultCloudProvider.config.temperature,
+          maxTokens: defaultCloudProvider.config.maxTokens,
+          organization: defaultCloudProvider.config.organization
+        };
+        console.log('[Main] Using default cloud provider for LLM:', defaultCloudProvider.provider);
+      } else {
+        // Fallback to stored LLM configuration
+        const storedLLMConfig = this.configService.getLLMConfig();
+        if (storedLLMConfig) {
+          llmConfig = storedLLMConfig;
+          console.log('[Main] No default cloud provider, using stored LLM config:', storedLLMConfig.provider);
+        } else {
+          console.warn('[Main] No LLM configuration available - neither default provider nor stored config');
+        }
+      }
+      
+      // Reinitialize LLM service
+      this.llmService = new EnhancedLLMService(llmConfig, this.authService, this.mcpClient);
+      
+      console.log('[Main] Services reinitialized successfully');
+      
+      // Notify renderer that configuration has been updated
+      if (this.mainWindow) {
+        this.mainWindow.webContents.send('auth:configurationAvailable', { source: 'config-update' });
+      }
+      
+    } catch (error) {
+      console.error('[Main] Failed to reinitialize services:', error);
+      throw error;
+    }
+  }
+
   private setupEventHandlers(): void {
     // Set application ID for Windows taskbar
     if (process.platform === 'win32') {
@@ -322,10 +605,70 @@ class EntraPulseLiteApp {
           
           // Get the full LLM configuration now that we're authenticated
           const fullLLMConfig = this.configService.getLLMConfig();
-          console.log('🔧 Reloading LLM service with full configuration including cloud providers');
-          
-          // Reinitialize LLM service with full config
+          console.log('🔧 Reloading LLM service with full configuration including cloud providers');          // Reinitialize LLM service with full config
           this.llmService = new EnhancedLLMService(fullLLMConfig, this.authService, this.mcpClient);
+          
+          // Check if we have stored Entra credentials and update MCP server config
+          console.log('🔧 Checking for stored Entra credentials after login...');
+          const storedEntraConfig = this.configService.getEntraConfig();
+          
+          if (storedEntraConfig && storedEntraConfig.clientId && storedEntraConfig.tenantId && storedEntraConfig.clientSecret) {
+            console.log('🔐 Found stored Entra credentials, updating Lokka MCP server configuration...');
+            
+            // Update the Lokka server configuration with stored credentials
+            const lokkaServerIndex = this.config.mcpServers.findIndex(server => server.name === 'external-lokka');
+            if (lokkaServerIndex !== -1) {
+              this.config.mcpServers[lokkaServerIndex] = {
+                ...this.config.mcpServers[lokkaServerIndex],
+                enabled: true, // Enable since we have credentials
+                env: {
+                  TENANT_ID: storedEntraConfig.tenantId,
+                  CLIENT_ID: storedEntraConfig.clientId,
+                  CLIENT_SECRET: storedEntraConfig.clientSecret
+                }
+              };
+              
+              console.log('✅ Updated Lokka MCP server configuration with stored credentials');
+              
+              // Reinitialize MCP services with updated config
+              const mcpAuthService = new MCPAuthService(this.authService);
+              
+              // Stop existing MCP services gracefully
+              if (this.mcpServerManager) {
+                try {
+                  await this.mcpServerManager.stopAllServers();
+                } catch (error) {
+                  console.warn('Error stopping MCP server manager:', error);
+                }
+              }
+              
+              // Create new MCP services with updated configuration
+              this.mcpServerManager = new MCPServerManager(this.config.mcpServers, mcpAuthService);
+              this.mcpClient = new MCPClient(this.config.mcpServers, mcpAuthService);
+              
+              console.log('🚀 MCP services reinitialized with Entra credentials');
+            }
+          } else {
+            console.log('⚠️ No stored Entra credentials found for Lokka MCP server');
+          }
+          
+          // Start or restart the Lokka MCP server with the new authentication context
+          try {
+            console.log('[Main] Attempting to start Lokka MCP server after successful login...');
+            
+            // Check if Lokka server is enabled in the configuration
+            const lokkaConfig = this.config.mcpServers.find(server => server.name === 'external-lokka');
+            
+            if (lokkaConfig && lokkaConfig.enabled) {
+              // Try to start the server explicitly
+              await this.mcpClient.startServer('external-lokka');
+              console.log('[Main] ✅ Lokka MCP server started after authentication');
+            } else {
+              console.log('[Main] Lokka MCP server not enabled, skipping start after login');
+            }
+          } catch (error) {
+            console.error('[Main] Failed to start Lokka MCP server after login:', error);
+          }
           
           // Notify renderer that configuration is now available
           if (this.mainWindow) {
@@ -338,7 +681,9 @@ class EntraPulseLiteApp {
         console.error('Login failed:', error);
         throw error;
       }
-    });    ipcMain.handle('auth:logout', async () => {
+    });
+
+    ipcMain.handle('auth:logout', async () => {
       try {
         await this.authService.logout();
         
@@ -359,7 +704,9 @@ class EntraPulseLiteApp {
         console.error('Get token failed:', error);
         return null;
       }
-    });    ipcMain.handle('auth:getCurrentUser', async () => {
+    });
+
+    ipcMain.handle('auth:getCurrentUser', async () => {
       try {
         return await this.authService.getCurrentUser();
       } catch (error) {
@@ -394,7 +741,9 @@ class EntraPulseLiteApp {
         console.error('Get token with permissions failed:', error);
         return null;
       }
-    });    ipcMain.handle('auth:getAuthenticationInfo', async () => {
+    });
+
+    ipcMain.handle('auth:getAuthenticationInfo', async () => {
       try {
         return await this.authService.getAuthenticationInfoWithToken();
       } catch (error) {
@@ -423,6 +772,30 @@ class EntraPulseLiteApp {
       }
     });
 
+    ipcMain.handle('auth:testConfiguration', async (event, testConfig) => {
+      try {
+        console.log('🧪 Testing authentication configuration via IPC...');
+          // Create AppConfig from the provided Entra config
+        const appConfig = {
+          auth: {
+            clientId: testConfig.clientId,
+            tenantId: testConfig.tenantId,
+            clientSecret: testConfig.clientSecret,
+            useClientCredentials: !!testConfig.clientSecret,
+            scopes: ['https://graph.microsoft.com/.default']
+          }
+        };
+
+        return await this.authService.testAuthentication(appConfig);
+      } catch (error) {
+        console.error('Auth configuration test failed:', error);
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : String(error)
+        };
+      }
+    });
+
     // Microsoft Graph handlers
     ipcMain.handle('graph:query', async (event, endpoint: string, method?: string, data?: any) => {
       try {
@@ -440,15 +813,24 @@ class EntraPulseLiteApp {
         console.error('Get user photo failed:', error);
         return null;
       }
-    });    // LLM handlers
-    ipcMain.handle('llm:chat', async (event, messages) => {
+    });
+
+    // LLM handlers
+    ipcMain.handle('llm:chat', async (event, messages: any) => {
       try {
+        // Ensure Lokka MCP server is running before chat
+        // This handles the case where the user has authenticated but server isn't started
+        await this.ensureLokkaMCPServerRunning();
+        
+        // Now proceed with enhanced chat
         return await this.llmService.enhancedChat(messages);
       } catch (error) {
         console.error('LLM chat failed:', error);
         throw error;
       }
-    });    ipcMain.handle('llm:isAvailable', async () => {
+    });
+    
+    ipcMain.handle('llm:isAvailable', async () => {
       try {
         return await this.llmService.isAvailable();
       } catch (error) {
@@ -496,9 +878,10 @@ class EntraPulseLiteApp {
         return await lmStudioService.isAvailable();
       } catch (error) {
         console.error('Local LLM availability check failed:', error);
-        return false;
-      }
-    });// MCP handlers
+        return false;      }
+    });
+
+    // MCP handlers
     ipcMain.handle('mcp:call', async (event, server: string, toolName: string, arguments_: any) => {
       try {
         return await this.mcpClient.callTool(server, toolName, arguments_);
@@ -573,7 +956,9 @@ class EntraPulseLiteApp {
     });    // LLM Configuration handlers
     ipcMain.handle('config:getLLMConfig', async () => {
       return this.configService.getLLMConfig();
-    });    ipcMain.handle('config:saveLLMConfig', async (event, newLLMConfig) => {
+    });
+
+    ipcMain.handle('config:saveLLMConfig', async (event, newLLMConfig) => {
       try {        
         // Save configuration securely
         this.configService.saveLLMConfig(newLLMConfig);
@@ -600,7 +985,9 @@ class EntraPulseLiteApp {
         console.error('Failed to clear model cache:', error);
         throw error;
       }
-    });    ipcMain.handle('config:getCachedModels', async (event, provider: string) => {
+    });
+
+    ipcMain.handle('config:getCachedModels', async (event, provider: string) => {
       try {
         return this.configService.getCachedModels(provider) || [];
       } catch (error) {
@@ -634,7 +1021,9 @@ class EntraPulseLiteApp {
         console.error('Get configured cloud providers failed:', error);
         return [];
       }
-    });    ipcMain.handle('config:setDefaultCloudProvider', async (event, provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai') => {
+    });
+
+    ipcMain.handle('config:setDefaultCloudProvider', async (event, provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai') => {
       try {
         this.configService.setDefaultCloudProvider(provider);
         
@@ -705,6 +1094,46 @@ class EntraPulseLiteApp {
       }
     });
 
+    // Entra configuration handlers
+    ipcMain.handle('config:getEntraConfig', async () => {
+      try {
+        return this.configService.getEntraConfig();
+      } catch (error) {
+        console.error('Get Entra config failed:', error);
+        return null;
+      }
+    });
+
+    ipcMain.handle('config:saveEntraConfig', async (event, entraConfig) => {
+      try {
+        this.configService.saveEntraConfig(entraConfig);
+        
+        // Reinitialize services with new Entra configuration
+        console.log('[Main] Entra config saved, reinitializing services...');
+        await this.reinitializeServices();
+        
+        return true;
+      } catch (error) {
+        console.error('Save Entra config failed:', error);
+        throw error;
+      }
+    });
+
+    ipcMain.handle('config:clearEntraConfig', async () => {
+      try {
+        this.configService.clearEntraConfig();
+        
+        // Reinitialize services after clearing Entra configuration
+        console.log('[Main] Entra config cleared, reinitializing services...');
+        await this.reinitializeServices();
+        
+        return true;
+      } catch (error) {
+        console.error('Clear Entra config failed:', error);
+        throw error;
+      }
+    });
+
     // LLM testing handlers
     ipcMain.handle('llm:testConnection', async (event, testConfig) => {
       try {
@@ -715,7 +1144,9 @@ class EntraPulseLiteApp {
         console.error('LLM connection test failed:', error);
         return false;
       }
-    });    ipcMain.handle('llm:getAvailableModels', async (event, config?: any) => {
+    });
+
+    ipcMain.handle('llm:getAvailableModels', async (event, config?: any) => {
       try {
         // If config is provided, use the appropriate service
         if (config && (config.provider === 'openai' || config.provider === 'anthropic' || config.provider === 'gemini' || config.provider === 'azure-openai') && config.apiKey) {
@@ -818,8 +1249,7 @@ class EntraPulseLiteApp {
   /**
    * Check if user is already authenticated from a previous session
    * and set up authentication context accordingly
-   */
-  private async initializeAuthenticationState(): Promise<void> {
+   */  private async initializeAuthenticationState(): Promise<void> {
     try {
       console.log('🔍 Checking for existing authentication session...');
       
@@ -834,12 +1264,77 @@ class EntraPulseLiteApp {
         
         // Set authentication context  
         this.configService.setAuthenticationContext('client-credentials');
-        
-        // Reload LLM service with full configuration
+          // Reload LLM service with full configuration
         const fullLLMConfig = this.configService.getLLMConfig();
         console.log('🔧 Initializing LLM service with full configuration from existing session');
+          this.llmService = new EnhancedLLMService(fullLLMConfig, this.authService, this.mcpClient);
         
-        this.llmService = new EnhancedLLMService(fullLLMConfig, this.authService, this.mcpClient);
+        // Check if we have stored Entra credentials and update MCP server config
+        console.log('🔧 Checking for stored Entra credentials during initialization...');
+        const storedEntraConfig = this.configService.getEntraConfig();
+        
+        if (storedEntraConfig && storedEntraConfig.clientId && storedEntraConfig.tenantId && storedEntraConfig.clientSecret) {
+          console.log('🔐 Found stored Entra credentials, updating Lokka MCP server configuration...');
+          
+          // Update the Lokka server configuration with stored credentials
+          const lokkaServerIndex = this.config.mcpServers.findIndex(server => server.name === 'external-lokka');
+          if (lokkaServerIndex !== -1) {
+            this.config.mcpServers[lokkaServerIndex] = {
+              ...this.config.mcpServers[lokkaServerIndex],
+              enabled: true, // Enable since we have credentials
+              env: {
+                TENANT_ID: storedEntraConfig.tenantId,
+                CLIENT_ID: storedEntraConfig.clientId,
+                CLIENT_SECRET: storedEntraConfig.clientSecret
+              }
+            };
+            
+            console.log('✅ Updated Lokka MCP server configuration with stored credentials:', {
+              enabled: this.config.mcpServers[lokkaServerIndex].enabled,
+              hasEnv: Boolean(this.config.mcpServers[lokkaServerIndex].env),
+              envKeys: this.config.mcpServers[lokkaServerIndex].env ? Object.keys(this.config.mcpServers[lokkaServerIndex].env) : []
+            });
+            
+            // Reinitialize MCP services with updated config
+            const mcpAuthService = new MCPAuthService(this.authService);
+            
+            // Stop existing MCP services gracefully
+            if (this.mcpServerManager) {
+              try {
+                await this.mcpServerManager.stopAllServers();
+              } catch (error) {
+                console.warn('Error stopping MCP server manager:', error);
+              }
+            }
+            
+            // Create new MCP services with updated configuration
+            this.mcpServerManager = new MCPServerManager(this.config.mcpServers, mcpAuthService);
+            this.mcpClient = new MCPClient(this.config.mcpServers, mcpAuthService);
+            
+            console.log('🚀 MCP services reinitialized with Entra credentials during startup');
+          }
+        } else {
+          console.log('⚠️ No stored Entra credentials found for Lokka MCP server during startup');
+          
+          // Since user is authenticated but no stored Entra config, Lokka might still be enabled
+          // via env vars, so let's check that case
+          const lokkaConfig = this.config.mcpServers.find(server => server.name === 'external-lokka');
+          if (lokkaConfig && lokkaConfig.enabled) {
+            console.log('🔧 Lokka MCP server enabled via environment variables');
+          } else {
+            console.log('❌ Lokka MCP server not enabled - missing Entra credentials');
+          }
+        }
+        
+        // Ensure Lokka MCP server is running after all configuration updates
+        console.log('🔧 Attempting to ensure Lokka MCP server is running...');
+        const lokkaStarted = await this.ensureLokkaMCPServerRunning();
+        
+        if (lokkaStarted) {
+          console.log('✅ Lokka MCP server is running and ready');
+        } else {
+          console.warn('⚠️ Lokka MCP server failed to start or is not available');
+        }
         
         console.log('🎉 Authentication state initialized successfully');
       } else {
@@ -850,9 +1345,131 @@ class EntraPulseLiteApp {
       }
     } catch (error) {
       console.warn('Failed to check authentication state:', error);
-      
-      // On error, ensure authentication verification is false
+        // On error, ensure authentication verification is false
       this.configService.setAuthenticationVerified(false);
+    }
+  }
+
+  /**
+   * Get authentication configuration from stored settings, falling back to environment variables
+   */
+  private async getAuthConfiguration(): Promise<{clientId: string, tenantId: string, clientSecret?: string}> {
+    // First try to get stored configuration
+    const storedEntraConfig = this.configService.getEntraConfig();
+    
+    if (storedEntraConfig && storedEntraConfig.clientId && storedEntraConfig.tenantId) {
+      console.log('[Main] Using stored Entra configuration');
+      return {
+        clientId: storedEntraConfig.clientId,
+        tenantId: storedEntraConfig.tenantId,
+        clientSecret: storedEntraConfig.clientSecret
+      };
+    }
+    
+    // Fall back to environment variables
+    console.log('[Main] Using environment variable configuration');
+    return {
+      clientId: process.env.MSAL_CLIENT_ID && process.env.MSAL_CLIENT_ID.trim() !== '' 
+        ? process.env.MSAL_CLIENT_ID 
+        : '14d82eec-204b-4c2f-b7e8-296a70dab67e', // Microsoft Graph PowerShell fallback
+      tenantId: process.env.MSAL_TENANT_ID && process.env.MSAL_TENANT_ID.trim() !== '' 
+        ? process.env.MSAL_TENANT_ID 
+        : 'common',
+      clientSecret: process.env.MSAL_CLIENT_SECRET || process.env.LOKKA_CLIENT_SECRET
+    };
+  }
+
+  /**
+   * Check if Lokka MCP server is running and start it if enabled but not running
+   * This method can be called after authentication or when MCP services are needed
+   */  private async ensureLokkaMCPServerRunning(): Promise<boolean> {
+    try {
+      console.log('[Main] Checking if Lokka MCP server is running...');
+      
+      // First check if Lokka is enabled in the configuration
+      const lokkaConfig = this.config.mcpServers.find(server => server.name === 'external-lokka');
+      
+      console.log('[Main] Lokka MCP server configuration check:', {
+        found: Boolean(lokkaConfig),
+        enabled: lokkaConfig?.enabled,
+        hasEnv: Boolean(lokkaConfig?.env),
+        envKeys: lokkaConfig?.env ? Object.keys(lokkaConfig.env) : []
+      });
+      
+      if (!lokkaConfig || !lokkaConfig.enabled) {
+        console.log('[Main] Lokka MCP server not enabled in configuration');
+        
+        // If it's not enabled, let's check if we have environment variable configuration
+        const hasEnvConfig = process.env.USE_EXTERNAL_LOKKA === 'true' || 
+                            (process.env.LOKKA_CLIENT_SECRET && process.env.MSAL_CLIENT_ID && process.env.MSAL_TENANT_ID);
+        
+        if (hasEnvConfig) {
+          console.log('[Main] Environment variables suggest Lokka should be enabled, but config shows disabled');
+          console.log('[Main] Environment check:', {
+            USE_EXTERNAL_LOKKA: process.env.USE_EXTERNAL_LOKKA,
+            hasLokkaCreds: Boolean(process.env.LOKKA_CLIENT_SECRET && process.env.MSAL_CLIENT_ID && process.env.MSAL_TENANT_ID)
+          });
+        }
+        
+        return false;
+      }
+      
+      // Check if the server is in the available servers list
+      const availableServers = this.mcpClient.getAvailableServers();
+      const lokkaServerExists = availableServers.includes('external-lokka');
+      
+      console.log('[Main] MCP server availability check:', {
+        availableServers,
+        lokkaServerExists
+      });
+      
+      if (lokkaServerExists) {
+        console.log('[Main] Lokka MCP server found in available servers');
+        
+        // Try to validate if it's actually running by attempting to list tools
+        try {
+          // Just checking if the server is actually available
+          await this.mcpClient.listTools('external-lokka');
+          console.log('[Main] ✅ Lokka MCP server is running and responding');
+          return true;
+        } catch (error) {
+          console.warn('[Main] Lokka MCP server exists but failed to respond:', error);
+          // Will try to restart below
+        }
+      } else {
+        console.log('[Main] Lokka MCP server not found in available servers');
+      }
+      
+      // If we get here, server is either not running or not responding
+      console.log('[Main] Attempting to start Lokka MCP server...');
+      
+      try {
+        // Try to start the server explicitly through the client
+        await this.mcpClient.startServer('external-lokka');
+        console.log('[Main] ✅ Lokka MCP server started successfully');
+        return true;
+      } catch (clientError) {
+        console.error('[Main] Failed to start Lokka MCP server through client:', clientError);
+        
+        // Try direct approach through server manager as fallback
+        try {
+          const lokkaServer = this.mcpServerManager.getServer('external-lokka');
+          if (lokkaServer && lokkaServer.startServer) {
+            await lokkaServer.startServer();
+            console.log('[Main] ✅ Lokka MCP server started through server manager');
+            return true;
+          } else {
+            console.warn('[Main] Could not find Lokka server instance in manager');
+          }
+        } catch (managerError) {
+          console.error('[Main] Failed to start Lokka MCP server through manager:', managerError);
+        }
+      }
+      
+      return false;
+    } catch (error) {
+      console.error('[Main] Error in ensureLokkaMCPServerRunning:', error);
+      return false;
     }
   }
 }

@@ -15,9 +15,9 @@ import { LLMStatusProvider, useLLMStatus } from './context/LLMStatusContext';
 // Inner App component that uses LLM status context
 const AppContent: React.FC = () => {
   const [darkMode, setDarkMode] = useState(true);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);  const [settingsOpen, setSettingsOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [configReloadTimeout, setConfigReloadTimeout] = useState<NodeJS.Timeout | null>(null);
   const [llmConfig, setLlmConfig] = useState<LLMConfig>({
     provider: 'openai', // Default to cloud for better initial experience
     model: 'gpt-4o-mini',
@@ -54,27 +54,44 @@ const AppContent: React.FC = () => {
     // Load saved LLM configuration
     loadLLMConfig();    // Listen for authentication configuration availability
     const handleConfigurationAvailable = (event: any, data: any) => {
-      console.log('🔄 [App.tsx] Configuration available - reloading LLM config and forcing status check');
-      // Reload configuration now that authentication is verified
-      loadLLMConfig();
-      // Also update authentication status
-      checkAuthStatus();
-      // Force LLM status check through the context
-      forceCheck();
+      console.log('🔄 [App.tsx] Configuration available - scheduling LLM config reload and status check');
+      
+      // Clear any existing timeout
+      if (configReloadTimeout) {
+        clearTimeout(configReloadTimeout);
+      }
+      
+      // If settings dialog is open, delay the reload to avoid interfering with user input
+      const delay = settingsOpen ? 2000 : 100; // 2 second delay if settings are open
+      
+      const timeoutId = setTimeout(() => {
+        console.log('🔄 [App.tsx] Executing delayed configuration reload');
+        // Reload configuration now that authentication is verified
+        loadLLMConfig();
+        // Also update authentication status
+        checkAuthStatus();
+        // Force LLM status check through the context
+        forceCheck();
+        setConfigReloadTimeout(null);
+      }, delay);
+      
+      setConfigReloadTimeout(timeoutId);
     };
 
     // Add the IPC listener using the exposed API
     const electronAPI = window.electronAPI as any;
     if (electronAPI?.on) {
       electronAPI.on('auth:configurationAvailable', handleConfigurationAvailable);
-    }
-
-    // Cleanup function to remove the listener
+    }    // Cleanup function to remove the listener
     return () => {
+      if (configReloadTimeout) {
+        clearTimeout(configReloadTimeout);
+      }
       if (electronAPI?.removeListener) {
-        electronAPI.removeListener('auth:configurationAvailable', handleConfigurationAvailable);      }
+        electronAPI.removeListener('auth:configurationAvailable', handleConfigurationAvailable);
+      }
     };
-  }, [forceCheck]);
+  }, [forceCheck, settingsOpen, configReloadTimeout]);
 
   const checkAuthStatus = async () => {
     try {
@@ -98,9 +115,14 @@ const AppContent: React.FC = () => {
   const handleThemeToggle = () => {
     setDarkMode(!darkMode);
   };
-
   const handleSettings = () => {
+    console.log('🔧 [App.tsx] Opening settings dialog');
     setSettingsOpen(true);
+  };
+
+  const handleSettingsClose = () => {
+    console.log('🔧 [App.tsx] Closing settings dialog');
+    setSettingsOpen(false);
   };
 
   const handleAboutOpen = () => {
@@ -211,10 +233,9 @@ const AppContent: React.FC = () => {
           <ChatComponent />
         </Box>
 
-        {/* Settings Dialog */}
-        <EnhancedSettingsDialog
+        {/* Settings Dialog */}        <EnhancedSettingsDialog
           open={settingsOpen}
-          onClose={() => setSettingsOpen(false)}
+          onClose={handleSettingsClose}
           currentConfig={llmConfig}
           onSave={handleSaveSettings}
         />

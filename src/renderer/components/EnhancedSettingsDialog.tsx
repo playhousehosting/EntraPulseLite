@@ -34,7 +34,7 @@ import StarIcon from '@mui/icons-material/Star';
 import StarBorderIcon from '@mui/icons-material/StarBorder';
 import CloudIcon from '@mui/icons-material/Cloud';
 import ComputerIcon from '@mui/icons-material/Computer';
-import { LLMConfig, CloudLLMProviderConfig } from '../../types';
+import { LLMConfig, CloudLLMProviderConfig, EntraConfig } from '../../types';
 
 interface EnhancedSettingsDialogProps {
   open: boolean;
@@ -63,11 +63,19 @@ export const EnhancedSettingsDialog: React.FC<EnhancedSettingsDialogProps> = ({
   const [isLoadingModels, setIsLoadingModels] = useState<Record<string, boolean>>({});
   const [modelFetchError, setModelFetchError] = useState<Record<string, string>>({});
   const [defaultCloudProvider, setDefaultCloudProvider] = useState<'openai' | 'anthropic' | 'gemini' | 'azure-openai' | null>(null);
-
+  const [entraConfig, setEntraConfig] = useState<EntraConfig | null>(null);
+  const [isLoadingEntraConfig, setIsLoadingEntraConfig] = useState(false);
   useEffect(() => {
     setConfig(currentConfig);
-    loadCloudProviders();
-  }, [currentConfig, open]);  const loadCloudProviders = async () => {
+  }, [currentConfig]);
+  useEffect(() => {
+    if (open) {
+      loadCloudProviders();
+      loadEntraConfig();
+    }
+  }, [open]); // Only reload when dialog opens, not on every config change
+
+  const loadCloudProviders = async () => {
     try {
       const electronAPI = window.electronAPI as any; // Temporary type assertion
       const configured = await electronAPI.config.getConfiguredCloudProviders();
@@ -118,76 +126,27 @@ export const EnhancedSettingsDialog: React.FC<EnhancedSettingsDialogProps> = ({
       });
       
       setCloudProviders(providers);
-      
-      // Add additional check for Azure OpenAI provider
-      const azureOpenAIProvider = providers.find(p => p.provider === 'azure-openai');
-      if (azureOpenAIProvider) {
-        console.log('🔁 [Azure OpenAI Debug] Provider found in state after loading:', {
-          baseUrl: azureOpenAIProvider.config.baseUrl,
-          model: azureOpenAIProvider.config.model
-        });
-        
-        // Additional validation for loaded URL
-        if (azureOpenAIProvider.config.baseUrl) {
-          const url = azureOpenAIProvider.config.baseUrl;
-          console.log(`📝 [Azure OpenAI Debug] Full URL loaded: "${url}"`);
-        } else {
-          console.warn('⚠️ [Azure OpenAI Debug] No baseUrl found for Azure OpenAI provider');
-        }
-      }
     } catch (error) {
       console.error('Failed to load cloud providers:', error);
     }
   };
-  const fetchAvailableModels = async (provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai', apiKey: string) => {
-    if (provider === 'gemini') {
-      // Gemini models are predefined
-      setAvailableModels(prev => ({
-        ...prev,
-        [provider]: ['gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-pro']
-      }));
-      return;
-    }
 
-    if (provider === 'azure-openai') {
-      // Azure OpenAI models are typically predefined by the Azure deployment
-      setAvailableModels(prev => ({
-        ...prev,
-        [provider]: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-4', 'gpt-35-turbo']
-      }));
-      return;
-    }
-
-    if (!apiKey) {
-      setAvailableModels(prev => ({ ...prev, [provider]: [] }));
-      return;
-    }
-
-    setIsLoadingModels(prev => ({ ...prev, [provider]: true }));
-    setModelFetchError(prev => ({ ...prev, [provider]: '' }));
-    
+  const loadEntraConfig = async () => {
     try {
-      const tempConfig: LLMConfig = {
-        ...config,
-        provider,
-        apiKey
-      };
-
-      const models = await window.electronAPI.llm.getAvailableModels?.(tempConfig) || [];
-      const uniqueModels = [...new Set(models)].sort();
-      setAvailableModels(prev => ({ ...prev, [provider]: uniqueModels }));
-      
-      if (uniqueModels.length === 0) {
-        setModelFetchError(prev => ({ ...prev, [provider]: 'No models found. Please check your API key.' }));
-      }
+      setIsLoadingEntraConfig(true);
+      const electronAPI = window.electronAPI as any;
+      const config = await electronAPI.config.getEntraConfig();
+      setEntraConfig(config);
+      console.log('📋 [EntraConfig] Loaded Entra config:', config ? 'Yes' : 'No');
     } catch (error) {
-      console.error('Failed to fetch models:', error);
-      setModelFetchError(prev => ({ ...prev, [provider]: 'Failed to fetch models. Please check your API key and try again.' }));
-      setAvailableModels(prev => ({ ...prev, [provider]: [] }));
+      console.error('❌ Failed to load Entra config:', error);
+      setEntraConfig(null);
     } finally {
-      setIsLoadingModels(prev => ({ ...prev, [provider]: false }));
+      setIsLoadingEntraConfig(false);
     }
-  };  const handleSaveCloudProvider = async (provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai', providerConfig: CloudLLMProviderConfig) => {
+  };
+
+  const handleSaveCloudProvider = async (provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai', providerConfig: CloudLLMProviderConfig) => {
     try {
       // Enhanced logging for Azure OpenAI
       if (provider === 'azure-openai') {
@@ -280,7 +239,94 @@ export const EnhancedSettingsDialog: React.FC<EnhancedSettingsDialogProps> = ({
     }
   };
 
-  const handleSetDefaultProvider = async (provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai') => {
+  const handleSaveEntraConfig = async (newEntraConfig: EntraConfig) => {
+    try {
+      setIsLoadingEntraConfig(true);
+      const electronAPI = window.electronAPI as any;
+      
+      console.log('🔄 Saving Entra config:', {
+        clientId: newEntraConfig.clientId ? '[REDACTED]' : 'none',
+        tenantId: newEntraConfig.tenantId ? '[REDACTED]' : 'none',
+        hasClientSecret: !!newEntraConfig.clientSecret
+      });
+
+      await electronAPI.config.saveEntraConfig(newEntraConfig);
+      setEntraConfig(newEntraConfig);
+      
+      console.log('✅ Entra config saved successfully');
+    } catch (error) {
+      console.error('❌ Failed to save Entra config:', error);
+      throw error;
+    } finally {
+      setIsLoadingEntraConfig(false);
+    }
+  };
+
+  const handleClearEntraConfig = async () => {
+    try {
+      setIsLoadingEntraConfig(true);
+      const electronAPI = window.electronAPI as any;
+      await electronAPI.config.clearEntraConfig();
+      setEntraConfig(null);
+      
+      console.log('✅ Entra config cleared successfully');
+    } catch (error) {
+      console.error('❌ Failed to clear Entra config:', error);
+      throw error;
+    } finally {
+      setIsLoadingEntraConfig(false);
+    }
+  };
+
+  const fetchAvailableModels = async (provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai', apiKey: string) => {
+    if (provider === 'gemini') {
+      // Gemini models are predefined
+      setAvailableModels(prev => ({
+        ...prev,
+        [provider]: ['gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-pro']
+      }));
+      return;
+    }
+
+    if (provider === 'azure-openai') {
+      // Azure OpenAI models are typically predefined by the Azure deployment
+      setAvailableModels(prev => ({
+        ...prev,
+        [provider]: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-4', 'gpt-35-turbo']
+      }));
+      return;
+    }
+
+    if (!apiKey) {
+      setAvailableModels(prev => ({ ...prev, [provider]: [] }));
+      return;
+    }
+
+    setIsLoadingModels(prev => ({ ...prev, [provider]: true }));
+    setModelFetchError(prev => ({ ...prev, [provider]: '' }));
+    
+    try {
+      const tempConfig: LLMConfig = {
+        ...config,
+        provider,
+        apiKey
+      };
+
+      const models = await window.electronAPI.llm.getAvailableModels?.(tempConfig) || [];
+      const uniqueModels = [...new Set(models)].sort();
+      setAvailableModels(prev => ({ ...prev, [provider]: uniqueModels }));
+      
+      if (uniqueModels.length === 0) {
+        setModelFetchError(prev => ({ ...prev, [provider]: 'No models found. Please check your API key.' }));
+      }
+    } catch (error) {
+      console.error('Failed to fetch models:', error);
+      setModelFetchError(prev => ({ ...prev, [provider]: 'Failed to fetch models. Please check your API key and try again.' }));
+      setAvailableModels(prev => ({ ...prev, [provider]: [] }));
+    } finally {
+      setIsLoadingModels(prev => ({ ...prev, [provider]: false }));
+    }
+  };  const handleSetDefaultProvider = async (provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai') => {
     try {
       const electronAPI = window.electronAPI as any; // Temporary type assertion
       await electronAPI.config.setDefaultCloudProvider(provider);
@@ -429,6 +475,32 @@ export const EnhancedSettingsDialog: React.FC<EnhancedSettingsDialogProps> = ({
       <DialogTitle>LLM Settings</DialogTitle>
       <DialogContent>
         <Box sx={{ mt: 2 }}>
+          {/* Entra Application Settings */}
+          <Accordion defaultExpanded>
+            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+              <Typography variant="h6">Entra Application Settings</Typography>
+            </AccordionSummary>
+            <AccordionDetails>
+              <Box sx={{ mb: 2 }}>
+                <Typography variant="body2" color="textSecondary" gutterBottom>
+                  Configure your Microsoft Entra application registration details. These settings are secure and stored locally encrypted.
+                </Typography>
+              </Box>
+              
+              {isLoadingEntraConfig ? (
+                <Box display="flex" justifyContent="center" py={2}>
+                  <CircularProgress size={24} />
+                </Box>
+              ) : (
+                <EntraConfigForm
+                  config={entraConfig}
+                  onSave={handleSaveEntraConfig}
+                  onClear={handleClearEntraConfig}
+                />
+              )}
+            </AccordionDetails>
+          </Accordion>
+
           {/* Provider Selection */}
           <FormControl fullWidth sx={{ mb: 3 }}>
             <InputLabel>LLM Provider</InputLabel>
@@ -579,9 +651,7 @@ export const EnhancedSettingsDialog: React.FC<EnhancedSettingsDialogProps> = ({
                 })}
               </Grid>
             </AccordionDetails>
-          </Accordion>
-
-          {/* Advanced Settings */}
+          </Accordion>          {/* Advanced Settings */}
           <Accordion>
             <AccordionSummary expandIcon={<ExpandMoreIcon />}>
               <Typography variant="h6">Advanced Settings</Typography>
@@ -681,6 +751,7 @@ const CloudProviderCard: React.FC<CloudProviderCardProps> = ({
 
   const [isTestingConnection, setIsTestingConnection] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [testResult, setTestResult] = useState<{ success: boolean; error?: string; details?: any } | null>(null);
 
   useEffect(() => {
     if (config) {
@@ -828,8 +899,7 @@ const CloudProviderCard: React.FC<CloudProviderCardProps> = ({
 
   return (
     <Paper elevation={isDefault ? 3 : 1} sx={{ p: 2, border: isDefault ? 2 : 1, borderColor: isDefault ? 'primary.main' : 'divider' }}>
-      <Box display="flex" alignItems="center" justifyContent="space-between" mb={2}>
-        <Box display="flex" alignItems="center" gap={1}>
+      <Box display="flex" alignItems="center" justifyContent="space-between" mb={2}>        <Box display="flex" alignItems="center" gap={1}>
           <CloudIcon color={isConfigured ? 'primary' : 'disabled'} />
           <Typography variant="h6">{getProviderDisplayName(provider)}</Typography>
           {isDefault && <StarIcon color="primary" fontSize="small" />}
@@ -996,5 +1066,214 @@ const CloudProviderCard: React.FC<CloudProviderCardProps> = ({
         />
       )}
     </Paper>
+  );
+};
+
+interface EntraConfigFormProps {
+  config: EntraConfig | null;
+  onSave: (config: EntraConfig) => Promise<void>;
+  onClear: () => Promise<void>;
+}
+
+const EntraConfigForm: React.FC<EntraConfigFormProps> = ({ config, onSave, onClear }) => {
+  const [localConfig, setLocalConfig] = useState<EntraConfig>({
+    clientId: '',
+    tenantId: '',
+    clientSecret: ''
+  });
+  const [isSaving, setIsSaving] = useState(false);
+  const [isUserEditing, setIsUserEditing] = useState(false);
+  const [isTestingConnection, setIsTestingConnection] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; error?: string; details?: any } | null>(null);
+
+  useEffect(() => {
+    // Only update local config if the user is not actively editing
+    // This prevents the form from being cleared when background processes reload config
+    if (config && !isUserEditing) {
+      setLocalConfig(config);
+    }
+  }, [config, isUserEditing]);
+  const handleSave = async () => {
+    try {
+      setIsSaving(true);
+      await onSave(localConfig);
+      // Successfully saved - no longer editing
+      setIsUserEditing(false);
+    } catch (error) {
+      console.error('Failed to save Entra config:', error);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleClear = async () => {
+    try {
+      setIsSaving(true);
+      await onClear();
+      setLocalConfig({
+        clientId: '',
+        tenantId: '',
+        clientSecret: ''
+      });
+      // Successfully cleared - no longer editing
+      setIsUserEditing(false);
+    } catch (error) {
+      console.error('Failed to clear Entra config:', error);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleInputChange = (field: keyof EntraConfig, value: string) => {
+    setLocalConfig({ ...localConfig, [field]: value });
+    // Mark as user editing when any input changes
+    setIsUserEditing(true);
+    // Clear any previous test results when config changes
+    setTestResult(null);
+  };
+
+  const handleTestConnection = async () => {
+    try {
+      setIsTestingConnection(true);
+      setTestResult(null);
+      
+      console.log('🧪 Testing Entra application configuration...');
+      
+      // Validate that we have the minimum required fields
+      if (!localConfig.clientId.trim() || !localConfig.tenantId.trim()) {
+        setTestResult({
+          success: false,
+          error: 'Client ID and Tenant ID are required for testing'
+        });
+        return;
+      }
+
+      const electronAPI = window.electronAPI as any;
+      const result = await electronAPI.auth.testConfiguration(localConfig);
+      
+      console.log('🧪 Test result:', result);
+      setTestResult(result);
+      
+    } catch (error) {
+      console.error('❌ Connection test failed:', error);
+      setTestResult({
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error occurred'
+      });
+    } finally {
+      setIsTestingConnection(false);
+    }
+  };
+
+  const isConfigured = !!(config?.clientId && config?.tenantId);
+
+  return (
+    <Grid container spacing={2}>
+      <Grid item xs={12}>        <TextField
+          fullWidth
+          label="Client ID"
+          value={localConfig.clientId}
+          onChange={(e) => handleInputChange('clientId', e.target.value)}
+          placeholder="Enter your Azure app registration Client ID"
+          helperText="The Application (client) ID from your Azure app registration"
+          disabled={isSaving}
+        />
+      </Grid>
+      <Grid item xs={12}>
+        <TextField
+          fullWidth
+          label="Tenant ID"
+          value={localConfig.tenantId}
+          onChange={(e) => handleInputChange('tenantId', e.target.value)}
+          placeholder="Enter your Azure Directory (tenant) ID"
+          helperText="The Directory (tenant) ID from your Azure app registration"
+          disabled={isSaving}
+        />
+      </Grid>
+      <Grid item xs={12}>
+        <TextField
+          fullWidth
+          label="Client Secret (Optional)"
+          type="password"
+          value={localConfig.clientSecret || ''}
+          onChange={(e) => handleInputChange('clientSecret', e.target.value)}
+          placeholder="Enter your Azure app client secret (optional)"
+          helperText="Required only for client credentials flow (advanced scenarios)"
+          disabled={isSaving}
+        />
+      </Grid>      <Grid item xs={12}>
+        <Box display="flex" gap={1} justifyContent="flex-end">
+          {isConfigured && (
+            <Button 
+              onClick={handleClear}
+              disabled={isSaving || isTestingConnection}
+              color="error"
+            >
+              Clear Configuration
+            </Button>
+          )}
+          <Button 
+            onClick={handleTestConnection}
+            disabled={isSaving || isTestingConnection || !localConfig.clientId.trim() || !localConfig.tenantId.trim()}
+            variant="outlined"
+          >
+            {isTestingConnection ? <CircularProgress size={20} /> : 'Test Connection'}
+          </Button>
+          <Button 
+            onClick={handleSave}
+            variant="contained"
+            disabled={isSaving || isTestingConnection || !localConfig.clientId.trim() || !localConfig.tenantId.trim()}
+          >
+            {isSaving ? <CircularProgress size={20} /> : (isConfigured ? 'Update' : 'Save')}
+          </Button>
+        </Box>
+      </Grid>
+      {testResult && (
+        <Grid item xs={12}>
+          <Alert 
+            severity={testResult.success ? 'success' : 'error'}
+            onClose={() => setTestResult(null)}
+          >
+            {testResult.success ? (
+              <>
+                <strong>Connection Test Successful!</strong>
+                {testResult.details && (
+                  <Typography variant="body2" sx={{ mt: 1 }}>
+                    {testResult.details.tokenType === 'client_credentials' 
+                      ? 'Client credentials flow verified. Authentication is working correctly.'
+                      : testResult.details.tokenType === 'interactive'
+                      ? 'Interactive authentication verified with cached tokens.'
+                      : testResult.details.message || 'Configuration is valid for authentication.'}
+                  </Typography>
+                )}
+              </>
+            ) : (
+              <>
+                <strong>Connection Test Failed</strong>
+                <Typography variant="body2" sx={{ mt: 1 }}>
+                  {testResult.error}
+                </Typography>
+              </>
+            )}
+          </Alert>
+        </Grid>
+      )}
+      {isConfigured && (
+        <Grid item xs={12}>
+          <Alert severity="success">
+            Entra configuration is set and ready to use.
+          </Alert>
+        </Grid>
+      )}
+      {!localConfig.clientSecret && (
+        <Grid item xs={12}>
+          <Alert severity="warning">
+            <strong>Note:</strong> The Lokka MCP server for Microsoft Graph queries requires a Client Secret. 
+            Without a Client Secret, you can still authenticate interactively, but Graph queries through the AI assistant will not work.
+            To enable full functionality, please provide a Client Secret from your Azure app registration.
+          </Alert>
+        </Grid>
+      )}
+    </Grid>
   );
 };

@@ -27,6 +27,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getAuthenticationInfo: () => ipcRenderer.invoke('auth:getAuthenticationInfo'),
     clearTokenCache: () => ipcRenderer.invoke('auth:clearTokenCache'),
     forceReauthentication: () => ipcRenderer.invoke('auth:forceReauthentication'),
+    testConfiguration: (config) => ipcRenderer.invoke('auth:testConfiguration', config),
   },
 
   // Microsoft Graph methods
@@ -67,6 +68,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     setDefaultCloudProvider: (provider) => ipcRenderer.invoke('config:setDefaultCloudProvider', provider),
     getDefaultCloudProvider: () => ipcRenderer.invoke('config:getDefaultCloudProvider'),
     removeCloudProviderConfig: (provider) => ipcRenderer.invoke('config:removeCloudProviderConfig', provider),
+    getEntraConfig: () => ipcRenderer.invoke('config:getEntraConfig'),
+    saveEntraConfig: (config) => ipcRenderer.invoke('config:saveEntraConfig', config),
+    clearEntraConfig: () => ipcRenderer.invoke('config:clearEntraConfig'),
   },
 
   // Event listeners for real-time updates

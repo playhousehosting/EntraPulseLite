@@ -2,11 +2,12 @@
 // Secure configuration management service with user-context awareness
 
 import Store from 'electron-store';
-import { LLMConfig, CloudLLMProviderConfig } from '../types';
+import { LLMConfig, CloudLLMProviderConfig, EntraConfig } from '../types';
 
 interface UserConfigSchema {
   llm: LLMConfig;
   lastUsedProvider: string;
+  entraConfig?: EntraConfig;
   modelCache: {
     [provider: string]: {
       models: string[];
@@ -35,6 +36,7 @@ export class ConfigService {
   private currentAuthMode: 'client-credentials' | 'interactive' = 'client-credentials';
   private currentUserKey?: string;
   private isAuthenticationVerified: boolean = false; // Security flag to prevent data exposure
+  private isServiceLevelAccess: boolean = false; // Flag for trusted main process access
 
   constructor() {
     this.store = new Store({
@@ -61,7 +63,15 @@ export class ConfigService {
     // Load current context from store
     this.currentAuthMode = this.store.get('currentAuthMode');
     this.currentUserKey = this.store.get('currentUserKey');
+  }  /**
+   * Set service-level access for the main process (trusted environment)
+   * @param hasAccess True if this is the main process or other trusted context
+   */
+  setServiceLevelAccess(hasAccess: boolean): void {
+    this.isServiceLevelAccess = hasAccess;
+    console.log(`[ConfigService] Service level access set to: ${hasAccess}`);
   }
+
   /**
    * Verify that authentication has occurred before exposing sensitive data
    * @param isAuthenticated True if user is authenticated
@@ -120,12 +130,11 @@ export class ConfigService {
    * Get the current user configuration context
    */
   private getCurrentContext(): UserConfigSchema {
-    try {
-      console.log(`[ConfigService] getCurrentContext - Mode: ${this.currentAuthMode}, UserKey: ${this.currentUserKey}`);
+    try {      console.log(`[ConfigService] getCurrentContext - Mode: ${this.currentAuthMode}, UserKey: ${this.currentUserKey}`);
       
-      // Security check: If authentication is not verified, return safe defaults
-      if (!this.isAuthenticationVerified) {
-        console.log(`[ConfigService] 🔒 Authentication not verified - returning safe defaults`);
+      // Security check: If authentication is not verified AND this is not service-level access, return safe defaults
+      if (!this.isAuthenticationVerified && !this.isServiceLevelAccess) {
+        console.log(`[ConfigService] 🔒 Authentication not verified and no service access - returning safe defaults`);
         return this.getDefaultUserConfig();
       }
       
@@ -573,8 +582,7 @@ export class ConfigService {
   }
   /**
    * Set the default cloud provider
-   */
-  setDefaultCloudProvider(provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai'): void {
+   */  setDefaultCloudProvider(provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai'): void {
     const config = this.getLLMConfig();
     
     // Verify the provider is configured
@@ -582,7 +590,20 @@ export class ConfigService {
       throw new Error(`Cloud provider ${provider} is not configured`);
     }
     
+    // Set the default cloud provider
     config.defaultCloudProvider = provider;
+    
+    // Also update the main provider field to match the default
+    // This ensures consistency between the default and the active provider
+    config.provider = provider;
+    
+    // If switching to a cloud provider, update the model to match the cloud provider's model
+    if (config.cloudProviders[provider]?.model) {
+      config.model = config.cloudProviders[provider].model;
+    }
+    
+    console.log(`[ConfigService] Set default cloud provider: ${provider}, updated main provider to match`);
+    
     this.saveLLMConfig(config);
   }
   /**
@@ -701,5 +722,58 @@ export class ConfigService {
       };
       this.store.set('application', defaultAppConfig);
     }
+  }
+
+  /**
+   * Get Entra application configuration
+   * @returns Current Entra configuration or null if not set
+   */
+  getEntraConfig(): EntraConfig | null {
+    if (!this.isAuthenticationVerified) {
+      console.log('[ConfigService] 🔒 Access to Entra config blocked - authentication not verified');
+      return null;
+    }
+
+    const config = this.getCurrentContext();
+    return config.entraConfig || null;
+  }
+
+  /**
+   * Save Entra application configuration
+   * @param entraConfig Entra configuration to save
+   */
+  saveEntraConfig(entraConfig: EntraConfig): void {
+    if (!this.isAuthenticationVerified) {
+      console.log('[ConfigService] 🔒 Save Entra config blocked - authentication not verified');
+      return;
+    }
+
+    console.log('[ConfigService] saveEntraConfig - Input config:', {
+      clientId: entraConfig.clientId ? '[REDACTED]' : 'none',
+      tenantId: entraConfig.tenantId ? '[REDACTED]' : 'none',
+      hasClientSecret: !!entraConfig.clientSecret
+    });
+
+    const currentConfig = this.getCurrentContext();
+    currentConfig.entraConfig = entraConfig;
+    this.saveCurrentContext(currentConfig);
+
+    console.log('[ConfigService] saveEntraConfig - Configuration saved successfully');
+  }
+
+  /**
+   * Clear Entra application configuration
+   */
+  clearEntraConfig(): void {
+    if (!this.isAuthenticationVerified) {
+      console.log('[ConfigService] 🔒 Clear Entra config blocked - authentication not verified');
+      return;
+    }
+
+    const currentConfig = this.getCurrentContext();
+    delete currentConfig.entraConfig;
+    this.saveCurrentContext(currentConfig);
+
+    console.log('[ConfigService] clearEntraConfig - Configuration cleared successfully');
   }
 }

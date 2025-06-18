@@ -168,4 +168,45 @@ export class MCPClient {
       throw error;
     }
   }
+
+  /**
+   * Start a specific MCP server by name
+   * @param serverName Name of the MCP server to start
+   * @returns Promise that resolves when the server is started
+   */
+  async startServer(serverName: string): Promise<void> {
+    try {
+      // Check if the server is in our configs
+      const serverConfig = this.serverConfigs.get(serverName);
+      if (!serverConfig || !serverConfig.enabled) {
+        throw new Error(`MCP server '${serverName}' not found or disabled`);
+      }
+      
+      // Import MCPServerManager dynamically to avoid circular dependencies
+      const { MCPServerManager } = await import('../servers/MCPServerManager');
+      
+      // Get the MCPServerManager instance using the static getter
+      const instance = MCPServerManager.instance;
+      
+      if (instance) {
+        console.log(`Attempting to start MCP server '${serverName}' explicitly...`);
+        
+        // Get the server instance
+        const server = instance.getServer(serverName);
+        
+        if (server && typeof server.startServer === 'function') {
+          console.log(`Starting MCP server '${serverName}'...`);
+          await server.startServer();
+          console.log(`MCP server '${serverName}' started successfully`);
+        } else {
+          console.warn(`MCP server '${serverName}' does not have a startServer method`);
+        }
+      } else {
+        console.warn('Could not find MCPServerManager instance to start server');
+      }
+    } catch (error) {
+      console.error(`Error starting MCP server '${serverName}':`, error);
+      throw error;
+    }
+  }
 }
