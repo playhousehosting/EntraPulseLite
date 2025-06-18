@@ -123,15 +123,14 @@ export class ExternalLokkaMCPServer {
         // Use npx to run Lokka MCP server
         const command = this.config.command || 'npx';
         const args = this.config.args || ['-y', '@merill/lokka'];
-        
-        // Get environment variables for the process
+          // Get environment variables for the process
         const env: NodeJS.ProcessEnv = {
           ...process.env,
           ...this.config.env,
           // Use provided config or try to get from authService
-          TENANT_ID: this.config.env?.TENANT_ID || process.env.LOKKA_TENANT_ID || this.config.authConfig?.tenantId,
-          CLIENT_ID: this.config.env?.CLIENT_ID || process.env.LOKKA_CLIENT_ID || this.config.authConfig?.clientId,
-          CLIENT_SECRET: this.config.env?.CLIENT_SECRET || process.env.LOKKA_CLIENT_SECRET,
+          TENANT_ID: this.config.env?.TENANT_ID || this.config.authConfig?.tenantId,
+          CLIENT_ID: this.config.env?.CLIENT_ID || this.config.authConfig?.clientId,
+          CLIENT_SECRET: this.config.env?.CLIENT_SECRET,
         };
         
         console.log(`Starting Lokka MCP server with command: ${command} ${args.join(' ')}`);

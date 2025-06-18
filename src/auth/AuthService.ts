@@ -4,14 +4,10 @@
 import { PublicClientApplication, Configuration, AuthenticationResult, AccountInfo } from '@azure/msal-node';
 import { ConfidentialClientApplication } from '@azure/msal-node';
 import { AppConfig, AuthToken } from '../types';
-import * as dotenv from 'dotenv';
 import { BrowserWindow, app } from 'electron';
 import { createHash, randomBytes } from 'crypto';
 import * as http from 'http';
 import * as path from 'path';
-
-// Load environment variables
-dotenv.config({ path: '.env.local' });
 
 export class AuthService {
   private pca: PublicClientApplication | ConfidentialClientApplication | null = null;

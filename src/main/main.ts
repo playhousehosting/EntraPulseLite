@@ -19,9 +19,6 @@ if (process.platform === 'win32') {
   app.setAppUserModelId('com.increment.entrapulselite');
 }
 
-// Load environment variables from .env.local
-require('dotenv').config({ path: path.join(__dirname, '../../.env.local') });
-
 class EntraPulseLiteApp {
   private mainWindow: BrowserWindow | null = null;
   private authService!: AuthService;
@@ -50,21 +47,17 @@ class EntraPulseLiteApp {
   }
   private async initializeServices(): Promise<void> {
     // Initialize configuration service first
-    this.configService = new ConfigService();
-      // Get authentication configuration (stored config takes precedence over env vars)
+    this.configService = new ConfigService();    // Get authentication configuration (stored config takes precedence)
     const authConfig = await this.getAuthConfiguration();
     
     // Check if we have Lokka credentials configured for non-interactive authentication
     const hasLokkaCreds = authConfig.clientSecret && authConfig.clientId && authConfig.tenantId;
-    const useExternalLokka = process.env.USE_EXTERNAL_LOKKA === 'true' || hasLokkaCreds;
     
     console.log('[Main] Initial Lokka configuration check:', {
       hasLokkaCreds,
-      useExternalLokka,
       clientIdExists: Boolean(authConfig.clientId),
       tenantIdExists: Boolean(authConfig.tenantId),
-      clientSecretExists: Boolean(authConfig.clientSecret),
-      USE_EXTERNAL_LOKKA: process.env.USE_EXTERNAL_LOKKA
+      clientSecretExists: Boolean(authConfig.clientSecret)
     });
       // Set authentication context based on available credentials
     const authMode = hasLokkaCreds ? 'client-credentials' : 'interactive';
@@ -88,29 +81,29 @@ class EntraPulseLiteApp {
           : ['https://graph.microsoft.com/.default'], // Interactive flow using .default to inherit all app registration permissions
         clientSecret: authConfig.clientSecret, // Only needed for confidential client applications        useClientCredentials: Boolean(hasLokkaCreds), // Use client credentials flow if Lokka creds are configured
       },      llm: storedLLMConfig, // Use stored LLM configuration
-      mcpServers: [
-        {
+      mcpServers: [        {
           name: 'external-lokka',
           type: 'external-lokka',
-          port: parseInt(process.env.EXTERNAL_MCP_LOKKA_PORT || '3003'),
-          enabled: (process.env.USE_EXTERNAL_LOKKA === 'true' || Boolean(hasLokkaCreds)), // Enable if explicitly set or if creds exist
+          port: 0, // Not used for stdin/stdout MCP servers
+          enabled: Boolean(hasLokkaCreds), // Enable only if credentials are configured in UI
           command: 'npx',
-          args: ['-y', '@merill/lokka'],          env: {
+          args: ['-y', '@merill/lokka'],
+          env: {
             TENANT_ID: authConfig.tenantId,
             CLIENT_ID: authConfig.clientId,
-            CLIENT_SECRET: authConfig.clientSecret || process.env.LOKKA_CLIENT_SECRET
+            CLIENT_SECRET: authConfig.clientSecret
           }
         },
         {
           name: 'fetch',
           type: 'fetch',
-          port: parseInt(process.env.MCP_DOCS_PORT || '3002'),
+          port: 3002, // Only used for built-in fetch server
           enabled: true,
         },
       ],      features: {
-        enablePremiumFeatures: process.env.ENABLE_PREMIUM_FEATURES === 'true',
-        enableTelemetry: process.env.ENABLE_TELEMETRY === 'true',
-      },    };
+        enablePremiumFeatures: false, // Set via UI preferences
+        enableTelemetry: false, // Set via UI preferences
+      },};
 
     // Log the final Lokka MCP server configuration for debugging
     const lokkaConfig = this.config.mcpServers.find(server => server.name === 'external-lokka');
@@ -215,10 +208,8 @@ class EntraPulseLiteApp {
       
       // Get updated authentication configuration
       const authConfig = await this.getAuthConfiguration();
-      
-      // Check if we have Lokka credentials configured for non-interactive authentication
+        // Check if we have Lokka credentials configured for non-interactive authentication
       const hasLokkaCreds = authConfig.clientSecret && authConfig.clientId && authConfig.tenantId;
-      const useExternalLokka = process.env.USE_EXTERNAL_LOKKA === 'true' || hasLokkaCreds;      
       // Update authentication context in ConfigService BEFORE reinitializing other services
       console.log('[Main] Updating authentication context for configuration mode...');
       
@@ -252,28 +243,25 @@ class EntraPulseLiteApp {
         useClientCredentials: Boolean(hasLokkaCreds),
       };      // Update MCP server configuration
       const lokkaServerIndex = this.config.mcpServers.findIndex(server => server.name === 'external-lokka');
-      if (lokkaServerIndex !== -1) {
-        const updatedLokkaConfig: MCPServerConfig = {
+      if (lokkaServerIndex !== -1) {        const updatedLokkaConfig: MCPServerConfig = {
           name: 'external-lokka',
           type: 'external-lokka' as const,
-          port: parseInt(process.env.EXTERNAL_MCP_LOKKA_PORT || '3003'),
-          enabled: Boolean(useExternalLokka),
+          port: 0, // Not used for stdin/stdout MCP servers
+          enabled: Boolean(hasLokkaCreds),
           command: 'npx',
           args: ['-y', '@merill/lokka'],
           env: {
             TENANT_ID: authConfig.tenantId,
             CLIENT_ID: authConfig.clientId,
-            CLIENT_SECRET: authConfig.clientSecret || process.env.LOKKA_CLIENT_SECRET
+            CLIENT_SECRET: authConfig.clientSecret
           }
         };
         this.config.mcpServers[lokkaServerIndex] = updatedLokkaConfig;
-        
-        console.log('[Main] Updated Lokka MCP server config:', {
+          console.log('[Main] Updated Lokka MCP server config:', {
           enabled: updatedLokkaConfig.enabled,
           hasTenantId: Boolean(updatedLokkaConfig.env?.TENANT_ID),
           hasClientId: Boolean(updatedLokkaConfig.env?.CLIENT_ID),
           hasClientSecret: Boolean(updatedLokkaConfig.env?.CLIENT_SECRET),
-          useExternalLokka,
           hasLokkaCreds
         });
       } else {
@@ -1365,17 +1353,12 @@ class EntraPulseLiteApp {
         clientSecret: storedEntraConfig.clientSecret
       };
     }
-    
-    // Fall back to environment variables
-    console.log('[Main] Using environment variable configuration');
+      // Fall back to default Microsoft Graph PowerShell configuration for interactive auth
+    console.log('[Main] Using default Microsoft Graph PowerShell configuration for interactive authentication');
     return {
-      clientId: process.env.MSAL_CLIENT_ID && process.env.MSAL_CLIENT_ID.trim() !== '' 
-        ? process.env.MSAL_CLIENT_ID 
-        : '14d82eec-204b-4c2f-b7e8-296a70dab67e', // Microsoft Graph PowerShell fallback
-      tenantId: process.env.MSAL_TENANT_ID && process.env.MSAL_TENANT_ID.trim() !== '' 
-        ? process.env.MSAL_TENANT_ID 
-        : 'common',
-      clientSecret: process.env.MSAL_CLIENT_SECRET || process.env.LOKKA_CLIENT_SECRET
+      clientId: '14d82eec-204b-4c2f-b7e8-296a70dab67e', // Microsoft Graph PowerShell public client
+      tenantId: 'common',
+      clientSecret: undefined
     };
   }
 
@@ -1395,22 +1378,8 @@ class EntraPulseLiteApp {
         hasEnv: Boolean(lokkaConfig?.env),
         envKeys: lokkaConfig?.env ? Object.keys(lokkaConfig.env) : []
       });
-      
-      if (!lokkaConfig || !lokkaConfig.enabled) {
+        if (!lokkaConfig || !lokkaConfig.enabled) {
         console.log('[Main] Lokka MCP server not enabled in configuration');
-        
-        // If it's not enabled, let's check if we have environment variable configuration
-        const hasEnvConfig = process.env.USE_EXTERNAL_LOKKA === 'true' || 
-                            (process.env.LOKKA_CLIENT_SECRET && process.env.MSAL_CLIENT_ID && process.env.MSAL_TENANT_ID);
-        
-        if (hasEnvConfig) {
-          console.log('[Main] Environment variables suggest Lokka should be enabled, but config shows disabled');
-          console.log('[Main] Environment check:', {
-            USE_EXTERNAL_LOKKA: process.env.USE_EXTERNAL_LOKKA,
-            hasLokkaCreds: Boolean(process.env.LOKKA_CLIENT_SECRET && process.env.MSAL_CLIENT_ID && process.env.MSAL_TENANT_ID)
-          });
-        }
-        
         return false;
       }
       

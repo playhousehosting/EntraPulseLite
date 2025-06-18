@@ -87,12 +87,11 @@ export class ExternalLokkaMCPStdioServer {
       port: this.config.port || 0, // Not used for stdio, but required by interface
       enabled: true,
       command: this.config.command || 'npx',
-      args: this.config.args || ['-y', '@merill/lokka'],
-      options: {
+      args: this.config.args || ['-y', '@merill/lokka'],      options: {
         env: {
-          TENANT_ID: this.config.env?.TENANT_ID || process.env.LOKKA_TENANT_ID,
-          CLIENT_ID: this.config.env?.CLIENT_ID || process.env.LOKKA_CLIENT_ID,
-          CLIENT_SECRET: this.config.env?.CLIENT_SECRET || process.env.LOKKA_CLIENT_SECRET
+          TENANT_ID: this.config.env?.TENANT_ID,
+          CLIENT_ID: this.config.env?.CLIENT_ID,
+          CLIENT_SECRET: this.config.env?.CLIENT_SECRET
         }
       }
     };
