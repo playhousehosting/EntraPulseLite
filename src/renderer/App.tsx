@@ -86,19 +86,26 @@ const AppContent: React.FC<AppContentProps> = ({ settingsOpen, setSettingsOpen }
       }, 100);
       
       setConfigReloadTimeout(timeoutId);
+    };    // Listen for LLM status refresh requests (e.g., after MCP servers are ready)
+    const handleLLMStatusRefresh = (event: any, data: any) => {
+      console.log('🔄 [App.tsx] LLM status refresh requested from:', data?.source);
+      // Force immediate LLM status check and config reload
+      forceCheck();
+      loadLLMConfig();
     };
 
     // Add the IPC listener using the exposed API
     const electronAPI = window.electronAPI as any;
     if (electronAPI?.on) {
       electronAPI.on('auth:configurationAvailable', handleConfigurationAvailable);
-    }    // Cleanup function to remove the listener
+      electronAPI.on('llm:forceStatusRefresh', handleLLMStatusRefresh);
+    }// Cleanup function to remove the listener
     return () => {
       if (configReloadTimeout) {
         clearTimeout(configReloadTimeout);
-      }
-      if (electronAPI?.removeListener) {
+      }      if (electronAPI?.removeListener) {
         electronAPI.removeListener('auth:configurationAvailable', handleConfigurationAvailable);
+        electronAPI.removeListener('llm:forceStatusRefresh', handleLLMStatusRefresh);
       }
     };
   }, [forceCheck, settingsOpen, configReloadTimeout]);

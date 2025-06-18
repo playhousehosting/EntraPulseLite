@@ -18,10 +18,31 @@ export class LLMService {
         return this.chatWithLMStudio(messages);
       } else {
         throw new Error(`Unsupported LLM provider: ${this.config.provider}`);
-      }
-    } catch (error) {
+      }    } catch (error) {
       console.error('LLM chat failed:', error);
-      throw new Error('Failed to communicate with local LLM');
+      
+      // Provide more specific error messages
+      if (error && typeof error === 'object') {
+        if ('code' in error) {
+          switch (error.code) {
+            case 'ECONNRESET':
+              throw new Error(`Connection to ${this.config.provider} was reset. The model may have run out of resources or the request was too large.`);
+            case 'ECONNREFUSED':
+              throw new Error(`Cannot connect to ${this.config.provider} at ${this.config.baseUrl}. Please ensure ${this.config.provider} is running.`);
+            case 'ETIMEDOUT':
+              throw new Error(`Timeout communicating with ${this.config.provider}. The request may be too complex or the model is overloaded.`);
+            default:
+              throw new Error(`Network error communicating with ${this.config.provider}: ${error.code}`);
+          }
+        }        if ('response' in error && error.response && typeof error.response === 'object') {
+          const response = error.response as any;
+          const status = response.status || 'Unknown status';
+          const statusText = response.statusText || 'Unknown error';
+          throw new Error(`${this.config.provider} returned error ${status}: ${statusText}`);
+        }
+      }
+      
+      throw new Error(`Failed to communicate with ${this.config.provider}: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }  async isAvailable(): Promise<boolean> {
     try {
@@ -89,7 +110,7 @@ export class LLMService {
       }
       return false;
     }
-  }private async chatWithOllama(messages: ChatMessage[]): Promise<string> {
+  }  private async chatWithOllama(messages: ChatMessage[]): Promise<string> {
     const ollamaMessages = messages.map(msg => ({
       role: msg.role,
       content: msg.content,
@@ -102,6 +123,7 @@ export class LLMService {
     if (hasSystemPrompt) {
       // Use the provided system prompt (from EnhancedLLMService)
       fullMessages = ollamaMessages;
+      console.log(`[LLMService] Using provided system prompt (${fullMessages[0]?.content?.length || 0} chars)`);
     } else {
       // Use standardized system prompt for direct calls
       const systemPrompt = StandardizedPrompts.getSystemPrompt(this.config.provider);
@@ -109,16 +131,34 @@ export class LLMService {
         { role: 'system', content: systemPrompt },
         ...ollamaMessages
       ];
+      console.log(`[LLMService] Using standard system prompt (${systemPrompt.length} chars)`);
     }
 
-    const response = await axios.post(`${this.config.baseUrl}/api/chat`, {
+    // Calculate total message size for debugging
+    const totalChars = fullMessages.reduce((sum, msg) => sum + (msg.content?.length || 0), 0);
+    console.log(`[LLMService] Sending ${fullMessages.length} messages, total ${totalChars} characters to Ollama`);
+    
+    // Log system message length specifically since that's often the largest
+    const systemMsg = fullMessages.find(msg => msg.role === 'system');
+    if (systemMsg) {
+      console.log(`[LLMService] System message length: ${systemMsg.content?.length || 0} characters`);
+    }const response = await axios.post(`${this.config.baseUrl}/api/chat`, {
       model: this.config.model,
       messages: fullMessages,
       stream: false,
       options: {
         temperature: this.config.temperature || 0.2,
         num_predict: this.config.maxTokens || 2048,
+        // Add specific timeout and resource limits for Ollama
+        timeout: 120000, // 2 minutes timeout
+        keep_alive: "5m",
+        num_ctx: 8192, // Increase context window
       },
+    }, {
+      timeout: 120000, // 2 minute HTTP timeout
+      // Add request interceptor to handle large payloads
+      maxContentLength: Infinity,
+      maxBodyLength: Infinity,
     });
 
     return response.data.message.content;

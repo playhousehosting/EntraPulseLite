@@ -27,7 +27,8 @@ class EntraPulseLiteApp {
   private llmService!: EnhancedLLMService;
   private mcpClient!: MCPClient;
   private mcpServerManager!: MCPServerManager;
-  private config!: AppConfig;  constructor() {
+  private config!: AppConfig;
+  private configurationAvailabilityNotified: boolean = false;constructor() {
     this.initializeServices().then(() => {
       this.setupEventHandlers();
     });
@@ -412,9 +413,10 @@ class EntraPulseLiteApp {
       this.llmService = new EnhancedLLMService(llmConfig, this.authService, this.mcpClient);
       
       console.log('[Main] Services reinitialized successfully');
-      
-      // Notify renderer that configuration has been updated
-      if (this.mainWindow) {
+        // Notify renderer that configuration has been updated - but only if not already notified
+      if (this.mainWindow && !this.configurationAvailabilityNotified) {
+        console.log('📡 [Main] Sending auth:configurationAvailable event from config-update - FIRST TIME ONLY');
+        this.configurationAvailabilityNotified = true;
         this.mainWindow.webContents.send('auth:configurationAvailable', { source: 'config-update' });
       }
       
@@ -662,20 +664,26 @@ class EntraPulseLiteApp {
             
             // Check if Lokka server is enabled in the configuration
             const lokkaConfig = this.config.mcpServers.find(server => server.name === 'external-lokka');
-            
-            if (lokkaConfig && lokkaConfig.enabled) {
+              if (lokkaConfig && lokkaConfig.enabled) {
               // Try to start the server explicitly
               await this.mcpClient.startServer('external-lokka');
               console.log('[Main] ✅ Lokka MCP server started after authentication');
+              
+              // Force UI refresh after MCP server initialization
+              if (this.mainWindow) {
+                console.log('🔄 [Main] Forcing UI state refresh after MCP server startup');
+                this.mainWindow.webContents.send('llm:forceStatusRefresh', { source: 'mcp-startup' });
+              }
             } else {
               console.log('[Main] Lokka MCP server not enabled, skipping start after login');
             }
           } catch (error) {
             console.error('[Main] Failed to start Lokka MCP server after login:', error);
           }
-          
-          // Notify renderer that configuration is now available
-          if (this.mainWindow) {
+            // Notify renderer that configuration is now available - but only if not already notified
+          if (this.mainWindow && !this.configurationAvailabilityNotified) {
+            console.log('📡 [Main] Sending auth:configurationAvailable event from post-login - FIRST TIME ONLY');
+            this.configurationAvailabilityNotified = true;
             this.mainWindow.webContents.send('auth:configurationAvailable', { source: 'post-login' });
           }
         }
@@ -685,14 +693,16 @@ class EntraPulseLiteApp {
         console.error('Login failed:', error);
         throw error;
       }
-    });
-
-    ipcMain.handle('auth:logout', async () => {
+    });    ipcMain.handle('auth:logout', async () => {
       try {
         await this.authService.logout();
         
         // Reset authentication verification flag on logout
         this.configService.setAuthenticationVerified(false);
+        
+        // Reset configuration availability notification flag for next login session
+        this.configurationAvailabilityNotified = false;
+        console.log('[Main] Reset configurationAvailabilityNotified flag on logout');
         
         return true;
       } catch (error) {
@@ -987,7 +997,16 @@ class EntraPulseLiteApp {
       }
     });    // LLM Configuration handlers
     ipcMain.handle('config:getLLMConfig', async () => {
-      return this.configService.getLLMConfig();
+      const config = this.configService.getLLMConfig();
+      
+      // If configuration contains cloud providers (indicating authentication is verified and config is available), notify renderer ONCE
+      if (config && config.cloudProviders && Object.keys(config.cloudProviders).length > 0 && this.mainWindow && !this.configurationAvailabilityNotified) {
+        console.log('📡 [Main] Sending auth:configurationAvailable event from config:getLLMConfig (cloud providers detected) - FIRST TIME ONLY');
+        this.configurationAvailabilityNotified = true;
+        this.mainWindow.webContents.send('auth:configurationAvailable', { source: 'config:getLLMConfig' });
+      }
+      
+      return config;
     });
 
     ipcMain.handle('config:saveLLMConfig', async (event, newLLMConfig) => {
@@ -1044,11 +1063,18 @@ class EntraPulseLiteApp {
         console.error('Get cloud provider config failed:', error);
         return null;
       }
-    });
-
-    ipcMain.handle('config:getConfiguredCloudProviders', async () => {
+    });    ipcMain.handle('config:getConfiguredCloudProviders', async () => {
       try {
-        return this.configService.getConfiguredCloudProviders();
+        const providers = this.configService.getConfiguredCloudProviders();
+        
+        // If we have configured cloud providers, notify renderer that configuration is available ONCE
+        if (providers && providers.length > 0 && this.mainWindow && !this.configurationAvailabilityNotified) {
+          console.log('📡 [Main] Sending auth:configurationAvailable event from config:getConfiguredCloudProviders - FIRST TIME ONLY');
+          this.configurationAvailabilityNotified = true;
+          this.mainWindow.webContents.send('auth:configurationAvailable', { source: 'config:getConfiguredCloudProviders' });
+        }
+        
+        return providers;
       } catch (error) {
         console.error('Get configured cloud providers failed:', error);
         return [];
@@ -1112,11 +1138,18 @@ class EntraPulseLiteApp {
         console.error('Set default cloud provider failed:', error);
         throw error;
       }
-    });
-
-    ipcMain.handle('config:getDefaultCloudProvider', async () => {
+    });    ipcMain.handle('config:getDefaultCloudProvider', async () => {
       try {
-        return this.configService.getDefaultCloudProvider();
+        const defaultProvider = this.configService.getDefaultCloudProvider();
+        
+        // If we have a default cloud provider, notify renderer that configuration is available ONCE
+        if (defaultProvider && this.mainWindow && !this.configurationAvailabilityNotified) {
+          console.log('📡 [Main] Sending auth:configurationAvailable event from config:getDefaultCloudProvider - FIRST TIME ONLY');
+          this.configurationAvailabilityNotified = true;
+          this.mainWindow.webContents.send('auth:configurationAvailable', { source: 'config:getDefaultCloudProvider' });
+        }
+        
+        return defaultProvider;
       } catch (error) {
         console.error('Get default cloud provider failed:', error);
         return null;

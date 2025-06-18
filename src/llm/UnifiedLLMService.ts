@@ -21,67 +21,66 @@ export class UnifiedLLMService {
       console.log(`[UnifiedLLMService] Available cloudProviders:`, Object.keys(config.cloudProviders));
     }
     
-    // Initialize appropriate service based on provider
+    // Initialize local service if provider is local or if cloud providers are available (for fallback)
     if (config.provider === 'ollama' || config.provider === 'lmstudio') {
-      if (!config.baseUrl) {
-        throw new Error(`baseUrl is required for ${config.provider}`);
-      }
-      this.localService = new LLMService(config);
-    } else if (config.provider === 'openai' || config.provider === 'anthropic' || config.provider === 'gemini' || config.provider === 'azure-openai') {
-      // First try to get the cloud provider specific configuration for the requested provider
-      let cloudProviderConfig = this.getCloudProviderConfig(config, config.provider);
-      console.log(`[UnifiedLLMService] Primary provider config result:`, cloudProviderConfig ? 'found' : 'not found');
-        // If the configured provider isn't available, try to find any available cloud provider
-      if (!cloudProviderConfig || !cloudProviderConfig.apiKey || cloudProviderConfig.apiKey.trim() === '') {
-        console.log(`[UnifiedLLMService] Configured provider '${config.provider}' not available, searching for alternative cloud providers...`);
-        cloudProviderConfig = this.findBestAvailableCloudProvider(config);
-        
-        if (cloudProviderConfig) {
-          console.log(`[UnifiedLLMService] Found alternative cloud provider: ${cloudProviderConfig.provider}`);
-          // Update the main config to reflect the actually available provider
-          this.config = {
-            ...this.config,
-            provider: cloudProviderConfig.provider,
-            model: cloudProviderConfig.model,
-            apiKey: cloudProviderConfig.apiKey,
-            baseUrl: cloudProviderConfig.baseUrl
-          };
-          console.log(`[UnifiedLLMService] Updated main config to use ${cloudProviderConfig.provider}`);
-        } else {
-          console.log(`[UnifiedLLMService] No alternative cloud providers found`);
-        }
-      }
-      
-      if (!cloudProviderConfig) {
-        console.warn(`⚠️  No cloud provider configuration found. Service will be unavailable.`);
-        this.cloudService = null;
-      } else if (!cloudProviderConfig.apiKey || cloudProviderConfig.apiKey.trim() === '') {
-        console.warn(`⚠️  ${cloudProviderConfig.provider} provider found but no API key configured. Service will be unavailable until API key is provided.`);
-        this.cloudService = null; // Will be initialized when API key is provided
-      } else if (cloudProviderConfig.provider === 'azure-openai' && (!cloudProviderConfig.baseUrl || cloudProviderConfig.baseUrl.trim() === '')) {
-        console.warn(`⚠️  Azure OpenAI provider found but no baseUrl configured. Service will be unavailable until baseUrl is provided.`);
-        this.cloudService = null;
+      if (config.baseUrl) {
+        console.log(`[UnifiedLLMService] Initializing local service: ${config.provider}`);
+        this.localService = new LLMService(config);
       } else {
-        // Pass MCP client to CloudLLMService for enhanced model discovery
-        console.log(`[UnifiedLLMService] Initializing CloudLLMService with ${cloudProviderConfig.provider} config:`, {
+        console.warn(`[UnifiedLLMService] Local provider ${config.provider} specified but no baseUrl provided`);
+      }
+    }
+    
+    // Initialize cloud service if cloud providers are available (regardless of main provider)
+    if (config.cloudProviders && Object.keys(config.cloudProviders).length > 0) {
+      console.log(`[UnifiedLLMService] Cloud providers are available, attempting to initialize cloud service...`);
+      
+      // Try to find the best available cloud provider
+      let cloudProviderConfig = this.findBestAvailableCloudProvider(config);
+      
+      if (cloudProviderConfig) {
+        console.log(`[UnifiedLLMService] Found available cloud provider: ${cloudProviderConfig.provider}`);
+        console.log(`[UnifiedLLMService] Initializing CloudLLMService with config:`, {
           provider: cloudProviderConfig.provider,
           model: cloudProviderConfig.model,
           hasApiKey: !!cloudProviderConfig.apiKey,
           baseUrl: cloudProviderConfig.baseUrl
         });
         this.cloudService = new CloudLLMService(cloudProviderConfig as any, this.mcpClient);
+      } else {
+        console.warn(`[UnifiedLLMService] No available cloud providers found (missing API keys or configs)`);
+        this.cloudService = null;
       }
     } else {
-      throw new Error(`Unsupported LLM provider: ${config.provider}`);
+      console.log(`[UnifiedLLMService] No cloud providers configured`);
+      this.cloudService = null;
     }
-  }
-  async chat(messages: ChatMessage[]): Promise<string> {
+    
+    // If the main provider is a cloud provider, ensure it's properly configured
+    if (config.provider === 'openai' || config.provider === 'anthropic' || config.provider === 'gemini' || config.provider === 'azure-openai') {
+      if (!this.cloudService) {
+        // Try to initialize cloud service specifically for the requested provider
+        const cloudProviderConfig = this.getCloudProviderConfig(config, config.provider);
+        if (cloudProviderConfig && cloudProviderConfig.apiKey && cloudProviderConfig.apiKey.trim() !== '') {
+          console.log(`[UnifiedLLMService] Initializing cloud service for requested provider: ${config.provider}`);
+          this.cloudService = new CloudLLMService(cloudProviderConfig as any, this.mcpClient);
+        }
+      }
+    }
+    
+    // Log final service state
+    console.log(`[UnifiedLLMService] Initialization complete:`, {
+      hasLocalService: !!this.localService,
+      hasCloudService: !!this.cloudService,
+      preferLocal: config.preferLocal
+    });
+  }async chat(messages: ChatMessage[]): Promise<string> {
     if (!this.isServiceReady()) {
       const status = this.getServiceStatus();
       throw new Error(`LLM service not available: ${status.reason}`);
     }
     
-    const service = this.getActiveService();
+    const service = await this.getActiveService();
     const response = await service.chat(messages);
     
     // Process any execute_query tags in the response
@@ -322,15 +321,47 @@ export class UnifiedLLMService {
     }
     
     return modifiedResponse;
-  }
-  async isAvailable(): Promise<boolean> {
+  }  async isAvailable(): Promise<boolean> {
     if (!this.isServiceReady()) {
       return false;
     }
     
     try {
-      const service = this.getActiveService();
-      return await service.isAvailable();
+      // Check if preferred service is available first
+      if (this.config.preferLocal && this.localService) {
+        console.log('[UnifiedLLMService] Checking local service availability...');
+        const localAvailable = await this.localService.isAvailable();
+        if (localAvailable) {
+          console.log('[UnifiedLLMService] Local service is available');
+          return true;
+        }
+        console.log('[UnifiedLLMService] Local service not available, checking cloud fallback...');
+      }
+      
+      // Check cloud service availability (either as preferred or fallback)
+      if (this.cloudService) {
+        console.log('[UnifiedLLMService] Checking cloud service availability...');
+        const cloudAvailable = await this.cloudService.isAvailable();
+        if (cloudAvailable) {
+          console.log('[UnifiedLLMService] Cloud service is available');
+          return true;
+        }
+        console.log('[UnifiedLLMService] Cloud service not available');
+      }
+      
+      // If preferLocal is false or not set, try local as fallback
+      if (!this.config.preferLocal && this.localService) {
+        console.log('[UnifiedLLMService] Checking local service as fallback...');
+        const localAvailable = await this.localService.isAvailable();
+        if (localAvailable) {
+          console.log('[UnifiedLLMService] Local service is available as fallback');
+          return true;
+        }
+        console.log('[UnifiedLLMService] Local service not available as fallback');
+      }
+      
+      console.log('[UnifiedLLMService] No services are available');
+      return false;
     } catch (error) {
       console.warn('Error checking service availability:', error);
       return false;
@@ -352,20 +383,58 @@ export class UnifiedLLMService {
       console.error('Failed to get available models:', error);
       return [];
     }
-  }  private getActiveService(): LLMService | CloudLLMService {
+  }  private async getActiveService(): Promise<LLMService | CloudLLMService> {
     // Check preferLocal setting first
     if (this.config.preferLocal && this.localService) {
-      console.log('[UnifiedLLMService] Using LOCAL service (preferLocal=true)');
-      return this.localService;
-    } else if (this.cloudService) {
-      console.log('[UnifiedLLMService] Using CLOUD service');
-      return this.cloudService;
-    } else if (this.localService) {
-      console.log('[UnifiedLLMService] Using LOCAL service (fallback)');
-      return this.localService;
-    } else {
-      throw new Error(`No LLM service available. Provider '${this.config.provider}' is configured but ${this.isCloudProvider() ? 'API key is missing' : 'service failed to initialize'}.`);
+      console.log('[UnifiedLLMService] Checking preferred LOCAL service availability...');
+      try {
+        const localAvailable = await this.localService.isAvailable();
+        if (localAvailable) {
+          console.log('[UnifiedLLMService] Using LOCAL service (preferred and available)');
+          return this.localService;
+        }
+        console.log('[UnifiedLLMService] Preferred LOCAL service not available, trying cloud fallback...');
+      } catch (error) {
+        console.warn('[UnifiedLLMService] Error checking local service availability:', error);
+      }
     }
+    
+    // Try cloud service (either as preferred or fallback)
+    if (this.cloudService) {
+      console.log('[UnifiedLLMService] Checking CLOUD service availability...');
+      try {
+        const cloudAvailable = await this.cloudService.isAvailable();
+        if (cloudAvailable) {
+          console.log('[UnifiedLLMService] Using CLOUD service');
+          return this.cloudService;
+        }
+        console.log('[UnifiedLLMService] CLOUD service not available');
+      } catch (error) {
+        console.warn('[UnifiedLLMService] Error checking cloud service availability:', error);
+      }
+    }
+    
+    // If preferLocal is false or not set, try local as final fallback
+    if (!this.config.preferLocal && this.localService) {
+      console.log('[UnifiedLLMService] Checking LOCAL service as final fallback...');
+      try {
+        const localAvailable = await this.localService.isAvailable();
+        if (localAvailable) {
+          console.log('[UnifiedLLMService] Using LOCAL service (fallback)');
+          return this.localService;
+        }
+        console.log('[UnifiedLLMService] LOCAL fallback service not available');
+      } catch (error) {
+        console.warn('[UnifiedLLMService] Error checking local fallback service availability:', error);
+      }
+    }
+    
+    // No services available
+    const availableServices = [];
+    if (this.localService) availableServices.push('local');
+    if (this.cloudService) availableServices.push('cloud');
+    
+    throw new Error(`No LLM service available. Provider '${this.config.provider}' is configured but no services are responding. Available service types: ${availableServices.join(', ') || 'none'}.`);
   }
 
   /**

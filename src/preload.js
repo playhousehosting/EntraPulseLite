@@ -78,7 +78,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Event listeners for real-time updates
   on: (channel, callback) => {
-    const validChannels = ['auth-status-changed', 'chat-message', 'graph-api-call', 'config:defaultCloudProviderChanged', 'auth:configurationAvailable'];
+    const validChannels = ['auth-status-changed', 'chat-message', 'graph-api-call', 'config:defaultCloudProviderChanged', 'auth:configurationAvailable', 'llm:forceStatusRefresh'];
     if (validChannels.includes(channel)) {
       ipcRenderer.on(channel, callback);
     }
@@ -86,7 +86,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Remove specific event listener
   removeListener: (channel, callback) => {
-    const validChannels = ['auth-status-changed', 'chat-message', 'graph-api-call', 'config:defaultCloudProviderChanged', 'auth:configurationAvailable'];
+    const validChannels = ['auth-status-changed', 'chat-message', 'graph-api-call', 'config:defaultCloudProviderChanged', 'auth:configurationAvailable', 'llm:forceStatusRefresh'];
     if (validChannels.includes(channel)) {
       ipcRenderer.removeListener(channel, callback);
     }
@@ -94,7 +94,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Remove event listeners
   removeAllListeners: (channel) => {
-    const validChannels = ['auth-status-changed', 'chat-message', 'graph-api-call', 'config:defaultCloudProviderChanged', 'auth:configurationAvailable'];
+    const validChannels = ['auth-status-changed', 'chat-message', 'graph-api-call', 'config:defaultCloudProviderChanged', 'auth:configurationAvailable', 'llm:forceStatusRefresh'];
     if (validChannels.includes(channel)) {
       ipcRenderer.removeAllListeners(channel);
     }

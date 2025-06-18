@@ -537,9 +537,7 @@ export const EnhancedSettingsDialog: React.FC<EnhancedSettingsDialogProps> = ({
       hasCloudProviders: !!finalConfig.cloudProviders,
       cloudProviderKeys: finalConfig.cloudProviders ? Object.keys(finalConfig.cloudProviders) : 'none',
       azureOpenAIUrl: finalConfig.cloudProviders?.['azure-openai']?.baseUrl
-    });
-
-    onSave(finalConfig);
+    });    onSave(finalConfig);
     onClose();
   };
 
@@ -1440,42 +1438,5 @@ const EntraConfigForm: React.FC<EntraConfigFormProps> = ({ config, onSave, onCle
           </Alert>
         </Grid>
       )}
-    </Grid>
-  );
+    </Grid>  );
 };
-
-const fetchLocalModels = async () => {
-    if (!config.baseUrl) {
-      setModelFetchError({ ...modelFetchError, local: 'Base URL is required to fetch models' });
-      return;
-    }
-
-    setIsLoadingModels({ ...isLoadingModels, local: true });
-    setModelFetchError({ ...modelFetchError, local: '' });
-
-    try {
-      const testConfig = {
-        provider: config.provider,
-        baseUrl: config.baseUrl,
-        model: config.model // This is for the connection test
-      };
-
-      const models = await window.electronAPI.llm.getAvailableModels(testConfig);
-      setAvailableModels({ ...availableModels, local: models });
-      
-      if (models.length === 0) {
-        setModelFetchError({ 
-          ...modelFetchError, 
-          local: `No models found. Make sure ${config.provider} is running and has models installed.` 
-        });
-      }
-    } catch (error) {
-      console.error('Failed to fetch local models:', error);
-      setModelFetchError({ 
-        ...modelFetchError, 
-        local: `Failed to fetch models: ${error instanceof Error ? error.message : 'Unknown error'}` 
-      });
-    } finally {
-      setIsLoadingModels({ ...isLoadingModels, local: false });
-    }
-  };

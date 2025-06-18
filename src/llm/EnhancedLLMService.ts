@@ -738,7 +738,6 @@ If you received documentation, summarize the key points accurately.`;
       throw enhancedError;
     }
   }
-
   /**
    * Create user-friendly error messages based on error type and provider
    */
@@ -747,6 +746,75 @@ If you received documentation, summarize the key points accurately.`;
     if (error.response && error.response.status) {
       const status = error.response.status;
       const providerName = this.getProviderDisplayName(provider);
+        // Special handling for Ollama-specific errors
+      if (provider === 'ollama' && error.response.data) {
+        let ollamaError = '';
+        
+        // Try multiple possible error response structures
+        if (error.response.data.error) {
+          ollamaError = error.response.data.error;
+        } else if (typeof error.response.data === 'string') {
+          ollamaError = error.response.data;
+        } else if (error.response.data.message) {
+          ollamaError = error.response.data.message;
+        } else {
+          // Fallback: convert data to string and look for error patterns
+          const dataStr = JSON.stringify(error.response.data);
+          ollamaError = dataStr;
+        }
+        
+        console.log(`[EnhancedLLMService] Processing Ollama error: "${ollamaError}"`);
+        
+        // Check for memory-related errors
+        if (ollamaError.includes('requires more system memory') || ollamaError.includes('out of memory')) {
+          const memoryMatch = ollamaError.match(/requires more system memory \(([^)]+)\) than is available \(([^)]+)\)/);
+          if (memoryMatch) {
+            const required = memoryMatch[1];
+            const available = memoryMatch[2];
+            return new Error(`🧠 **Local LLM Memory Error**: The ${this.config.model} model requires **${required}** of system memory, but only **${available}** is available. 
+            
+**Solutions:**
+• Switch to a smaller model (e.g., codellama:3b or llama3.2:1b)
+• Close other applications to free memory
+• Use a cloud LLM provider instead
+• Increase your system's available memory`);
+          } else {
+            return new Error(`🧠 **Local LLM Memory Error**: ${ollamaError}
+
+**Solutions:**
+• Try a smaller model
+• Close other applications to free memory  
+• Switch to a cloud LLM provider`);
+          }
+        }
+        
+        // Check for model loading errors
+        if (ollamaError.includes('model not found') || ollamaError.includes('pull model')) {
+          return new Error(`📥 **Local LLM Model Error**: The model "${this.config.model}" is not available locally.
+
+**Solutions:**
+• Run: \`ollama pull ${this.config.model}\` to download the model
+• Choose a different model that's already downloaded
+• Switch to a cloud LLM provider`);
+        }
+        
+        // Check for context length errors
+        if (ollamaError.includes('context length') || ollamaError.includes('too long')) {
+          return new Error(`📝 **Local LLM Context Error**: The message is too long for the ${this.config.model} model.
+
+**Solutions:**
+• Try a shorter question
+• Use a model with larger context (e.g., llama3.1 or qwen2.5)
+• Switch to a cloud LLM provider with larger context`);
+        }
+        
+        // Other Ollama-specific errors
+        if (ollamaError.trim()) {
+          return new Error(`🤖 **Local LLM Error**: ${ollamaError}
+
+**Suggestion:** Try switching to a cloud LLM provider for more reliable performance.`);
+        }
+      }
       
       switch (status) {
         case 429:
@@ -775,12 +843,35 @@ If you received documentation, summarize the key points accurately.`;
     // Handle network/connection errors
     if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
       const providerName = this.getProviderDisplayName(provider);
+      
+      // Special handling for Ollama connection errors
+      if (provider === 'ollama') {
+        return new Error(`🔌 **Local LLM Connection Error**: Cannot connect to Ollama at http://localhost:11434
+
+**Solutions:**
+• Start Ollama: \`ollama serve\`
+• Check if Ollama is running in the background
+• Verify Ollama is installed correctly
+• Switch to a cloud LLM provider`);
+      }
+      
       return new Error(`Cannot connect to ${providerName}. Please check your internet connection and provider configuration.`);
     }
     
     // Handle timeout errors
     if (error.code === 'ETIMEDOUT' || error.message?.includes('timeout')) {
       const providerName = this.getProviderDisplayName(provider);
+      
+      if (provider === 'ollama') {
+        return new Error(`⏱️ **Local LLM Timeout**: ${providerName} request timed out. The model may be too large or your system too slow.
+
+**Solutions:**
+• Try a smaller/faster model
+• Reduce the context length
+• Close other applications
+• Switch to a cloud LLM provider`);
+      }
+      
       return new Error(`${providerName} request timed out. The service may be slow or overloaded. Please try again.`);
     }
     
