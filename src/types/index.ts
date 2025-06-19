@@ -96,7 +96,7 @@ export interface MCPAuthConfig {
 
 export interface MCPServerConfig {
   name: string;
-  type: 'fetch' | 'external-lokka';
+  type: 'fetch' | 'external-lokka' | 'microsoft-docs';
   port: number;
   enabled: boolean;
   url?: string;

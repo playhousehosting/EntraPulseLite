@@ -207,11 +207,22 @@ async handleMicrosoftGraphQuery(args: {
 ```
 
 #### FetchMCPServer (`src/mcp/servers/FetchMCPServer.ts`)
-**Purpose**: Documentation and schema access
+**Purpose**: General web documentation and schema access
 **Tools Available**:
-- `fetch_documentation`: Microsoft Learn docs
+- `fetch`: General web content retrieval
+- `fetch_documentation`: General documentation access
 - `fetch_graph_schema`: Graph API schema
-- `fetch_permissions_info`: Permission documentation
+
+#### MicrosoftDocsMCPServer (`src/mcp/clients/MicrosoftDocsMCPClient.ts`)
+**Purpose**: Microsoft-specific documentation and official content access
+**Features**:
+- Dedicated Microsoft Learn documentation access
+- Official Microsoft product documentation
+- Microsoft Graph API documentation
+- Prioritized for all Microsoft-related queries
+**Tools Available**:
+- `search_docs`: Search Microsoft Learn and official documentation
+- `get_article`: Retrieve specific Microsoft documentation articles
 
 ### 4. Configuration Management
 

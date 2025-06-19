@@ -1,7 +1,7 @@
 // lokka-mcp-startup.test.ts
 // Tests for the startup behavior of the External Lokka MCP Server
 
-import { ExternalLokkaMCPServer } from '../../mcp/servers/lokka/ExternalLokkaMCPServer';
+import { ExternalLokkaMCPStdioServer as ExternalLokkaMCPServer } from '../../mcp/servers/lokka/ExternalLokkaMCPStdioServer';
 import { MCPAuthService } from '../../mcp/auth/MCPAuthService';
 import { spawn } from 'child_process';
 

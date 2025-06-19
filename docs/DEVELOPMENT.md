@@ -42,7 +42,8 @@ EntraPulse Lite is built with modern TypeScript, Electron, and React technologie
 #### 3. MCP Integration Layer
 - **MCPClient**: Protocol communication
 - **LokkaMCPServer**: Microsoft Graph API access
-- **FetchMCPServer**: Documentation and permissions
+- **MicrosoftDocsMCPClient**: Microsoft Learn and official documentation access
+- **FetchMCPServer**: General web documentation and content retrieval
 - **MCPAuthService**: Authentication for MCP servers
 
 #### 4. UI Layer
@@ -133,6 +134,8 @@ src/
 ├── mcp/                       # MCP server integration
 │   ├── MCPClient.ts         # MCP protocol client
 │   ├── MCPServerManager.ts  # Server lifecycle management
+│   ├── clients/             # MCP client implementations
+│   │   └── MicrosoftDocsMCPClient.ts
 │   ├── servers/             # MCP server implementations
 │   │   ├── LokkaMCPServer.ts
 │   │   └── FetchMCPServer.ts

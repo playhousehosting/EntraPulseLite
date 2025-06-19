@@ -1,7 +1,7 @@
 // lokka-mcp-e2e.test.ts
 // End-to-end tests for the External Lokka MCP Server integration with LLM
 
-import { ExternalLokkaMCPServer } from '../../mcp/servers/lokka/ExternalLokkaMCPServer';
+import { ExternalLokkaMCPStdioServer as ExternalLokkaMCPServer } from '../../mcp/servers/lokka/ExternalLokkaMCPStdioServer';
 import { MCPAuthService } from '../../mcp/auth/MCPAuthService';
 import { AuthService } from '../../auth/AuthService';
 import { MCPRequest, MCPResponse } from '../../mcp/types';

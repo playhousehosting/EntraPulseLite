@@ -76,13 +76,16 @@ class EntraPulseLiteApp {
     
       this.config = {
       auth: {
-        clientId: authConfig.clientId,
-        tenantId: authConfig.tenantId,        scopes: hasLokkaCreds 
+        clientId: authConfig.clientId,        tenantId: authConfig.tenantId,
+        scopes: hasLokkaCreds 
           ? ['https://graph.microsoft.com/.default'] // Client credentials flow requires .default scope
           : ['https://graph.microsoft.com/.default'], // Interactive flow using .default to inherit all app registration permissions
-        clientSecret: authConfig.clientSecret, // Only needed for confidential client applications        useClientCredentials: Boolean(hasLokkaCreds), // Use client credentials flow if Lokka creds are configured
-      },      llm: storedLLMConfig, // Use stored LLM configuration
-      mcpServers: [        {
+        clientSecret: authConfig.clientSecret, // Only needed for confidential client applications
+        useClientCredentials: Boolean(hasLokkaCreds), // Use client credentials flow if Lokka creds are configured
+      },
+      llm: storedLLMConfig, // Use stored LLM configuration
+      mcpServers: [
+        {
           name: 'external-lokka',
           type: 'external-lokka',
           port: 0, // Not used for stdin/stdout MCP servers
@@ -101,10 +104,22 @@ class EntraPulseLiteApp {
           port: 3002, // Only used for built-in fetch server
           enabled: true,
         },
-      ],      features: {
+        {
+          name: 'microsoft-docs',
+          type: 'microsoft-docs',
+          port: 0, // Not used for HTTP-based MCP servers
+          enabled: true,
+          url: 'https://learn.microsoft.com/api/mcp',
+          authConfig: {
+            type: 'none' // Microsoft Docs MCP doesn't require authentication
+          }
+        },
+      ],
+      features: {
         enablePremiumFeatures: false, // Set via UI preferences
         enableTelemetry: false, // Set via UI preferences
-      },};
+      },
+    };
 
     // Log the final Lokka MCP server configuration for debugging
     const lokkaConfig = this.config.mcpServers.find(server => server.name === 'external-lokka');

@@ -13,7 +13,8 @@ This directory contains comprehensive documentation for EntraPulse Lite. Use thi
 - **[DEVELOPMENT.md](./DEVELOPMENT.md)** - Development workflow, architecture, and best practices
 - **[ARCHITECTURE.md](./ARCHITECTURE.md)** - Detailed technical architecture
 - **[TESTING.md](./TESTING.md)** - Testing strategies and test execution
-- **[MCP-INTEGRATION.md](./MCP-INTEGRATION.md)** - Model Context Protocol integration details
+- **[MCP-INTEGRATION.md](./MCP-INTEGRATION.md)** - Model Context Protocol integration details (includes Microsoft Docs MCP)
+- **[MICROSOFT-DOCS-MCP-INTEGRATION.md](./MICROSOFT-DOCS-MCP-INTEGRATION.md)** - Microsoft Docs MCP specific implementation details
 
 ### Critical Issues & Fixes
 

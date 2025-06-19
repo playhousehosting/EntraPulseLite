@@ -12,6 +12,7 @@ import { UnifiedLLMService } from './UnifiedLLMService';
 export interface QueryAnalysis {
   needsFetchMcp: boolean;
   needsLokkaMcp: boolean;
+  needsMicrosoftDocsMcp: boolean;
   graphEndpoint?: string;
   graphMethod?: string;
   graphParams?: any;
@@ -26,6 +27,7 @@ export interface EnhancedLLMResponse {
   mcpResults: {
     fetchResult?: any;
     lokkaResult?: any;
+    microsoftDocsResult?: any;
   };
   finalResponse: string;
   traceData: {
@@ -49,8 +51,7 @@ export class EnhancedLLMService {
     if (mcpClient) {
       this.mcpClient = mcpClient;
       console.log('EnhancedLLMService: Using provided MCPClient');
-    } else {      console.log('EnhancedLLMService: Creating fallback MCPClient with basic servers');
-      // Initialize MCP client with fallback servers (for backward compatibility)
+    } else {      console.log('EnhancedLLMService: Creating fallback MCPClient with basic servers');      // Initialize MCP client with fallback servers (for backward compatibility)
       const serverConfigs: MCPServerConfig[] = [
         {
           name: 'fetch',
@@ -67,6 +68,16 @@ export class EnhancedLLMService {
           url: 'http://localhost:3003',
           command: 'npx',
           args: ['-y', '@merill/lokka']
+        },
+        {
+          name: 'microsoft-docs',
+          type: 'microsoft-docs',
+          port: 0,
+          enabled: true,
+          url: 'https://learn.microsoft.com/api/mcp',
+          authConfig: {
+            type: 'none'
+          }
         }
       ];
       
@@ -91,13 +102,29 @@ export class EnhancedLLMService {
       const userQuery = messages[messages.length - 1]?.content || '';
       const analysis = await this.analyzeQuery(userQuery);
       trace.push(`Query analysis completed: ${analysis.reasoning}`);      // Step 2: MCP servers are automatically initialized in constructor
-      trace.push('MCP servers ready');
+      trace.push('MCP servers ready');      // Step 3: Execute MCP operations based on analysis
+      const mcpResults: { fetchResult?: any; lokkaResult?: any; microsoftDocsResult?: any } = {};
 
-      // Step 3: Execute MCP operations based on analysis
-      const mcpResults: { fetchResult?: any; lokkaResult?: any } = {};
+      // Microsoft Docs MCP for documentation (preferred)
+      if (analysis.needsMicrosoftDocsMcp) {
+        try {
+          trace.push('Calling Microsoft Docs MCP for documentation');
+          
+          const docsQuery = analysis.documentationQuery || analysis.permissionQuery || userQuery;
+          mcpResults.microsoftDocsResult = await this.mcpClient.callTool('microsoft-docs', 'search_docs', {
+            query: docsQuery,
+            maxResults: 5
+          });
+          trace.push('Microsoft Docs MCP completed successfully');
+        } catch (error) {
+          const errorMsg = `Microsoft Docs MCP failed: ${error}`;
+          errors.push(errorMsg);
+          trace.push(errorMsg);
+        }
+      }
 
-      // Fetch MCP for documentation/permissions
-      if (analysis.needsFetchMcp) {
+      // Fetch MCP for documentation/permissions (legacy fallback)
+      if (analysis.needsFetchMcp && !analysis.needsMicrosoftDocsMcp) {
         try {
           trace.push('Calling Fetch MCP for documentation');
           const fetchQuery = analysis.documentationQuery || analysis.permissionQuery || userQuery;
@@ -172,10 +199,10 @@ export class EnhancedLLMService {
       trace.push('Falling back to basic chat');
       const fallbackResponse = await this.basicChat(messages);
       
-      return {
-        analysis: {
+      return {        analysis: {
           needsFetchMcp: false,
           needsLokkaMcp: false,
+          needsMicrosoftDocsMcp: false,
           confidence: 0,
           reasoning: 'Analysis failed, using fallback response'
         },
@@ -192,23 +219,40 @@ export class EnhancedLLMService {
 
   /**
    * Analyze the user query to determine what MCP tools are needed
-   */
-  private async analyzeQuery(query: string): Promise<QueryAnalysis> {    const systemPrompt = `You are an expert analyzer for Microsoft Graph API queries. Analyze the user's query and determine:
+   */  private async analyzeQuery(query: string): Promise<QueryAnalysis> {    const systemPrompt = `You are an expert analyzer for Microsoft Graph API queries. Analyze the user's query and determine:
 
-1. Does the query need documentation or permission information? (Fetch MCP)
-2. Does the query need to access Microsoft Graph data? (Lokka MCP) 
-3. What specific Graph endpoint should be called?
-4. What parameters should be used?
+1. Does the query need Microsoft/Azure/Graph/Entra documentation? (Microsoft Docs MCP - DEFAULT for Microsoft content)
+2. Does the query need general web search for non-Microsoft content? (Fetch MCP - only for non-Microsoft searches)
+3. Does the query need to access Microsoft Graph data? (Lokka MCP) 
+4. What specific Graph endpoint should be called?
+5. What parameters should be used?
 
-Examples:
-- "List all users" -> needs Lokka MCP, endpoint: "/users", method: "get"
-- "How many users do we have?" -> needs Lokka MCP, endpoint: "/users/$count", method: "get", params: {"ConsistencyLevel": "eventual"}
-- "Count of user accounts" -> needs Lokka MCP, endpoint: "/users/$count", method: "get", params: {"ConsistencyLevel": "eventual"}
-- "What permissions does User.Read give me?" -> needs Fetch MCP for permission info
-- "Show me guest accounts" -> needs Lokka MCP, endpoint: "/users", method: "get", filter: userType eq 'Guest'
-- "How do I authenticate to Graph?" -> needs Fetch MCP for documentation
+MICROSOFT DOCS MCP (Priority #1) - Use for ANY Microsoft-related content:
+- "What permissions does User.Read give me?" -> Microsoft Docs MCP
+- "How do I authenticate to Graph?" -> Microsoft Docs MCP
+- "Tell me about Azure Active Directory" -> Microsoft Docs MCP
+- "What are the latest Graph API features?" -> Microsoft Docs MCP
+- "How do I configure authentication?" -> Microsoft Docs MCP
+- "Explain Microsoft Entra" -> Microsoft Docs MCP
+- "Azure documentation" -> Microsoft Docs MCP
+- "Office 365 permissions" -> Microsoft Docs MCP
+- "PowerShell for Graph" -> Microsoft Docs MCP
+- ANY Microsoft product, service, or technology -> Microsoft Docs MCP
+
+FETCH MCP (Only for non-Microsoft content):
+- "Weather in Seattle" -> Fetch MCP
+- "News about technology" -> Fetch MCP
+- "General web search" -> Fetch MCP
+- ONLY use when content is NOT related to Microsoft/Azure/Graph/Entra
+
+LOKKA MCP (Graph Data):
+- "List all users" -> Lokka MCP, endpoint: "/users", method: "get"
+- "How many users do we have?" -> Lokka MCP, endpoint: "/users/$count", method: "get", params: {"ConsistencyLevel": "eventual"}
+- "Show me guest accounts" -> Lokka MCP, endpoint: "/users", method: "get", filter: userType eq 'Guest'
 
 IMPORTANT: 
+- DEFAULT to Microsoft Docs MCP for ANY Microsoft-related query
+- Only use Fetch MCP for non-Microsoft web searches
 - Always use lowercase HTTP methods (get, post, put, delete, patch)
 - For count queries, use /$count endpoints with ConsistencyLevel parameter
 - Never use /me endpoint with client credentials authentication
@@ -217,6 +261,7 @@ Respond ONLY with a JSON object in this exact format:
 {
   "needsFetchMcp": boolean,
   "needsLokkaMcp": boolean,
+  "needsMicrosoftDocsMcp": boolean,
   "graphEndpoint": "string or null",
   "graphMethod": "lowercase HTTP method (get, post, put, delete, patch) or null", 
   "graphParams": object or null,
@@ -248,10 +293,10 @@ Respond ONLY with a JSON object in this exact format:
       const jsonMatch = response.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         try {
-          const analysis = JSON.parse(jsonMatch[0]);
-          return {
+          const analysis = JSON.parse(jsonMatch[0]);          return {
             needsFetchMcp: Boolean(analysis.needsFetchMcp),
             needsLokkaMcp: Boolean(analysis.needsLokkaMcp),
+            needsMicrosoftDocsMcp: Boolean(analysis.needsMicrosoftDocsMcp),
             graphEndpoint: analysis.graphEndpoint || undefined,
             graphMethod: analysis.graphMethod || undefined,
             graphParams: analysis.graphParams || undefined,
@@ -273,20 +318,35 @@ Respond ONLY with a JSON object in this exact format:
 
     // Fallback to heuristic analysis
     return this.heuristicAnalysis(query);
-  }
-  /**
+  }  /**
    * Fallback heuristic analysis when LLM analysis fails
    */
   private heuristicAnalysis(query: string): QueryAnalysis {
     const lowerQuery = query.toLowerCase();
+      // Check for Microsoft-related keywords (prioritize Microsoft Docs MCP)
+    const microsoftKeywords = [
+      'microsoft', 'azure', 'graph', 'entra', 'active directory', 'ad', 'aad',
+      'office', 'office 365', 'o365', 'sharepoint', 'teams', 'outlook',
+      'powershell', 'authentication', 'permission', 'scope', 'oauth', 'token',
+      'tenant', 'app registration', 'service principal', 'conditional access',
+      'intune', 'defender', 'security', 'compliance', 'licensing'
+    ];
     
-    // Keywords that suggest Graph data access
+    // Check for Microsoft-specific documentation queries
+    const microsoftDocKeywords = [
+      'microsoft graph', 'azure ad', 'entra id', 'office 365', 'sharepoint',
+      'azure authentication', 'microsoft teams', 'microsoft docs'
+    ];
+    const needsMicrosoftDocsMcp = microsoftKeywords.some(keyword => lowerQuery.includes(keyword)) ||
+      microsoftDocKeywords.some(keyword => lowerQuery.includes(keyword));
+    
+    // For non-Microsoft content, default to Fetch MCP for general web searches
+    // Only avoid Fetch MCP if it's clearly a Graph data query
     const graphKeywords = ['users', 'groups', 'me', 'mail', 'calendar', 'contacts', 'teams', 'sites', 'files', 'list', 'show', 'get', 'find', 'count'];
-    const needsLokkaMcp = graphKeywords.some(keyword => lowerQuery.includes(keyword));
+    const isGraphDataQuery = graphKeywords.some(keyword => lowerQuery.includes(keyword));
     
-    // Keywords that suggest documentation/permission needs
-    const docsKeywords = ['permission', 'scope', 'authenticate', 'how to', 'what is', 'explain', 'documentation'];
-    const needsFetchMcp = docsKeywords.some(keyword => lowerQuery.includes(keyword));
+    const needsFetchMcp = !needsMicrosoftDocsMcp && !isGraphDataQuery;
+    const needsLokkaMcp = isGraphDataQuery;
     
     let graphEndpoint = '/me'; // Default endpoint
     let graphParams: any = undefined;
@@ -309,32 +369,51 @@ Respond ONLY with a JSON object in this exact format:
       graphEndpoint = '/groups';
     } else if (lowerQuery.includes('mail')) {
       graphEndpoint = '/me/messages';
-    }
-
-    return {
+    }    return {
       needsFetchMcp,
       needsLokkaMcp,
+      needsMicrosoftDocsMcp,
       graphEndpoint: needsLokkaMcp ? graphEndpoint : undefined,
       graphMethod: 'get', // Use lowercase as required by Lokka MCP
       graphParams,
-      documentationQuery: needsFetchMcp ? query : undefined,
+      documentationQuery: needsMicrosoftDocsMcp ? query : undefined,
       confidence: 0.7,
-      reasoning: 'Used heuristic analysis as fallback'
+      reasoning: needsMicrosoftDocsMcp 
+        ? 'Used heuristic analysis as fallback - prioritizing Microsoft Docs MCP for Microsoft content'
+        : needsLokkaMcp 
+          ? 'Used heuristic analysis as fallback - using Lokka MCP for Graph data'
+          : 'Used heuristic analysis as fallback - using Fetch MCP for general web search'
     };
   }
   /**
    * Generate the final response using LLM with MCP results
-   */
-  private async generateFinalResponse(
+   */  private async generateFinalResponse(
     originalQuery: string, 
     analysis: QueryAnalysis, 
-    mcpResults: { fetchResult?: any; lokkaResult?: any }
+    mcpResults: { fetchResult?: any; lokkaResult?: any; microsoftDocsResult?: any }
   ): Promise<string> {
     
     let contextData = '';
     
-    // Prepare context from Fetch MCP results
-    if (mcpResults.fetchResult?.content) {
+    // Prepare context from Microsoft Docs MCP results (preferred)
+    if (mcpResults.microsoftDocsResult) {
+      try {
+        // Handle different possible response formats from Microsoft Docs MCP
+        if (mcpResults.microsoftDocsResult.content) {
+          contextData += `Microsoft Learn Documentation:\n${JSON.stringify(mcpResults.microsoftDocsResult.content, null, 2)}\n\n`;
+        } else if (mcpResults.microsoftDocsResult.results) {
+          contextData += `Microsoft Learn Search Results:\n${JSON.stringify(mcpResults.microsoftDocsResult.results, null, 2)}\n\n`;
+        } else {
+          contextData += `Microsoft Learn Data:\n${JSON.stringify(mcpResults.microsoftDocsResult, null, 2)}\n\n`;
+        }
+      } catch (error) {
+        console.warn('Error processing Microsoft Docs MCP result:', error);
+        contextData += `Microsoft Learn Documentation: Available but could not be processed\n\n`;
+      }
+    }
+    
+    // Prepare context from Fetch MCP results (legacy fallback)
+    if (mcpResults.fetchResult?.content && !mcpResults.microsoftDocsResult) {
       const textContent = mcpResults.fetchResult.content.find((item: any) => item.type === 'text');
       if (textContent?.text) {
         contextData += `Documentation Context:\n${textContent.text}\n\n`;
@@ -554,7 +633,7 @@ Respond ONLY with a JSON object in this exact format:
       }
     }    const systemPrompt = `You are an expert Microsoft Entra (Azure AD) and Microsoft Graph API assistant.
 
-${contextData ? `Here is the relevant data retrieved from Microsoft Graph and documentation:
+${contextData ? `Here is the relevant data retrieved from Microsoft Graph, Microsoft Learn documentation, and other sources:
 ${contextData}
 
 🚨 CRITICAL ANTI-HALLUCINATION INSTRUCTIONS - MUST FOLLOW EXACTLY 🚨:

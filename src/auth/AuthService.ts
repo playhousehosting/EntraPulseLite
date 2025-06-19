@@ -354,10 +354,9 @@ export class AuthService {
   async requestAdditionalPermissions(permissions: string[]): Promise<AuthToken | null> {
     if (!this.config) {
       throw new Error('Authentication service not initialized');
-    }
-
-    // Update config with new permissions
-    const updatedScopes = [...new Set([...this.config.auth.scopes, ...permissions])];
+    }    // Update config with new permissions
+    const uniqueScopes = new Set([...this.config.auth.scopes, ...permissions]);
+    const updatedScopes = Array.from(uniqueScopes);
     this.config.auth.scopes = updatedScopes;
 
     // Re-authenticate with new permissions

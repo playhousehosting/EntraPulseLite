@@ -1,7 +1,7 @@
 // guest-accounts-query.test.ts
 // Test for querying guest accounts through External Lokka MCP Server
 
-import { ExternalLokkaMCPServer } from '../../mcp/servers/lokka/ExternalLokkaMCPServer';
+import { ExternalLokkaMCPStdioServer as ExternalLokkaMCPServer } from '../../mcp/servers/lokka/ExternalLokkaMCPStdioServer';
 import { MCPAuthService } from '../../mcp/auth/MCPAuthService';
 import { MockAuthService } from '../mocks/MockAuthService';
 import { MCPRequest, MCPResponse } from '../../mcp/types';

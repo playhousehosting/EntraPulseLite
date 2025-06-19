@@ -12,7 +12,8 @@ A freemium desktop application that provides natural language querying of Micros
 - **Built-in MCP Servers**: 
   - Lokka MCP for Microsoft Graph API access
   - External Lokka MCP using the official @merill/lokka package
-  - Fetch MCP for Microsoft Learn documentation and Permissions Explorer
+  - Microsoft Docs MCP for Microsoft Learn documentation and official Microsoft documentation
+  - Fetch MCP for general web searches and documentation retrieval
 - **Chat Interface**: Modern UI with trace visualization and permission management
 - **Freemium Model**: No App Registration required for basic usage
 

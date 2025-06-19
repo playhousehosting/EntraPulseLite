@@ -57,6 +57,13 @@ export class MCPAuthService {
             'User-Agent': 'EntraPulseLite/1.0',
             'Content-Type': 'application/json'
           };
+        case 'microsoft-docs':
+          // Microsoft Docs MCP likely doesn't require authentication
+          // but we'll include user agent for identification
+          return {
+            'User-Agent': 'EntraPulseLite/1.0',
+            'Content-Type': 'application/json'
+          };
         default:
           console.warn(`Unknown server type: ${serverType}, returning default headers`);
           return {

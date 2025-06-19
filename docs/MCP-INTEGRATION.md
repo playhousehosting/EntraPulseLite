@@ -7,7 +7,8 @@ This document describes the SDK-based implementation of Model Context Protocol (
 EntraPulse Lite uses a dedicated MCP TypeScript SDK to interact with MCP servers, providing a secure and standardized way to access various data sources, including:
 
 1. Microsoft Graph API (via the Lokka MCP server)
-2. Microsoft Learn documentation (via the Fetch MCP server)
+2. Microsoft Learn and official documentation (via the Microsoft Docs MCP)
+3. General web content and documentation (via the Fetch MCP server)
 
 ## Architecture
 
@@ -17,19 +18,35 @@ The implementation consists of several components:
 2. **MCPAuthService** - Handles authentication for different MCP servers
 3. **MCPServerManager** - Manages MCP server instances
 4. **MCPServerFactory** - Creates appropriate server instances based on configuration
-5. **FetchMCPServer** - Implementation of the Fetch MCP server for Microsoft documentation
-6. **LokkaMCPServer** - Implementation of the Lokka MCP server for Microsoft Graph API access
-7. **MCPErrorHandler** - Utility for standardized error handling across all MCP components
+5. **MicrosoftDocsMCPClient** - HTTP-based client for Microsoft Learn and official documentation
+6. **FetchMCPServer** - Implementation of the Fetch MCP server for general web content
+7. **LokkaMCPServer** - Implementation of the Lokka MCP server for Microsoft Graph API access
+8. **MCPErrorHandler** - Utility for standardized error handling across all MCP components
 
 ## Server Types
 
+### Microsoft Docs MCP Client
+
+The Microsoft Docs MCP client provides prioritized access to official Microsoft documentation and resources. It includes the following tools:
+
+- `search_docs` - Search Microsoft Learn documentation and official Microsoft content
+- `get_article` - Retrieve specific Microsoft documentation articles
+
+**Key Features**:
+- **Priority for Microsoft Queries**: Automatically selected for Microsoft-related documentation queries
+- **Official Content**: Access to Microsoft Learn, Graph API documentation, and product information
+- **HTTP-based Communication**: Uses HTTP protocol for reliable communication with documentation services
+
 ### Fetch MCP Server
 
-The Fetch MCP server provides access to public Microsoft documentation and resources. It includes the following tools:
+The Fetch MCP server provides access to general web content and documentation. It includes the following tools:
 
-- `fetch_documentation` - Fetch Microsoft Learn documentation about Microsoft Graph and related topics
-- `fetch_graph_schema` - Fetch Microsoft Graph API schema information for entities
-- `fetch_permissions_info` - Fetch information about Microsoft Graph API permissions
+- `fetch` - Fetch general web content from URLs
+- `fetch_documentation` - Fetch general documentation resources
+
+**Key Features**:
+- **General Web Access**: Used for non-Microsoft documentation and general web searches
+- **Fallback Option**: Used when Microsoft Docs MCP is not suitable for the query
 
 ### Lokka MCP Server
 

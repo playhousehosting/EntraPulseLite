@@ -1,7 +1,7 @@
 // external-lokka-mcp.test.ts
 // Tests for the External Lokka MCP Server implementation
 
-import { ExternalLokkaMCPServer } from '../../mcp/servers/lokka/ExternalLokkaMCPServer';
+import { ExternalLokkaMCPStdioServer as ExternalLokkaMCPServer } from '../../mcp/servers/lokka/ExternalLokkaMCPStdioServer';
 import { MCPAuthService } from '../../mcp/auth/MCPAuthService';
 import { ErrorCode } from '../../mcp/utils';
 import { MCPRequest, MCPResponse } from '../../mcp/types';

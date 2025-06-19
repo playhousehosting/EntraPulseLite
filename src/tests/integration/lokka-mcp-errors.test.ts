@@ -1,7 +1,7 @@
 // lokka-mcp-errors.test.ts
 // Integration tests to verify error handling in the External Lokka MCP Server
 
-import { ExternalLokkaMCPServer } from '../../mcp/servers/lokka/ExternalLokkaMCPServer';
+import { ExternalLokkaMCPStdioServer as ExternalLokkaMCPServer } from '../../mcp/servers/lokka/ExternalLokkaMCPStdioServer';
 import { MCPAuthService } from '../../mcp/auth/MCPAuthService';
 import { AuthService } from '../../auth/AuthService';
 import { extractJsonFromMCPResponse, validateMCPResponse } from '../utils/mcpResponseParser';

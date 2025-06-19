@@ -1,7 +1,7 @@
 // lokka-tenant-connection.test.ts
 // Integration test to verify the Lokka MCP Server can connect to an Entra ID tenant
 
-import { ExternalLokkaMCPServer } from '../../mcp/servers/lokka/ExternalLokkaMCPServer';
+import { ExternalLokkaMCPStdioServer as ExternalLokkaMCPServer } from '../../mcp/servers/lokka/ExternalLokkaMCPStdioServer';
 import { MCPAuthService } from '../../mcp/auth/MCPAuthService';
 import { AuthService } from '../../auth/AuthService';
 import { validateMCPResponse } from '../utils/mcpResponseParser';
