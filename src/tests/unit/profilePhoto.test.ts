@@ -119,55 +119,69 @@ describe('ProfilePhotoService', () => {
       expect(result).toBeNull();
     });
   });
-    describe('caching', () => {
-    beforeEach(() => {
-      // Clear cache before each test
+  describe('caching', () => {    beforeEach(() => {
+      // Clear cache first
       profilePhotoService.clearCache();
+      
+      // Clear all mocks
+      jest.clearAllMocks();
+      
       // Reset global fetch mock
       delete (global as any).fetch;
+      
+      // Completely reset the mock chain for the Graph client
+      mockGraphClient.api = jest.fn().mockReturnValue(mockGraphClient);
+      mockGraphClient.responseType = jest.fn().mockReturnValue(mockGraphClient);
+      mockGraphClient.select = jest.fn().mockReturnValue(mockGraphClient);
+      mockGraphClient.get = jest.fn();
     });    it('should cache successful photo results', async () => {
-      // Create a fresh service instance to avoid state pollution
-      const freshService = new ProfilePhotoService(mockGraphClient);
-      
-      const mockPhotoBuffer = Buffer.from('fakeImageData');const expectedResult = `data:image/jpeg;base64,${mockPhotoBuffer.toString('base64')}`;
-      
-      // Clear any previous calls and reset all mocks
-      jest.clearAllMocks();
-      // Ensure a completely fresh cache
-      profilePhotoService.clearCache();
+      const mockPhotoBuffer = Buffer.from('fakeImageData');
+      const expectedResult = `data:image/jpeg;base64,${mockPhotoBuffer.toString('base64')}`;
       
       // Mock successful response for the API call
       mockGraphClient.get.mockResolvedValueOnce(mockPhotoBuffer);
-        // First call should hit the API - use 'testuser1' (non-email ID)
+      
+      // First call should hit the API - use 'testuser1' (non-email ID)
       const result1 = await profilePhotoService.getUserPhoto('testuser1');
       expect(result1).toBe(expectedResult);
       expect(mockGraphClient.api).toHaveBeenCalledWith('/users/testuser1/photo/$value');
       expect(mockGraphClient.get).toHaveBeenCalledTimes(1);
       
+      // Reset mocks for cache test but not the cache itself
+      jest.clearAllMocks();
+      mockGraphClient.api = jest.fn().mockReturnValue(mockGraphClient);
+      mockGraphClient.responseType = jest.fn().mockReturnValue(mockGraphClient);
+      mockGraphClient.select = jest.fn().mockReturnValue(mockGraphClient);
+      mockGraphClient.get = jest.fn();
+      
       // Second call should use cache
       const result2 = await profilePhotoService.getUserPhoto('testuser1');
       expect(result2).toBe(expectedResult);
-      expect(mockGraphClient.get).toHaveBeenCalledTimes(1); // No additional API call
+      expect(mockGraphClient.get).toHaveBeenCalledTimes(0); // No additional API call
     });    it('should cache null results for failed requests', async () => {
-      // Clear any previous mocks
-      jest.clearAllMocks();
-      // Ensure a completely fresh cache
-      profilePhotoService.clearCache();
-      
-      // Mock all endpoints failing
+      // Mock all endpoints failing consistently
       mockGraphClient.get.mockRejectedValue(new Error('Not found'));
       global.fetch = jest.fn().mockRejectedValue(new Error('Fetch failed'));
-        // First call should try v1.0 endpoint and return null
+      
+      // First call should try v1.0 endpoint and return null
       const result1 = await profilePhotoService.getUserPhoto('testuser2');
       expect(result1).toBeNull();
+      
+      // Reset mocks but not the cache
+      jest.clearAllMocks();
+      mockGraphClient.api = jest.fn().mockReturnValue(mockGraphClient);
+      mockGraphClient.responseType = jest.fn().mockReturnValue(mockGraphClient);
+      mockGraphClient.select = jest.fn().mockReturnValue(mockGraphClient);
+      mockGraphClient.get = jest.fn();
       
       // Second call should use cached null result
       const result2 = await profilePhotoService.getUserPhoto('testuser2');
       expect(result2).toBeNull();
-      
-      // Should only have made API calls once
-      expect(mockGraphClient.get).toHaveBeenCalledTimes(1); // Only v1.0 endpoint
-    });    it('should normalize user IDs for consistent caching', async () => {
+        // Should not have made any new API calls due to cache
+      expect(mockGraphClient.get).toHaveBeenCalledTimes(0);
+    });
+
+    it('should normalize user IDs for consistent caching', async () => {
       const mockPhotoBuffer = Buffer.from('fakeImageData');
       const mockUserResponse = { id: 'resolved-user-id' };
       

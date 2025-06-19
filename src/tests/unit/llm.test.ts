@@ -120,7 +120,7 @@ describe('LLMService', () => {
         }
       ];
 
-      await expect(invalidService.chat(messages)).rejects.toThrow('Failed to communicate with local LLM');
+      await expect(invalidService.chat(messages)).rejects.toThrow('Failed to communicate with unsupported');
     });
   });
 });

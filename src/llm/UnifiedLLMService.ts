@@ -55,15 +55,19 @@ export class UnifiedLLMService {
       console.log(`[UnifiedLLMService] No cloud providers configured`);
       this.cloudService = null;
     }
-    
-    // If the main provider is a cloud provider, ensure it's properly configured
+      // If the main provider is a cloud provider, ensure it's properly configured
     if (config.provider === 'openai' || config.provider === 'anthropic' || config.provider === 'gemini' || config.provider === 'azure-openai') {
       if (!this.cloudService) {
         // Try to initialize cloud service specifically for the requested provider
         const cloudProviderConfig = this.getCloudProviderConfig(config, config.provider);
         if (cloudProviderConfig && cloudProviderConfig.apiKey && cloudProviderConfig.apiKey.trim() !== '') {
-          console.log(`[UnifiedLLMService] Initializing cloud service for requested provider: ${config.provider}`);
-          this.cloudService = new CloudLLMService(cloudProviderConfig as any, this.mcpClient);
+          // Additional validation for Azure OpenAI - must have baseUrl
+          if (config.provider === 'azure-openai' && (!cloudProviderConfig.baseUrl || cloudProviderConfig.baseUrl.trim() === '')) {
+            console.warn(`[UnifiedLLMService] Azure OpenAI provider requires baseUrl but none provided`);
+          } else {
+            console.log(`[UnifiedLLMService] Initializing cloud service for requested provider: ${config.provider}`);
+            this.cloudService = new CloudLLMService(cloudProviderConfig as any, this.mcpClient);
+          }
         }
       }
     }

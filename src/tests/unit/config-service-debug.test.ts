@@ -46,6 +46,7 @@ describe('ConfigService Debug Test', () => {
     jest.clearAllMocks();
     
     console.log('Calling setAuthenticationContext...');
+    configService.setAuthenticationVerified(true);
     configService.setAuthenticationContext('client-credentials');
     
     console.log('Mock set calls:', mockStoreInstance.set.mock.calls.length);

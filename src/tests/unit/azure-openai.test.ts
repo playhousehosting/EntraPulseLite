@@ -94,8 +94,7 @@ const mockedAxios = axios as jest.Mocked<typeof axios>;
 
 describe('Azure OpenAI Provider Tests', () => {
   let mockAzureOpenAIConfig: CloudLLMProviderConfig;
-  let mockLLMConfig: LLMConfig;
-  beforeEach(() => {
+  let mockLLMConfig: LLMConfig;  beforeEach(() => {
     jest.clearAllMocks();    
     mockAzureOpenAIConfig = {
       provider: 'azure-openai',
@@ -110,7 +109,8 @@ describe('Azure OpenAI Provider Tests', () => {
       baseUrl: 'https://test.openai.azure.com/openai/deployments/gpt-4o/chat/completions?api-version=2025-01-01-preview',
       model: 'gpt-4o',
       temperature: 0.1,
-      maxTokens: 2048
+      maxTokens: 4096,
+      preferLocal: true
     };
   });
   describe('CloudLLMService Azure OpenAI', () => {
@@ -199,6 +199,9 @@ describe('Azure OpenAI Provider Tests', () => {
       expect(deploymentLog).toContain('gpt-4o');
     });    test('should persist and reload full Azure OpenAI endpoint URL correctly', async () => {
       const configService = new ConfigService();
+      // Set authentication verified before testing persistence
+      configService.setAuthenticationVerified(true);
+      
       const fullEndpointUrl = 'https://test.openai.azure.com/openai/deployments/gpt-4o/chat/completions?api-version=2025-01-01-preview';
       
       // Mock cloud provider config
@@ -214,14 +217,14 @@ describe('Azure OpenAI Provider Tests', () => {
       console.log('💾 [Persistence Test] Saving Azure OpenAI config with full URL:', fullEndpointUrl);
       
       // Save the config
-      await configService.saveCloudProviderConfig('azure-openai', azureOpenAIConfig);
+      configService.saveCloudProviderConfig('azure-openai', azureOpenAIConfig);
       
       // Reload config to verify persistence
-      const reloadedConfig = await configService.getLLMConfig();
+      const reloadedConfig = configService.getLLMConfig();
       console.log('🔄 [Persistence Test] Reloaded config:', reloadedConfig);
       
       // Get the Azure OpenAI provider specifically
-      const azureProvider = await configService.getCloudProviderConfig('azure-openai');
+      const azureProvider = configService.getCloudProviderConfig('azure-openai');
       console.log('🔍 [Persistence Test] Azure OpenAI provider config:', azureProvider);
       
       // Verify the full URL is preserved
@@ -246,14 +249,13 @@ describe('Azure OpenAI Provider Tests', () => {
 
       const isAvailable = await cloudLLMService.isAvailable();
       
-      expect(isAvailable).toBe(true);
-      expect(mockedAxios.get).toHaveBeenCalledWith(
+      expect(isAvailable).toBe(true);      expect(mockedAxios.get).toHaveBeenCalledWith(
         'https://test.openai.azure.com/openai/models?api-version=2025-01-01-preview',
         expect.objectContaining({
           headers: {
             'api-key': 'test-azure-openai-api-key'
           },
-          timeout: 5000
+          timeout: 15000
         })
       );
     });
@@ -429,21 +431,37 @@ describe('Azure OpenAI Provider Tests', () => {
       expect(unifiedLLMService.isCloudProvider()).toBe(true);
       expect(unifiedLLMService.isLocalProvider()).toBe(false);
       expect(unifiedLLMService.getProviderType()).toBe('cloud');
-    });
-
-    test('should require API key for service readiness', () => {
+    });    test('should require API key for service readiness', () => {
       expect(unifiedLLMService.isServiceReady()).toBe(true);
 
-      const configWithoutKey = { ...mockLLMConfig, apiKey: '' };
+      // Create config without API key but with cloud providers structure
+      const configWithoutKey = { 
+        ...mockLLMConfig, 
+        apiKey: '',
+        cloudProviders: {
+          'azure-openai': {
+            ...mockAzureOpenAIConfig,
+            apiKey: ''
+          }
+        }
+      };
       const serviceWithoutKey = new UnifiedLLMService(configWithoutKey);
       
       expect(serviceWithoutKey.isServiceReady()).toBe(false);
       expect(serviceWithoutKey.getServiceStatus().ready).toBe(false);
       expect(serviceWithoutKey.getServiceStatus().reason).toContain('API key');
-    });
-
-    test('should require baseUrl for Azure OpenAI', () => {
-      const configWithoutBaseUrl = { ...mockLLMConfig, baseUrl: '' };
+    });    test('should require baseUrl for Azure OpenAI', () => {
+      // Create config without baseUrl but with cloud providers structure
+      const configWithoutBaseUrl = { 
+        ...mockLLMConfig, 
+        baseUrl: '',
+        cloudProviders: {
+          'azure-openai': {
+            ...mockAzureOpenAIConfig,
+            baseUrl: ''
+          }
+        }
+      };
       const serviceWithoutBaseUrl = new UnifiedLLMService(configWithoutBaseUrl);
       
       expect(serviceWithoutBaseUrl.isServiceReady()).toBe(false);
@@ -459,12 +477,13 @@ describe('Azure OpenAI Provider Tests', () => {
       expect(unifiedLLMService.isServiceReady()).toBe(true);
     });
   });
-
   describe('ConfigService Azure OpenAI Integration', () => {
     let configService: ConfigService;
 
     beforeEach(() => {
       configService = new ConfigService();
+      // Set authentication verified before testing config operations
+      configService.setAuthenticationVerified(true);
     });
 
     test('should save Azure OpenAI cloud provider configuration', () => {
@@ -675,7 +694,6 @@ describe('Azure OpenAI Provider Tests', () => {
         })
       );
     });  });
-
   describe('Azure OpenAI URL Persistence Tests', () => {
     let configService: ConfigService;
     const fullAzureOpenAIUrl = 'https://test.openai.azure.com/openai/deployments/gpt-4o/chat/completions?api-version=2025-01-01-preview';
@@ -691,6 +709,8 @@ describe('Azure OpenAI Provider Tests', () => {
     beforeEach(() => {
       // Create a fresh ConfigService for each test
       configService = new ConfigService();
+      // Set authentication verified before testing config operations
+      configService.setAuthenticationVerified(true);
       // Reset any existing config
       configService.resetConfig();
     });

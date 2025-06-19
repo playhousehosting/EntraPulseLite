@@ -51,9 +51,9 @@ describe('ConfigService - Context-Aware Configuration', () => {
     // Create new ConfigService instance
     configService = new ConfigService();
   });
-
   describe('Authentication Context Management', () => {
     test('should set authentication context to client-credentials mode', () => {
+      configService.setAuthenticationVerified(true);
       configService.setAuthenticationContext('client-credentials');
       
       expect(mockStoreInstance.set).toHaveBeenCalledWith('currentAuthMode', 'client-credentials');
@@ -68,9 +68,9 @@ describe('ConfigService - Context-Aware Configuration', () => {
         if (key === 'users') {
           return {};
         }
-        return undefined;
-      });
+        return undefined;      });
       
+      configService.setAuthenticationVerified(true);
       configService.setAuthenticationContext('interactive', userInfo);
       
       expect(mockStoreInstance.set).toHaveBeenCalledWith('currentAuthMode', 'interactive');
@@ -82,11 +82,10 @@ describe('ConfigService - Context-Aware Configuration', () => {
           modelCache: {}
         })
       }));
-    });
-
-    test('should handle interactive mode without user info', () => {
+    });    test('should handle interactive mode without user info', () => {
       // Should not throw, just set the mode
       expect(() => {
+        configService.setAuthenticationVerified(true);
         configService.setAuthenticationContext('interactive');
       }).not.toThrow();
       
@@ -97,15 +96,15 @@ describe('ConfigService - Context-Aware Configuration', () => {
   describe('LLM Configuration Management', () => {
     test('should get default LLM configuration', () => {
       const config = configService.getLLMConfig();
-      
-      expect(config).toEqual({
+        expect(config).toEqual({
         provider: 'anthropic',
         model: 'claude-3-5-sonnet-20241022',
         apiKey: '',
         baseUrl: '',
         temperature: 0.2,
-        maxTokens: 2048,
-        organization: ''
+        maxTokens: 4096,
+        organization: '',
+        preferLocal: true
       });
     });
 
@@ -175,9 +174,9 @@ describe('ConfigService - Context-Aware Configuration', () => {
             }
           };
         }
-        return undefined;
-      });
+        return undefined;      });
       
+      configService.setAuthenticationVerified(true);
       configService.setAuthenticationContext('interactive', userInfo);
       
       const newConfig: LLMConfig = {

@@ -186,17 +186,23 @@ This query will return the total user count.`;
     });
   });
 
-  describe('API Key Management', () => {
-    test('cloud providers should handle missing API keys gracefully', () => {
+  describe('API Key Management', () => {    test('cloud providers should handle missing API keys gracefully', () => {
       const configWithoutKey: LLMConfig = {
         provider: 'openai',
         model: 'gpt-4o-mini',
         apiKey: '', // Empty API key
         temperature: 0.1,
-        maxTokens: 2048
-      };
-
-      expect(() => new UnifiedLLMService(configWithoutKey)).not.toThrow();
+        maxTokens: 2048,
+        cloudProviders: {
+          'openai': {
+            provider: 'openai',
+            model: 'gpt-4o-mini',
+            apiKey: '', // Empty API key
+            temperature: 0.1,
+            maxTokens: 2048
+          }
+        }
+      };      expect(() => new UnifiedLLMService(configWithoutKey)).not.toThrow();
       
       const service = new UnifiedLLMService(configWithoutKey);
       expect(service.isServiceReady()).toBe(false);
