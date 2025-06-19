@@ -47,8 +47,17 @@ export class CloudLLMService {
     lastChecked: 0,
     cacheValidityMs: 60000 // 1 minute cache
   };
-
   constructor(config: CloudLLMConfig, mcpClient?: MCPClient) {
+    console.log(`[CloudLLMService] Constructor called with config:`, {
+      provider: config.provider,
+      model: config.model,
+      hasApiKey: !!config.apiKey,
+      baseUrl: config.baseUrl,
+      temperature: config.temperature,
+      maxTokens: config.maxTokens,
+      hasTemperature: config.temperature !== undefined,
+      hasMaxTokens: config.maxTokens !== undefined
+    });
     this.config = config;
     this.mcpClient = mcpClient;
   }
@@ -477,15 +486,18 @@ export class CloudLLMService {
     const deploymentName = deploymentMatch ? deploymentMatch[1] : 'unknown';
     console.log(`Azure OpenAI sending request to endpoint: ${this.config.baseUrl}`);
     console.log(`Using deployment: ${deploymentName}`);
-    
-    // Use retry logic for the actual request
+      // Use retry logic for the actual request
     return await this.retryWithBackoff(async () => {
-      console.log(`Making Azure OpenAI request with temperature: ${this.config.temperature || 0.1}, max_tokens: ${this.config.maxTokens || 2048}`);
+      const requestTemperature = this.config.temperature || 0.1;
+      const requestMaxTokens = this.config.maxTokens || 2048;
+      
+      console.log(`Making Azure OpenAI request with temperature: ${requestTemperature}, max_tokens: ${requestMaxTokens}`);
+      console.log(`[CloudLLMService] Azure OpenAI config values - temperature: ${this.config.temperature}, maxTokens: ${this.config.maxTokens}`);
       
       const response = await axios.post(this.config.baseUrl!, {
         messages: fullMessages,
-        temperature: this.config.temperature || 0.1,
-        max_tokens: this.config.maxTokens || 2048,
+        temperature: requestTemperature,
+        max_tokens: requestMaxTokens,
       }, {
         headers: {
           'api-key': this.config.apiKey,

@@ -1007,9 +1007,7 @@ class EntraPulseLiteApp {
       }
       
       return config;
-    });
-
-    ipcMain.handle('config:saveLLMConfig', async (event, newLLMConfig) => {
+    });    ipcMain.handle('config:saveLLMConfig', async (event, newLLMConfig) => {
       try {        
         // Save configuration securely
         this.configService.saveLLMConfig(newLLMConfig);
@@ -1017,8 +1015,11 @@ class EntraPulseLiteApp {
         // Update runtime config
         this.config.llm = newLLMConfig;
         
-        // Don't reinitialize LLM service here - let setDefaultCloudProvider handle it
-        // This prevents race conditions when both save and setDefault are called
+        // Update existing LLM service with new configuration
+        if (this.llmService && this.llmService.updateConfig) {
+          console.log('[Main] Updating LLM service configuration with new settings');
+          this.llmService.updateConfig(newLLMConfig);
+        }
         
         return this.configService.getLLMConfig();
       } catch (error) {

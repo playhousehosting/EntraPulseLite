@@ -536,15 +536,25 @@ export class UnifiedLLMService {
     if (config.cloudProviders) {
       const providerKey = provider as 'openai' | 'anthropic' | 'gemini' | 'azure-openai';
       const providerConfig = config.cloudProviders[providerKey];
-      
-      if (providerConfig) {
+        if (providerConfig) {
         console.log(`[UnifiedLLMService] Found cloud provider config for ${provider}:`, {
           provider: providerConfig.provider,
           model: providerConfig.model,
           hasApiKey: !!providerConfig.apiKey,
-          baseUrl: providerConfig.baseUrl
+          baseUrl: providerConfig.baseUrl,
+          maxTokens: config.maxTokens,
+          temperature: config.temperature
         });
-        return providerConfig;
+        // Return config with global settings inherited
+        return {
+          ...providerConfig,
+          // Inherit global LLM settings from main config
+          temperature: config.temperature,
+          maxTokens: config.maxTokens,
+          // Provider-specific settings can override global ones
+          ...(providerConfig.temperature !== undefined && { temperature: providerConfig.temperature }),
+          ...(providerConfig.maxTokens !== undefined && { maxTokens: providerConfig.maxTokens })
+        };
       }
     }
     
@@ -581,14 +591,30 @@ export class UnifiedLLMService {
         // Additional validation for Azure OpenAI
         if (provider === 'azure-openai' && (!providerConfig.baseUrl || providerConfig.baseUrl.trim() === '')) {
           continue; // Skip this provider if baseUrl is missing
-        }
-        
-        console.log(`[UnifiedLLMService] Found available cloud provider: ${provider}`);
-        // Return the config with the provider name explicitly set
-        return {
+        }        console.log(`[UnifiedLLMService] Found available cloud provider: ${provider}`);
+        // Return the config with the provider name explicitly set and global settings inherited
+        const cloudConfig = {
           ...providerConfig,
-          provider: provider
+          provider: provider,
+          // Global LLM settings from Advanced Settings take precedence
+          temperature: config.temperature,
+          maxTokens: config.maxTokens,
+          // Only use provider-specific settings if global settings are not defined
+          ...(config.temperature === undefined && providerConfig.temperature !== undefined && { temperature: providerConfig.temperature }),
+          ...(config.maxTokens === undefined && providerConfig.maxTokens !== undefined && { maxTokens: providerConfig.maxTokens })
         };
+        
+        console.log(`[UnifiedLLMService] Created cloud config for ${provider}:`, {
+          temperature: cloudConfig.temperature,
+          maxTokens: cloudConfig.maxTokens,
+          globalTemperature: config.temperature,
+          globalMaxTokens: config.maxTokens,
+          providerTemperature: providerConfig.temperature,
+          providerMaxTokens: providerConfig.maxTokens,
+          usingGlobalSettings: config.temperature !== undefined && config.maxTokens !== undefined
+        });
+        
+        return cloudConfig;
       }
     }
 
@@ -604,15 +630,39 @@ export class UnifiedLLMService {
 
   /**
    * Update the configuration dynamically (useful when settings change)
-   */
-  updateConfig(newConfig: LLMConfig): void {
-    console.log(`[UnifiedLLMService] Updating config from ${this.config.provider} to ${newConfig.provider}`);
+   */  updateConfig(newConfig: LLMConfig): void {    console.log(`[UnifiedLLMService] Updating config from ${this.config.provider} to ${newConfig.provider}`);
     console.log(`[UnifiedLLMService] PreferLocal changed from ${this.config.preferLocal} to ${newConfig.preferLocal}`);
+    console.log(`[UnifiedLLMService] MaxTokens changed from ${this.config.maxTokens} to ${newConfig.maxTokens}`);
+    console.log(`[UnifiedLLMService] Temperature changed from ${this.config.temperature} to ${newConfig.temperature}`);
+    console.log(`[UnifiedLLMService] Current services state:`, {
+      hasCloudService: !!this.cloudService,
+      hasLocalService: !!this.localService,
+      cloudServiceType: this.cloudService ? this.cloudService.constructor.name : 'none',
+      localServiceType: this.localService ? this.localService.constructor.name : 'none'
+    });
     
     this.config = newConfig;
     
-    // Note: This method only updates the config reference. For provider changes,
-    // the service should be recreated via the main process to properly initialize
-    // the correct service instances (local vs cloud).
+    // Update existing CloudLLMService with new configuration if it exists
+    if (this.cloudService) {
+      console.log(`[UnifiedLLMService] CloudLLMService exists, finding best cloud provider...`);
+      const cloudProviderConfig = this.findBestAvailableCloudProvider(newConfig);
+      if (cloudProviderConfig) {
+        console.log(`[UnifiedLLMService] Updating existing CloudLLMService with new config`);
+        // Create a new CloudLLMService instance with updated configuration
+        this.cloudService = new CloudLLMService(cloudProviderConfig as any, this.mcpClient);
+      } else {
+        console.log(`[UnifiedLLMService] No cloud provider config found, keeping existing CloudLLMService`);
+      }
+    } else {
+      console.log(`[UnifiedLLMService] No existing CloudLLMService to update`);
+    }
+      // Update existing LocalLLMService with new configuration if it exists
+    if (this.localService && (newConfig.provider === 'ollama' || newConfig.provider === 'lmstudio')) {
+      console.log(`[UnifiedLLMService] Recreating LocalLLMService with new config`);
+      // Recreate local service with new configuration
+      const { LLMService } = require('./LLMService');
+      this.localService = new LLMService(newConfig);
+    }
   }
 }
