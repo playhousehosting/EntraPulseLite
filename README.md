@@ -1,21 +1,20 @@
 # EntraPulse Lite
 
-A freemium desktop application that provides natural language querying of Microsoft Graph APIs through local LLM integration. EntraPulse Lite is a lightweight derivative of the EntraPulse project, designed as an all-in-one desktop solution similar to Claude Desktop.
+A free community desktop application that provides natural language querying of Microsoft Graph APIs through local LLM integration. EntraPulse Lite is a lightweight derivative of the EntraPulse project, designed as an all-in-one desktop solution similar to Claude Desktop.
 
 ## 🚀 Features
 
 - **Progressive Authentication**: Start with basic permissions, request more as needed
-- **Microsoft Business Account Authentication**: Secure login with MSAL integration
+- **Work or School Account Authentication**: Secure login with MSAL integration
 - **Natural Language Querying**: Chat with your Microsoft Graph data using plain English
 - **Multi-Provider LLM Integration**: Works with local (Ollama, LM Studio) and cloud (OpenAI, Anthropic, Google Gemini) AI models
 - **Real-time LLM Status Monitoring**: Dynamic tracking of LLM availability with automatic UI updates
 - **Built-in MCP Servers**: 
-  - Lokka MCP for Microsoft Graph API access
-  - External Lokka MCP using the official @merill/lokka package
+  - External Lokka MCP using the official @merill/lokka package for Microsoft Graph API access
   - Microsoft Docs MCP for Microsoft Learn documentation and official Microsoft documentation
   - Fetch MCP for general web searches and documentation retrieval
 - **Chat Interface**: Modern UI with trace visualization and permission management
-- **Freemium Model**: No App Registration required for basic usage
+- **Free Community Tool**: No App Registration required for basic usage
 
 ## 🏗️ Architecture
 
@@ -41,13 +40,25 @@ src/
 └── tests/                # Unit and integration tests
 ```
 
-## 🛠️ Prerequisites
+## 🛠️ For End Users
+
+**No prerequisites required!** EntraPulse Lite is a self-contained desktop application.
+
+**Required:**
+- **Entra ID Work/School Account** - The application uses your delegated permissions to access Microsoft Graph
+- **LLM Provider** (flexible configuration):
+  - **Local LLM** (Ollama or LM Studio) - Privacy-focused processing with hardware-dependent performance
+  - **Cloud LLM API Keys** - Reliable performance with OpenAI, Azure OpenAI, Anthropic, or Google Gemini
+  - **Hybrid Mode** - Prefer local with cloud fallback, or use both based on availability
+
+**Optional (for advanced enterprise features):**
+- **Microsoft Entra App Registration** - Use your own application registration instead of delegated permissions
+
+## 👨‍💻 For Developers & Contributors
 
 - **Node.js** 18 or higher
 - **npm** or **yarn**
-- **Local LLM** (Optional: Ollama or LM Studio)
-- **Cloud LLM API Keys** (Optional: OpenAI, Anthropic, or Google Gemini)
-- **Microsoft Entra App Registration** (Optional: for advanced features)
+- **Git** for version control
 
 ## 🚀 Quick Start
 
@@ -83,7 +94,7 @@ For privacy-focused AI processing, install a local LLM:
 curl -fsSL https://ollama.ai/install.sh | sh
 
 # Pull a model
-ollama pull llama3.1:8b
+ollama pull codellama:7b
 ```
 
 #### Option 2: LM Studio
@@ -109,6 +120,7 @@ EntraPulse Lite implements smart permission management:
 
 **Cloud Providers** (Advanced features):
 - OpenAI (GPT-4, GPT-3.5)
+- Azure OpenAI (Enterprise-grade OpenAI models)
 - Anthropic (Claude)
 - Google Gemini
 
