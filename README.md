@@ -5,13 +5,13 @@ A free community desktop application that provides natural language querying of 
 ## 🚀 Features
 
 - **Progressive Authentication**: Start with basic permissions, request more as needed
-- **Work or School Account Authentication**: Secure login with MSAL integration
+- **Work or School Microsoft Account**: Secure login with MSAL integration
 - **Natural Language Querying**: Chat with your Microsoft Graph data using plain English
 - **Multi-Provider LLM Integration**: Works with local (Ollama, LM Studio) and cloud (OpenAI, Anthropic, Google Gemini) AI models
 - **Real-time LLM Status Monitoring**: Dynamic tracking of LLM availability with automatic UI updates
 - **Built-in MCP Servers**: 
-  - External Lokka MCP using the official @merill/lokka package for Microsoft Graph API access
-  - Microsoft Docs MCP for Microsoft Learn documentation and official Microsoft documentation
+  - Lokka MCP using the official @merill/lokka package for Microsoft Graph API access
+  - Microsoft Docs MCP using the official MicrosoftDocs/MCP package for Microsoft Learn documentation and official Microsoft documentation
   - Fetch MCP for general web searches and documentation retrieval
 - **Chat Interface**: Modern UI with trace visualization and permission management
 - **Free Community Tool**: No App Registration required for basic usage
