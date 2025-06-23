@@ -105,9 +105,41 @@ export class MCPClient {
    * @param toolName Name of the tool to call
    * @param arguments_ Arguments to pass to the tool
    * @returns Tool response
-   */
-  async callTool(serverName: string, toolName: string, arguments_: any): Promise<MCPResponse> {
+   */  async callTool(serverName: string, toolName: string, arguments_: any): Promise<MCPResponse> {
     try {
+      // For microsoft-docs server, use the HTTP Streamable MCP client
+      if (serverName === 'microsoft-docs') {
+        try {
+          const { MicrosoftDocsMCPClient } = await import('./MicrosoftDocsMCPClient');
+          const serverConfig = this.serverConfigs.get(serverName);
+          
+          if (!serverConfig) {
+            throw new Error(`Microsoft Docs MCP server config not found`);
+          }
+          
+          console.log(`Using HTTP Streamable MCP client for ${serverName} tool call`);
+          const client = new MicrosoftDocsMCPClient(serverConfig, this.authService);
+          await client.initialize();
+          
+          const result = await client.callTool(toolName, arguments_);
+          
+          // Wrap result in MCP response format if it's not already
+          if (result && typeof result === 'object' && result.content) {
+            return result;
+          } else {
+            return {
+              content: [{
+                type: 'json',
+                json: result
+              }]
+            };
+          }
+        } catch (error) {
+          console.warn(`Failed to use HTTP Streamable MCP client for ${serverName}:`, error);
+          throw error; // Re-throw to allow fallback in EnhancedLLMService
+        }
+      }
+      
       // For external-lokka server, try to get it from MCPServerManager first
       if (serverName === 'external-lokka') {
         try {

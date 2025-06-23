@@ -106,32 +106,52 @@ export class EnhancedLLMService {
       const mcpResults: { fetchResult?: any; lokkaResult?: any; microsoftDocsResult?: any } = {};      // Microsoft Docs MCP for documentation (preferred)
       if (analysis.needsMicrosoftDocsMcp) {
         try {
-          trace.push('Calling Microsoft Docs search for documentation');
+          trace.push('Attempting Microsoft Docs MCP via HTTP Streamable transport');
           
           const docsQuery = analysis.documentationQuery || analysis.permissionQuery || userQuery;
-          console.log('🔍 Calling real Microsoft Docs search with query:', docsQuery);
+          console.log('🔍 Calling Microsoft Docs MCP with query:', docsQuery);
           
-          // Use the working Microsoft Docs search instead of the broken MCP
-          const searchResults = await this.searchMicrosoftDocs(docsQuery);
+          // Try Microsoft Docs MCP first (HTTP Streamable transport)
+          try {
+            const mcpResponse = await this.mcpClient.callTool('microsoft-docs', 'microsoft_docs_search', {
+              question: docsQuery
+            });
+            
+            console.log('✅ Microsoft Docs MCP call successful:', {
+              hasContent: !!mcpResponse?.content,
+              contentLength: mcpResponse?.content?.length || 0
+            });
+            
+            mcpResults.microsoftDocsResult = mcpResponse;
+            trace.push('Microsoft Docs MCP completed successfully');
+            
+          } catch (mcpError) {
+            console.warn('⚠️ Microsoft Docs MCP failed, falling back to internal search:', mcpError);
+            trace.push(`Microsoft Docs MCP failed: ${mcpError}, using fallback`);
+            
+            // Fallback to internal Microsoft Docs search
+            const searchResults = await this.searchMicrosoftDocs(docsQuery);
+            
+            mcpResults.microsoftDocsResult = {
+              content: [{
+                type: 'text',
+                text: searchResults
+              }]
+            };
+            
+            console.log('🔍 Microsoft Docs fallback search completed successfully:', {
+              resultLength: searchResults.length,
+              preview: searchResults.substring(0, 200)
+            });
+            
+            trace.push('Microsoft Docs fallback search completed successfully');
+          }
           
-          mcpResults.microsoftDocsResult = {
-            content: [{
-              type: 'text',
-              text: searchResults
-            }]
-          };
-          
-          console.log('🔍 Microsoft Docs search completed successfully:', {
-            resultLength: searchResults.length,
-            preview: searchResults.substring(0, 200)
-          });
-          
-          trace.push('Microsoft Docs search completed successfully');
         } catch (error) {
-          const errorMsg = `Microsoft Docs search failed: ${error}`;
+          const errorMsg = `Microsoft Docs (MCP + fallback) failed: ${error}`;
           errors.push(errorMsg);
           trace.push(errorMsg);
-          console.error('🔍 Microsoft Docs search error:', error);
+          console.error('🔍 Microsoft Docs complete failure:', error);
         }
       }
 
