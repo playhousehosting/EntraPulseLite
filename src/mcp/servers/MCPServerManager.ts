@@ -4,12 +4,14 @@
 import { MCPServerConfig } from '../types';
 import { MCPServerFactory, MCPServerHandlers } from './MCPServerFactory';
 import { MCPAuthService } from '../auth/MCPAuthService';
+import { ConfigService } from '../../shared/ConfigService';
 
 // Explicitly export the class to resolve module issue
 export class MCPServerManager {
   private servers: Map<string, MCPServerHandlers> = new Map();
   private configs: MCPServerConfig[] = [];
   private authService?: MCPAuthService;
+  private configService?: ConfigService;
     // Static instance for singleton access
   private static _instance: MCPServerManager | null = null;
   
@@ -18,22 +20,22 @@ export class MCPServerManager {
     return MCPServerManager._instance;
   }
 
-  constructor(serverConfigs: MCPServerConfig[], authService?: MCPAuthService) {
+  constructor(serverConfigs: MCPServerConfig[], authService?: MCPAuthService, configService?: ConfigService) {
     this.configs = serverConfigs;
     this.authService = authService;
+    this.configService = configService;
     this.initializeServers();
     
     // Store instance reference for singleton access
     MCPServerManager._instance = this;
     console.log('MCPServerManager instance created and stored');
-  }  private initializeServers(): void {
+  }private initializeServers(): void {
     console.log(`Initializing ${this.configs.length} MCP servers...`);
     
     this.configs.forEach(config => {
-      if (config.enabled) {
-        try {
+      if (config.enabled) {        try {
           console.log(`Creating MCP server: ${config.name} (${config.type})`);
-          const serverInstance = MCPServerFactory.createServer(config, this.authService);
+          const serverInstance = MCPServerFactory.createServer(config, this.authService, this.configService);
           this.servers.set(config.name, serverInstance);
           
           // Start server if it has a startServer method

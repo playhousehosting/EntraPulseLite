@@ -51,8 +51,12 @@ src/
   - **Cloud LLM API Keys** - Reliable performance with OpenAI, Azure OpenAI, Anthropic, or Google Gemini
   - **Hybrid Mode** - Prefer local with cloud fallback, or use both based on availability
 
-**Optional (for advanced enterprise features):**
-- **Microsoft Entra App Registration** - Use your own application registration instead of delegated permissions
+**Authentication Options:**
+- **User Token Mode** (Default) - Uses your delegated user permissions to access Microsoft Graph
+- **Application Credentials Mode** - Use your own Entra App Registration for enhanced access and permissions
+
+**Optional (for enhanced enterprise features):**
+- **Microsoft Entra App Registration** - Required only if using Application Credentials mode for custom permissions and enhanced access
 
 ## 👨‍💻 For Developers & Contributors
 
@@ -107,11 +111,21 @@ See [docs/INSTALLATION.md](docs/INSTALLATION.md) for detailed setup instructions
 ## 🎯 Key Capabilities
 
 ### Progressive Authentication
-EntraPulse Lite implements smart permission management:
+EntraPulse Lite implements smart permission management with flexible authentication modes:
+
+**User Token Mode (Default):**
 - Starts with minimal permissions (`User.Read`)
 - Requests additional permissions only when needed
 - Reduces admin consent requirements
 - Provides clear context for permission requests
+
+**Application Credentials Mode:**
+- Uses your own Entra App Registration
+- Access via Client ID and Client Secret
+- Supports custom permission scopes
+- Enhanced enterprise integration capabilities
+
+You can switch between authentication modes in Settings → Entra Configuration.
 
 ### Multi-Provider LLM Support
 **Local Providers** (Privacy-focused):

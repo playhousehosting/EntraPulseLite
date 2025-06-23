@@ -69,6 +69,7 @@ export interface EntraConfig {
   clientId: string;
   tenantId: string;
   clientSecret?: string;
+  useApplicationCredentials?: boolean; // Toggle for authentication mode
 }
 
 export interface LLMConfig {
@@ -149,10 +150,11 @@ export interface ElectronAPI {
     isAvailable: () => Promise<boolean>;
     testConnection: (config: LLMConfig) => Promise<boolean>;
     getAvailableModels: (config: LLMConfig) => Promise<string[]>;
-  };mcp: {
+  };  mcp: {
     call: (server: string, toolName: string, arguments_: any) => Promise<any>;
     listServers: () => Promise<MCPServerConfig[]>;
-  };  config: {
+    restartLokkaMCPServer: () => Promise<void>;
+  };config: {
     get: () => Promise<AppConfig>;
     update: (config: Partial<AppConfig>) => Promise<void>;
     getLLMConfig: () => Promise<LLMConfig>;
@@ -193,6 +195,11 @@ export interface EnhancedLLMResponse {
     timing: Record<string, number>;
     errors?: string[];
   };
+}
+
+export interface AuthenticationContext {
+  mode: 'interactive' | 'client-credentials';
+  useApplicationCredentials?: boolean; // Track user preference
 }
 
 // Window interface is defined in assets.d.ts to avoid conflicts

@@ -7,13 +7,13 @@ module.exports = {
   ],
   transform: {
     "^.+\\.tsx?$": "ts-jest"
-  },
-  transformIgnorePatterns: [
-    "node_modules/(?!(electron-store)/)"
+  },  transformIgnorePatterns: [
+    "node_modules/(?!(electron-store|@modelcontextprotocol|@azure|@microsoft)/)"
   ],
   moduleFileExtensions: ["ts", "tsx", "js", "jsx", "json"],  moduleNameMapper: {
     "^@/(.*)$": "<rootDir>/src/$1",
-    "\\.(jpg|jpeg|png|gif|ico|svg)$": "<rootDir>/src/tests/mocks/fileMock.js"
+    "\\.(jpg|jpeg|png|gif|ico|svg)$": "<rootDir>/src/tests/mocks/fileMock.js",
+    "electron-store": "<rootDir>/src/tests/mocks/electron-store.js"
   },
   collectCoverageFrom: [
     "src/**/*.{ts,tsx}",

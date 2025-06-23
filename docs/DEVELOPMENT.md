@@ -28,9 +28,12 @@ EntraPulse Lite is built with modern TypeScript, Electron, and React technologie
 ### Core Components
 
 #### 1. Authentication Layer
-- **AuthService**: MSAL-based Microsoft authentication
-- **Progressive Permissions**: Request permissions as needed
+- **AuthService**: MSAL-based Microsoft authentication with dual modes
+- **User Token Mode**: Delegated permissions with progressive requests
+- **Application Credentials Mode**: Client credentials flow for enhanced access
+- **Runtime Mode Switching**: Toggle between authentication modes without restart
 - **Token Management**: Secure token storage and refresh
+- **Configuration Integration**: Authentication preferences stored in ConfigService
 
 #### 2. LLM Integration Layer
 - **UnifiedLLMService**: Provider-agnostic interface
@@ -41,10 +44,12 @@ EntraPulse Lite is built with modern TypeScript, Electron, and React technologie
 
 #### 3. MCP Integration Layer
 - **MCPClient**: Protocol communication
-- **LokkaMCPServer**: Microsoft Graph API access
+- **LokkaMCPServer**: Microsoft Graph API access with adaptive authentication
+- **Dynamic Authentication**: Automatically uses current auth mode (User Token or App Credentials)
 - **MicrosoftDocsMCPClient**: Microsoft Learn and official documentation access
 - **FetchMCPServer**: General web documentation and content retrieval
 - **MCPAuthService**: Authentication for MCP servers
+- **Runtime Restart**: MCP servers restart automatically when auth mode changes
 
 #### 4. UI Layer
 - **React Components**: Modern functional components with hooks
@@ -313,7 +318,10 @@ describe('YourComponent', () => {
 2. **Integration Tests** (`src/tests/integration/`)
    - Service integration testing
    - API integration testing
-   - Authentication flow testing
+   - Authentication flow testing (both User Token and Application Credentials modes)
+   - Authentication mode switching
+   - MCP server authentication integration
+   - Configuration context switching
    - **Target Coverage**: >80%
 
 3. **End-to-End Tests** (`src/tests/e2e/`)
@@ -611,3 +619,87 @@ location.reload();
 ```
 
 See `TROUBLESHOOTING.md` for comprehensive issue resolution guide.
+
+## 🔐 Dual Authentication System
+
+### Overview
+EntraPulse Lite supports two authentication modes that can be switched at runtime:
+
+#### User Token Mode (Default)
+- **Flow**: Interactive user authentication via MSAL
+- **Permissions**: Progressive permission requests starting with `User.Read`
+- **Storage**: User-specific configuration context
+- **Use Case**: Individual users, personal usage, basic scenarios
+
+#### Application Credentials Mode
+- **Flow**: Client credentials authentication using app registration
+- **Permissions**: Custom scopes defined in the app registration
+- **Storage**: Application-level configuration context
+- **Use Case**: Enterprise scenarios, enhanced permissions, IT administrators
+
+### Implementation Details
+
+#### Runtime Mode Switching
+```typescript
+// In ConfigService.ts
+async updateAuthenticationContext(config: EntraConfig): Promise<void> {
+  const mode = config.useApplicationCredentials ? 'application-credentials' : 'user-token';
+  await this.setAuthenticationContext(mode, this.currentUser);
+  
+  // Restart MCP servers if authentication mode changed
+  if (this.currentAuthMode !== mode) {
+    await this.ipcRenderer?.invoke('mcp:restartLokkaMCPServer');
+  }
+}
+```
+
+#### MCP Server Authentication Integration
+```typescript
+// In ExternalLokkaMCPStdioServer.ts
+private async getEnvironmentVariables(): Promise<Record<string, string>> {
+  const authMode = this.configService.getAuthenticationPreference();
+  
+  if (authMode === 'application-credentials') {
+    // Use client credentials from configuration
+    return {
+      CLIENT_ID: config.clientId,
+      CLIENT_SECRET: config.clientSecret,
+      TENANT_ID: config.tenantId
+    };
+  } else {
+    // Use user access token
+    const token = await this.authService.getToken();
+    return {
+      ACCESS_TOKEN: token?.accessToken || ''
+    };
+  }
+}
+```
+
+### Testing Authentication Modes
+```typescript
+// Example test for authentication mode switching
+describe('Authentication Mode Switching', () => {
+  it('should switch from user token to application credentials', async () => {
+    // Start in user token mode
+    expect(configService.getAuthenticationPreference()).toBe('user-token');
+    
+    // Switch to application credentials
+    await configService.updateAuthenticationContext({
+      useApplicationCredentials: true,
+      clientId: 'test-client-id',
+      clientSecret: 'test-secret',
+      tenantId: 'test-tenant-id'
+    });
+    
+    expect(configService.getAuthenticationPreference()).toBe('application-credentials');
+  });
+});
+```
+
+### UI Integration
+The authentication mode toggle is available in:
+- **Settings → Entra Configuration**
+- **Toggle Switch**: "Use Application Credentials"
+- **Form Fields**: Client ID, Client Secret, Tenant ID (shown when enabled)
+- **Automatic Save**: Changes saved immediately with validation

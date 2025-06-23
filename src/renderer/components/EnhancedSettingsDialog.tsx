@@ -26,7 +26,9 @@ import {
   CardContent,
   CardActions,
   Tooltip,
-  Paper
+  Paper,
+  Radio,
+  RadioGroup
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -1239,11 +1241,11 @@ interface EntraConfigFormProps {
   onClear: () => Promise<void>;
 }
 
-const EntraConfigForm: React.FC<EntraConfigFormProps> = ({ config, onSave, onClear }) => {
-  const [localConfig, setLocalConfig] = useState<EntraConfig>({
+const EntraConfigForm: React.FC<EntraConfigFormProps> = ({ config, onSave, onClear }) => {  const [localConfig, setLocalConfig] = useState<EntraConfig>({
     clientId: '',
     tenantId: '',
-    clientSecret: ''
+    clientSecret: '',
+    useApplicationCredentials: false
   });
   const [isSaving, setIsSaving] = useState(false);
   const [isUserEditing, setIsUserEditing] = useState(false);
@@ -1273,11 +1275,11 @@ const EntraConfigForm: React.FC<EntraConfigFormProps> = ({ config, onSave, onCle
   const handleClear = async () => {
     try {
       setIsSaving(true);
-      await onClear();
-      setLocalConfig({
+      await onClear();      setLocalConfig({
         clientId: '',
         tenantId: '',
-        clientSecret: ''
+        clientSecret: '',
+        useApplicationCredentials: false
       });
       // Successfully cleared - no longer editing
       setIsUserEditing(false);
@@ -1330,10 +1332,75 @@ const EntraConfigForm: React.FC<EntraConfigFormProps> = ({ config, onSave, onCle
   };
 
   const isConfigured = !!(config?.clientId && config?.tenantId);
-
   return (
     <Grid container spacing={2}>
-      <Grid item xs={12}>        <TextField
+      {/* Authentication Mode Selection */}
+      <Grid item xs={12}>
+        <Box sx={{ mb: 2, p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+          <Typography variant="h6" gutterBottom>
+            Authentication Mode
+          </Typography>
+          
+          <FormControl component="fieldset">
+            <RadioGroup
+              value={localConfig.useApplicationCredentials ? 'application-credentials' : 'user-token'}
+              onChange={(e) => {
+                const newMode = e.target.value === 'application-credentials';
+                
+                if (newMode && (!localConfig.clientSecret?.trim() || !localConfig.clientId?.trim() || !localConfig.tenantId?.trim())) {
+                  // For now, just show a warning - don't block the change
+                  console.warn('Client credentials mode requires Client ID, Tenant ID, and Client Secret');
+                }
+
+                setLocalConfig({
+                  ...localConfig,
+                  useApplicationCredentials: newMode
+                });
+                setIsUserEditing(true);
+                setTestResult(null); // Clear test results when mode changes
+              }}
+            >
+              <FormControlLabel
+                value="user-token"
+                control={<Radio />}
+                label={
+                  <Box>
+                    <Typography variant="body1" fontWeight="bold">
+                      User Token (Delegated Permissions)
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Query Microsoft Graph with your user permissions. Access your profile, email, calendar, and other user-scoped data.
+                    </Typography>
+                  </Box>
+                }
+              />
+              <FormControlLabel
+                value="application-credentials"
+                control={<Radio />}
+                label={
+                  <Box>
+                    <Typography variant="body1" fontWeight="bold">
+                      Application Credentials (App Permissions)
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Query Microsoft Graph with application permissions. Access organization-wide data like audit logs, sign-in logs, and directory information.
+                    </Typography>
+                  </Box>
+                }
+                disabled={!localConfig.clientSecret?.trim() || !localConfig.clientId?.trim() || !localConfig.tenantId?.trim()}
+              />
+            </RadioGroup>
+          </FormControl>
+
+          {localConfig.useApplicationCredentials && (
+            <Alert severity="warning" sx={{ mt: 2 }}>
+              <strong>Application Permissions Required:</strong> Ensure your Entra application has the necessary application permissions configured for the data you want to access (e.g., AuditLog.Read.All, Directory.Read.All).
+            </Alert>
+          )}
+        </Box>
+      </Grid>
+
+      <Grid item xs={12}><TextField
           fullWidth
           label="Client ID"
           value={localConfig.clientId}

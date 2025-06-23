@@ -60,14 +60,32 @@ export class StdioMCPClient {
     if (this.process) {
       console.log('MCP client already started');
       return;
-    }
-
-    console.log(`Starting MCP server: ${this.config.command} ${this.config.args?.join(' ')}`);
+    }    console.log(`Starting MCP server: ${this.config.command} ${this.config.args?.join(' ')}`);
     
     const env = {
       ...process.env,
       ...this.config.options?.env
     };
+
+    // CRITICAL DEBUG: Log the environment variables for any MCP process
+    console.log('🚨 CRITICAL DEBUG: Environment variables being passed to MCP process:');
+    console.log(`🚨 Config name: ${this.config.name}`);
+    console.log(`🚨 USE_CLIENT_TOKEN in process.env: ${process.env.USE_CLIENT_TOKEN}`);
+    console.log(`🚨 USE_CLIENT_TOKEN in config.options?.env: ${this.config.options?.env?.USE_CLIENT_TOKEN}`);
+    console.log(`🚨 USE_CLIENT_TOKEN in merged env: ${env.USE_CLIENT_TOKEN}`);
+    console.log(`🚨 Config options env keys: ${Object.keys(this.config.options?.env || {})}`);
+    console.log(`🚨 Merged env keys count: ${Object.keys(env).length}`);
+    
+    // Extra debug for Lokka specifically
+    if (this.config.name?.includes('lokka') || this.config.command?.includes('lokka')) {
+      console.log('🔥 LOKKA SPECIFIC DEBUG:');
+      console.log('🔥 TENANT_ID:', env.TENANT_ID ? 'SET' : 'NOT SET');
+      console.log('🔥 CLIENT_ID:', env.CLIENT_ID ? 'SET' : 'NOT SET');
+      console.log('🔥 CLIENT_SECRET:', env.CLIENT_SECRET ? 'SET' : 'NOT SET');
+      console.log('🔥 USE_CLIENT_TOKEN:', env.USE_CLIENT_TOKEN);
+      console.log('🔥 DEBUG_ENTRAPULSE:', env.DEBUG_ENTRAPULSE);
+      console.log('🔥 All env vars being passed:', JSON.stringify(env, null, 2));
+    }
 
     this.process = spawn(this.config.command!, this.config.args || [], {
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -82,11 +100,20 @@ export class StdioMCPClient {
     // Handle stdout (responses from MCP server)
     this.process.stdout.on('data', (data) => {
       this.handleStdout(data);
-    });
-
-    // Handle stderr (logging from MCP server)
+    });    // Handle stderr (logging from MCP server)
     this.process.stderr.on('data', (data) => {
-      console.log(`[MCP ${this.config.name} stderr]:`, data.toString().trim());
+      const stderrOutput = data.toString().trim();
+      console.log(`[MCP ${this.config.name} stderr]:`, stderrOutput);
+      
+      // Special logging for Lokka to see if it's recognizing the environment variables
+      if (this.config.name?.includes('lokka') && stderrOutput) {
+        console.log('🔥 LOKKA STDERR DETAILS:', stderrOutput);
+        
+        // Check for specific messages about authentication mode
+        if (stderrOutput.includes('Client') || stderrOutput.includes('token') || stderrOutput.includes('auth')) {
+          console.log('🚨 LOKKA AUTHENTICATION MESSAGE DETECTED:', stderrOutput);
+        }
+      }
     });
 
     // Handle process exit

@@ -4,6 +4,7 @@
 import { ExternalLokkaMCPStdioServer as ExternalLokkaMCPServer } from '../../mcp/servers/lokka/ExternalLokkaMCPStdioServer';
 import { MCPAuthService } from '../../mcp/auth/MCPAuthService';
 import { AuthService } from '../../auth/AuthService';
+import { ConfigService } from '../../shared/ConfigService';
 import { validateMCPResponse } from '../utils/mcpResponseParser';
 import dotenv from 'dotenv';
 import path from 'path';
@@ -38,11 +39,14 @@ describe('Lokka MCP Server Tenant Connection', () => {
           TENANT_ID: process.env.LOKKA_TENANT_ID,
           CLIENT_ID: process.env.LOKKA_CLIENT_ID,
           CLIENT_SECRET: process.env.LOKKA_CLIENT_SECRET
-        }
-      };
+        }      };
+      
+      // Create config service
+      const configService = new ConfigService();
+      configService.setServiceLevelAccess(true);
       
       // Create server instance
-      server = new ExternalLokkaMCPServer(config, authService);
+      server = new ExternalLokkaMCPServer(config, authService, configService);
       
       // Start the server
       await server.startServer();

@@ -741,8 +741,7 @@ export class ConfigService {
   /**
    * Save Entra application configuration
    * @param entraConfig Entra configuration to save
-   */
-  saveEntraConfig(entraConfig: EntraConfig): void {
+   */  saveEntraConfig(entraConfig: EntraConfig): void {
     if (!this.isAuthenticationVerified) {
       console.log('[ConfigService] 🔒 Save Entra config blocked - authentication not verified');
       return;
@@ -751,16 +750,19 @@ export class ConfigService {
     console.log('[ConfigService] saveEntraConfig - Input config:', {
       clientId: entraConfig.clientId ? '[REDACTED]' : 'none',
       tenantId: entraConfig.tenantId ? '[REDACTED]' : 'none',
-      hasClientSecret: !!entraConfig.clientSecret
+      hasClientSecret: !!entraConfig.clientSecret,
+      useApplicationCredentials: entraConfig.useApplicationCredentials
     });
 
     const currentConfig = this.getCurrentContext();
     currentConfig.entraConfig = entraConfig;
     this.saveCurrentContext(currentConfig);
 
+    // Update authentication context based on new config
+    this.updateAuthenticationContext();
+
     console.log('[ConfigService] saveEntraConfig - Configuration saved successfully');
   }
-
   /**
    * Clear Entra application configuration
    */
@@ -775,5 +777,36 @@ export class ConfigService {
     this.saveCurrentContext(currentConfig);
 
     console.log('[ConfigService] clearEntraConfig - Configuration cleared successfully');
+  }
+
+  /**
+   * Get the user's authentication preference (token vs application credentials)
+   */
+  getAuthenticationPreference(): 'user-token' | 'application-credentials' {
+    const entraConfig = this.getEntraConfig();
+    const hasClientCredentials = entraConfig?.clientSecret && entraConfig?.clientId && entraConfig?.tenantId;
+    
+    if (entraConfig?.useApplicationCredentials && hasClientCredentials) {
+      return 'application-credentials';
+    }
+    return 'user-token';
+  }
+
+  /**
+   * Update authentication context based on Entra configuration
+   */
+  updateAuthenticationContext(): void {
+    const entraConfig = this.getEntraConfig();
+    const hasClientCredentials = entraConfig?.clientSecret && entraConfig?.clientId && entraConfig?.tenantId;
+    const useAppCredentials = entraConfig?.useApplicationCredentials && hasClientCredentials;
+    
+    const authMode = useAppCredentials ? 'client-credentials' : 'interactive';
+    this.setAuthenticationContext(authMode);
+    
+    console.log('[ConfigService] Updated authentication context:', {
+      mode: authMode,
+      useApplicationCredentials: useAppCredentials,
+      hasClientCredentials
+    });
   }
 }

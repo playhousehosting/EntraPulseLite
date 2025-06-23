@@ -512,7 +512,7 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
               justifyContent: 'center',
               width: '90%',
             }}          >            <AppIcon 
-              size={100} 
+              size={150} 
               sx={{ 
                 margin: '10px 0',
                 filter: 'drop-shadow(0px 4px 8px rgba(0, 0, 0, 0.15))',

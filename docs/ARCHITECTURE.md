@@ -44,12 +44,13 @@ EntraPulse Lite is built as a modern Electron desktop application that bridges n
 ### 1. Authentication Layer
 
 #### AuthService (`src/auth/AuthService.ts`)
-**Purpose**: Manages Microsoft authentication using MSAL
+**Purpose**: Manages Microsoft authentication using MSAL with flexible authentication modes
 **Key Features**:
 - Progressive permission requests
 - Secure token storage and refresh
 - Multi-tenant support
-- Client credentials and interactive flows
+- Dual authentication modes: User Token and Application Credentials
+- Runtime authentication mode switching
 
 ```typescript
 interface AuthService {
@@ -59,6 +60,22 @@ interface AuthService {
   getCurrentUser(): Promise<User | null>;
 }
 ```
+
+**Authentication Modes**:
+
+1. **User Token Mode** (Default):
+   - Uses delegated user permissions
+   - Interactive authentication flow
+   - Progressive permission requests
+   - Ideal for individual users and basic scenarios
+
+2. **Application Credentials Mode**:
+   - Uses Client ID and Client Secret
+   - Application-only authentication
+   - Custom permission scopes
+   - Enhanced enterprise integration
+
+Users can switch between modes in Settings → Entra Configuration without requiring application restart.
 
 **Progressive Permission Model**:
 ```typescript
@@ -180,20 +197,24 @@ interface MCPClient {
 ```
 
 #### LokkaMCPServer (`src/mcp/servers/LokkaMCPServer.ts`)
-**Purpose**: Microsoft Graph API access through MCP
+**Purpose**: Microsoft Graph API access through MCP with adaptive authentication
+**Authentication Integration**: 
+- Dynamically uses current authentication mode (User Token or Application Credentials)
+- Supports both delegated and application-only permissions
+- Automatically restarts when authentication mode changes
+- No user intervention required for authentication switching
+
 **Tools Available**:
 - `microsoft_graph_query`: Execute Graph API queries
 - `get_user_info`: Retrieve user information
 - `list_groups`: List user groups
 - `get_applications`: Retrieve application data
 
+**Authentication Flow**:
 ```typescript
-async handleMicrosoftGraphQuery(args: {
-  endpoint: string;
-  method: string;
-  params?: any;
-}): Promise<any> {
-  const token = await this.authService.getToken();
+// User Token Mode
+async handleMicrosoftGraphQuery(args: any): Promise<any> {
+  const token = await this.authService.getToken(); // User's access token
   const response = await fetch(`https://graph.microsoft.com/v1.0${args.endpoint}`, {
     method: args.method,
     headers: {
@@ -204,6 +225,10 @@ async handleMicrosoftGraphQuery(args: {
   });
   return response.json();
 }
+
+// Application Credentials Mode (handled transparently by Lokka MCP)
+// Uses CLIENT_ID, CLIENT_SECRET, and TENANT_ID environment variables
+// Lokka MCP automatically handles client credentials flow
 ```
 
 #### FetchMCPServer (`src/mcp/servers/FetchMCPServer.ts`)

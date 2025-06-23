@@ -55,6 +55,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     call: (server, toolName, arguments_) => ipcRenderer.invoke('mcp:call', server, toolName, arguments_),
     listServers: () => ipcRenderer.invoke('mcp:listServers'),
     listTools: (server) => ipcRenderer.invoke('mcp:listTools', server),
+    restartLokkaMCPServer: () => ipcRenderer.invoke('mcp:restartLokkaMCPServer'),
   },
 
   // Configuration methods

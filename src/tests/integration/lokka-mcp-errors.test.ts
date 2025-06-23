@@ -4,6 +4,7 @@
 import { ExternalLokkaMCPStdioServer as ExternalLokkaMCPServer } from '../../mcp/servers/lokka/ExternalLokkaMCPStdioServer';
 import { MCPAuthService } from '../../mcp/auth/MCPAuthService';
 import { AuthService } from '../../auth/AuthService';
+import { ConfigService } from '../../shared/ConfigService';
 import { extractJsonFromMCPResponse, validateMCPResponse } from '../utils/mcpResponseParser';
 import dotenv from 'dotenv';
 import path from 'path';
@@ -50,11 +51,14 @@ describe('Lokka MCP Server Error Handling', () => {
         enableTelemetry: false
       }
     });
+      authService = new MCPAuthService(msalAuthService);
     
-    authService = new MCPAuthService(msalAuthService);
+    // Create config service
+    const configService = new ConfigService();
+    configService.setServiceLevelAccess(true);
     
     // Create server instance with invalid configuration
-    server = new ExternalLokkaMCPServer(invalidConfig, authService);
+    server = new ExternalLokkaMCPServer(invalidConfig, authService, configService);
     
     // We'll start the server in each test to isolate failures
   }, 10000);
@@ -64,8 +68,7 @@ describe('Lokka MCP Server Error Handling', () => {
     if (server) {
       await server.stopServer().catch(err => console.error('Error stopping server:', err));
     }
-  });
-  test('should handle server startup failures gracefully', async () => {
+  });  test('should handle server startup failures gracefully', async () => {
     // Create a server with an invalid command that won't exist
     const badCommandConfig = {
       ...invalidConfig,
@@ -73,7 +76,9 @@ describe('Lokka MCP Server Error Handling', () => {
       port: 3101 // Different port to avoid conflicts
     };
     
-    const badCommandServer = new ExternalLokkaMCPServer(badCommandConfig, authService);
+    const configService = new ConfigService();
+    configService.setServiceLevelAccess(true);
+    const badCommandServer = new ExternalLokkaMCPServer(badCommandConfig, authService, configService);
     
     // The current implementation uses a timeout approach and doesn't actually reject
     // Instead, it starts the server but it won't be functional
@@ -151,8 +156,7 @@ describe('Lokka MCP Server Error Handling', () => {
     expect(response.id).toBe('test-invalid-request');
     expect(response.error).toBeDefined();
   }, 15000);
-  test('should handle network issues gracefully', async () => {
-    // Create a server with a different configuration that might cause network issues
+  test('should handle network issues gracefully', async () => {    // Create a server with a different configuration that might cause network issues
     const networkIssueConfig = {
       ...invalidConfig,
       port: 9999, // Use a port that's unlikely to be available
@@ -160,7 +164,9 @@ describe('Lokka MCP Server Error Handling', () => {
       args: ['-y', '@merill/lokka', '--port', '9999']
     };
     
-    const networkServer = new ExternalLokkaMCPServer(networkIssueConfig, authService);
+    const networkConfigService = new ConfigService();
+    networkConfigService.setServiceLevelAccess(true);
+    const networkServer = new ExternalLokkaMCPServer(networkIssueConfig, authService, networkConfigService);
     
     // Start the server - it may start but not be functional
     await networkServer.startServer().catch(err => {

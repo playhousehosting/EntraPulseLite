@@ -9,17 +9,20 @@ import { AuthService } from '../../auth/AuthService';
 import { FetchMCPServer } from '../../mcp/servers/fetch/FetchMCPServer';
 import { MCPServerManager } from '../../mcp/servers/MCPServerManager';
 import { MCPErrorHandler, ErrorCode } from '../../mcp/utils';
+import { ConfigService } from '../../shared/ConfigService';
 
 // Mock dependencies
 jest.mock('../../auth/AuthService');
 jest.mock('../../mcp/mock');
 jest.mock('@microsoft/microsoft-graph-client');
 jest.mock('axios');
+jest.mock('../../shared/ConfigService');
 
 describe('MCP SDK Implementation', () => {
   let mcpClient: MCPClient;
   let authService: AuthService;
   let mcpAuthService: MCPAuthService;
+  let configService: ConfigService;
   let serverConfigs: MCPServerConfig[];
   
   beforeEach(() => {
@@ -32,9 +35,24 @@ describe('MCP SDK Implementation', () => {
       })
     }));
 
+    (ConfigService as jest.Mock).mockImplementation(() => ({
+      getAuthenticationContext: jest.fn().mockReturnValue({
+        mode: 'user-token',
+        userPrincipalName: 'test@example.com',
+        tenantId: 'test-tenant'
+      }),
+      getEntraConfig: jest.fn().mockReturnValue({
+        useApplicationCredentials: false,
+        clientId: 'test-client-id',
+        clientSecret: '',
+        tenantId: 'test-tenant'
+      })
+    }));
+
     // Create instances
     authService = new AuthService();
     mcpAuthService = new MCPAuthService(authService);
+    configService = new ConfigService();
     
     serverConfigs = [
       {
@@ -113,12 +131,11 @@ describe('MCP SDK Implementation', () => {
         .rejects.toThrow('Failed to get authentication headers for external-lokka server');
     });
   });
-  
-  describe('MCPServerManager', () => {
+    describe('MCPServerManager', () => {
     let serverManager: MCPServerManager;
     
     beforeEach(() => {
-      serverManager = new MCPServerManager(serverConfigs, mcpAuthService);
+      serverManager = new MCPServerManager(serverConfigs, mcpAuthService, configService);
     });
     
     test('should initialize enabled servers', () => {

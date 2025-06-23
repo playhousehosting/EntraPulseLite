@@ -4,6 +4,7 @@
 import { ExternalLokkaMCPStdioServer as ExternalLokkaMCPServer } from '../../mcp/servers/lokka/ExternalLokkaMCPStdioServer';
 import { MCPAuthService } from '../../mcp/auth/MCPAuthService';
 import { AuthService } from '../../auth/AuthService';
+import { ConfigService } from '../../shared/ConfigService';
 import { MCPRequest, MCPResponse } from '../../mcp/types';
 import { extractJsonFromMCPResponse, validateMCPResponse } from '../utils/mcpResponseParser';
 import dotenv from 'dotenv';
@@ -23,6 +24,7 @@ describe('External Lokka MCP Server End-to-End Tests', () => {
   (shouldRunTests ? describe : describe.skip)('LLM to Graph API Flow', () => {
     let server: ExternalLokkaMCPServer;
     let authService: MCPAuthService;
+    let configService: ConfigService;
       beforeAll(async () => {
       // Initialize auth service with tenant credentials
       const msalAuthService = new AuthService({
@@ -47,6 +49,8 @@ describe('External Lokka MCP Server End-to-End Tests', () => {
       });
       
       authService = new MCPAuthService(msalAuthService);
+      configService = new ConfigService();
+      configService.setServiceLevelAccess(true);
       
       // Configure server with tenant credentials
       const config: any = {
@@ -62,7 +66,7 @@ describe('External Lokka MCP Server End-to-End Tests', () => {
       };
       
       // Create server instance
-      server = new ExternalLokkaMCPServer(config, authService);
+      server = new ExternalLokkaMCPServer(config, authService, configService);
       
       // Start the server
       await server.startServer();
@@ -101,10 +105,11 @@ describe('External Lokka MCP Server End-to-End Tests', () => {
           }
         }
       };
-      
-      // 3. Send the request to the External Lokka MCP Server
+        // 3. Send the request to the External Lokka MCP Server
       console.log('Step 3: Sending request to External Lokka MCP Server');
-      const response: MCPResponse = await server.handleRequest(mcpRequest);      // 4. Verify the response
+      const response: MCPResponse = await server.handleRequest(mcpRequest);
+      
+      // 4. Verify the response
       console.log('Step 4: Verifying the response');
       expect(response).toBeDefined();
       expect(response.error).toBeUndefined();
@@ -175,11 +180,11 @@ describe('External Lokka MCP Server End-to-End Tests', () => {
       userArray.forEach((user: any, index: number) => {
         console.log(`${index + 1}. ${user.displayName} (${user.userPrincipalName})`);
       });
-      
-      // Verify we didn't get more than 5 users (as requested)
+        // Verify we didn't get more than 5 users (as requested)
       expect(userArray.length).toBeLessThanOrEqual(5);
     }, 20000);
-      test('should handle complex Graph API queries through microsoft_graph_query tool', async () => {
+
+    test('should handle complex Graph API queries through microsoft_graph_query tool', async () => {
       // Skip if tenant credentials are not configured
       if (!shouldRunTests) {
         return;

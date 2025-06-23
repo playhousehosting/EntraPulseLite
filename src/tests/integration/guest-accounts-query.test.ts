@@ -4,6 +4,7 @@
 import { ExternalLokkaMCPStdioServer as ExternalLokkaMCPServer } from '../../mcp/servers/lokka/ExternalLokkaMCPStdioServer';
 import { MCPAuthService } from '../../mcp/auth/MCPAuthService';
 import { MockAuthService } from '../mocks/MockAuthService';
+import { ConfigService } from '../../shared/ConfigService';
 import { MCPRequest, MCPResponse } from '../../mcp/types';
 import { GuestAccountAnalyzer } from '../../shared/GuestAccountAnalyzer';
 import { MCPClient } from '../../mcp/clients/MCPClient';
@@ -65,11 +66,14 @@ describe('Guest Account Queries with Lokka MCP Server', () => {
           CLIENT_SECRET: process.env.LOKKA_CLIENT_SECRET
         }
       };
+        console.log('Starting Lokka server with tenant credentials...');
       
-      console.log('Starting Lokka server with tenant credentials...');
+      // Create config service
+      const configService = new ConfigService();
+      configService.setServiceLevelAccess(true);
       
       // Create server instance
-      server = new ExternalLokkaMCPServer(config, authService);
+      server = new ExternalLokkaMCPServer(config, authService, configService);
       
       try {
         // Start the server

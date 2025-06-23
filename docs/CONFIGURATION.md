@@ -2,21 +2,30 @@
 
 ## Overview
 
-The EntraPulse Lite application now features a secure, context-aware configuration system that handles different authentication modes and user contexts properly.
+The EntraPulse Lite application features a secure, context-aware configuration system that handles dual authentication modes seamlessly. Users can switch between authentication modes at runtime without requiring application restart.
 
-## Authentication Contexts
+## Authentication Modes
 
-### 1. **Application/Admin Mode (Client Credentials)**
-- **When**: The app runs with `CLIENT_ID`, `CLIENT_SECRET`, and `TENANT_ID` configured
-- **Storage Location**: Application-level configuration (`application` key in store)
-- **API Keys**: Stored securely for system-wide access
-- **Use Case**: IT administrators managing tenant-wide operations
-
-### 2. **Interactive User Mode** 
-- **When**: Users sign in interactively (not implemented yet, but architecture ready)
+### 1. **User Token Mode (Default)**
+- **Authentication**: Delegated user permissions via interactive login
 - **Storage Location**: User-specific configuration (`users.user_{userId}` key in store)
 - **API Keys**: Isolated per user account
-- **Use Case**: Individual users with their own LLM configurations
+- **Use Case**: Individual users with personal LLM configurations
+- **Permissions**: Progressive permission model starting with `User.Read`
+
+### 2. **Application Credentials Mode**
+- **Authentication**: Client credentials flow using app registration
+- **Storage Location**: Application-level configuration (`application` key in store)
+- **API Keys**: Stored securely for system-wide access
+- **Use Case**: IT administrators, enterprise scenarios, enhanced permissions
+- **Configuration**: Requires `CLIENT_ID`, `CLIENT_SECRET`, and `TENANT_ID`
+
+### 🔄 **Runtime Mode Switching**
+Users can switch between authentication modes in Settings → Entra Configuration:
+- Toggle between "Use User Token" and "Use Application Credentials"
+- Automatic MCP server restart when switching modes
+- Configuration context automatically switches
+- No application restart required
 
 ## Features
 
@@ -46,28 +55,39 @@ The EntraPulse Lite application now features a secure, context-aware configurati
 ### Configuration Structure
 ```typescript
 {
-  application: {           // Admin/Client Credentials mode
+  application: {           // Application Credentials mode
     llm: { ... },
     modelCache: { ... },
     statusMonitoring: {    // LLM Status Monitoring settings
       pollingInterval: 5000,
       lastCheckTime: "2023-11-01T12:00:00Z",
       localLLMAvailable: true
+    },
+    entra: {              // Application-level Entra config
+      clientId: "...",
+      clientSecret: "...",
+      tenantId: "...",
+      useApplicationCredentials: true
     }
   },
   users: {
-    "user_12345": {        // Individual user configurations
+    "user_12345": {        // User Token mode configurations
       llm: { ... },
-      modelCache: { ... }
+      modelCache: { ... },
+      entra: {             // User-specific preferences
+        useApplicationCredentials: false
+      }
     }
   },
-  currentAuthMode: "client-credentials" | "interactive",
+  currentAuthMode: "user-token" | "application-credentials",
   currentUserKey: "user_12345" | undefined
 }
 ```
 
 ### Key Methods
 - `setAuthenticationContext(mode, userInfo?)` - Switch contexts
+- `getAuthenticationPreference()` - Get current auth mode preference
+- `updateAuthenticationContext(config)` - Update auth context from Entra config
 - `getLLMConfig()` - Get context-aware configuration
 - `saveLLMConfig(config)` - Save to appropriate context
 - `getCachedModels(provider)` - Context-aware model cache
@@ -76,21 +96,35 @@ The EntraPulse Lite application now features a secure, context-aware configurati
 ## Benefits
 
 1. **🔒 Security**: API keys are isolated by authentication context
-2. **👥 Multi-User Ready**: Architecture supports future interactive authentication
+2. **👥 Dual Authentication**: Support for both user token and application credentials modes
 3. **⚡ Performance**: Intelligent caching reduces API calls
-4. **🧹 Clean Separation**: No cross-contamination between admin and user configs
-5. **💾 Persistence**: Configuration survives app restarts
+4. **🔄 Runtime Switching**: Switch authentication modes without restart
+5. **🧹 Clean Separation**: No cross-contamination between auth mode configs
+6. **💾 Persistence**: Configuration survives app restarts
+7. **🎯 Progressive Permissions**: Smart permission requests in user token mode
 
 ## Current Status
 
-- ✅ **Application/Admin Mode**: Fully implemented and tested
+- ✅ **User Token Mode**: Fully implemented with progressive permissions
+- ✅ **Application Credentials Mode**: Full client credentials support
+- ✅ **Runtime Mode Switching**: Toggle between modes in UI
 - ✅ **Secure Storage**: Encrypted configuration with electron-store
 - ✅ **Model Caching**: 24-hour cache with deduplication
 - ✅ **Context Management**: Automatic switching based on auth mode
-- 🚧 **Interactive Mode**: Architecture ready, implementation pending
+- ✅ **MCP Integration**: Dynamic authentication for Lokka MCP server
 
 ## Usage
 
-When the app starts in client credentials mode (current default), all LLM configurations including API keys are stored in the application context. If/when interactive authentication is implemented, each user will have their own isolated configuration space.
+### Initial Setup
+1. Start the application (defaults to User Token Mode)
+2. Sign in with your Microsoft account
+3. Optionally switch to Application Credentials Mode in Settings
+
+### Switching Authentication Modes
+1. Go to Settings → Entra Configuration
+2. Toggle "Use Application Credentials" on/off
+3. If enabling: Enter Client ID, Client Secret, and Tenant ID
+4. If disabling: Keep credentials for future use or clear them
+5. MCP servers automatically restart with new authentication mode
 
 The SettingsDialog now includes cache management controls, and duplicate models are properly handled through both API-level deduplication and intelligent caching.
