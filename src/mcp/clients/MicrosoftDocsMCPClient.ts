@@ -149,11 +149,11 @@ export class MicrosoftDocsMCPClient {
    * Send HTTP request to the MCP server
    */
   private async sendRequest(request: HttpMCPRequest): Promise<HttpMCPResponse> {
-    try {
-      const headers: Record<string, string> = {
+    try {      const headers: Record<string, string> = {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
-        'User-Agent': 'EntraPulseLite/1.0.0'
+        'User-Agent': 'EntraPulseLite/1.0.0',
+        'Connection': 'keep-alive'
       };
 
       // Add authentication headers if needed

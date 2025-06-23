@@ -46,8 +46,7 @@ class EntraPulseLiteApp {
       default:        return 'gpt-4o-mini';
     }
   }
-  private async initializeServices(): Promise<void> {
-    // Initialize configuration service first
+  private async initializeServices(): Promise<void> {    // Initialize configuration service first
     this.configService = new ConfigService();    // Get authentication configuration (stored config takes precedence)
     const authConfig = await this.getAuthConfiguration();
       // Check if we have Lokka credentials OR if user can authenticate interactively
@@ -61,10 +60,6 @@ class EntraPulseLiteApp {
       tenantIdExists: Boolean(authConfig.tenantId),
       clientSecretExists: Boolean(authConfig.clientSecret)
     });
-      // Set authentication context based on available credentials
-    const authMode = hasLokkaCreds ? 'client-credentials' : 'interactive';
-    console.log(`[Main] Setting initial authentication mode: ${authMode}`);
-    this.configService.setAuthenticationContext(authMode);
     
     // Set service-level access for the main process (trusted environment)
     this.configService.setServiceLevelAccess(true);
@@ -72,17 +67,26 @@ class EntraPulseLiteApp {
       // Set authentication as verified since we are in the main process
     this.configService.setAuthenticationVerified(true);
     
+    // Check user's authentication preference from the Entra config
+    const authPreference = this.configService.getAuthenticationPreference();
+    const useAppCredentials = authPreference === 'application-credentials' && hasLokkaCreds;
+    
+    // Set authentication context based on user preference, not just credential availability
+    const authMode = useAppCredentials ? 'client-credentials' : 'interactive';
+    console.log(`[Main] Setting initial authentication mode: ${authMode} (preference: ${authPreference})`);
+    this.configService.setAuthenticationContext(authMode);
+    
     // Initialize configuration using stored config
     const storedLLMConfig = this.configService.getLLMConfig();
     
       this.config = {
       auth: {
         clientId: authConfig.clientId,        tenantId: authConfig.tenantId,
-        scopes: hasLokkaCreds 
+        scopes: useAppCredentials 
           ? ['https://graph.microsoft.com/.default'] // Client credentials flow requires .default scope
           : ['https://graph.microsoft.com/.default'], // Interactive flow using .default to inherit all app registration permissions
         clientSecret: authConfig.clientSecret, // Only needed for confidential client applications
-        useClientCredentials: Boolean(hasLokkaCreds), // Use client credentials flow if Lokka creds are configured
+        useClientCredentials: Boolean(useAppCredentials), // Use client credentials flow based on user preference
       },
       llm: storedLLMConfig, // Use stored LLM configuration
       mcpServers: [        {
@@ -209,16 +213,25 @@ class EntraPulseLiteApp {
         providerCount: currentCloudProviders ? Object.keys(currentCloudProviders).length : 0,
         defaultProvider: currentDefaultProvider?.provider
       });
-      
-      // Get updated authentication configuration
+        // Get updated authentication configuration
       const authConfig = await this.getAuthConfiguration();
         // Check if we have Lokka credentials configured for non-interactive authentication
       const hasLokkaCreds = authConfig.clientSecret && authConfig.clientId && authConfig.tenantId;
+      
+      // Check user's authentication preference from the Entra config
+      const authPreference = this.configService.getAuthenticationPreference();
+      const useAppCredentials = authPreference === 'application-credentials' && hasLokkaCreds;
+      
       // Update authentication context in ConfigService BEFORE reinitializing other services
       console.log('[Main] Updating authentication context for configuration mode...');
+      console.log('[Main] Authentication analysis:', {
+        hasLokkaCreds,
+        authPreference,
+        useAppCredentials
+      });
       
-      // Determine the new authentication mode
-      const newAuthMode = hasLokkaCreds ? 'client-credentials' : 'interactive';
+      // Determine the new authentication mode based on user preference
+      const newAuthMode = useAppCredentials ? 'client-credentials' : 'interactive';
       console.log(`[Main] Switching authentication mode to: ${newAuthMode}`);
       
       // Set authentication context but preserve existing cloud provider configs
@@ -236,16 +249,16 @@ class EntraPulseLiteApp {
         console.log('[Main] Cloud provider configurations restored successfully');
       }
       
-      // Update the config object
+      // Update the config object - use preference not just credential availability
       this.config.auth = {
         clientId: authConfig.clientId,
         tenantId: authConfig.tenantId,
-        scopes: hasLokkaCreds 
+        scopes: useAppCredentials 
           ? ['https://graph.microsoft.com/.default'] 
           : ['https://graph.microsoft.com/.default'],
         clientSecret: authConfig.clientSecret,
-        useClientCredentials: Boolean(hasLokkaCreds),
-      };      // Update MCP server configuration
+        useClientCredentials: Boolean(useAppCredentials),
+      };// Update MCP server configuration
       const lokkaServerIndex = this.config.mcpServers.findIndex(server => server.name === 'external-lokka');
       if (lokkaServerIndex !== -1) {        const updatedLokkaConfig: MCPServerConfig = {
           name: 'external-lokka',
