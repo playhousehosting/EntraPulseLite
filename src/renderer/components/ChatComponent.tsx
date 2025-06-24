@@ -36,6 +36,9 @@ import {
   Api as ApiIcon,
   Psychology as PsychologyIcon,
   Refresh as RefreshIcon,
+  ContentCopy as ContentCopyIcon,
+  Clear as ClearIcon,
+  Chat as ChatIcon,
 } from '@mui/icons-material';
 import { getAssetPath } from '../utils/assetUtils';
 import { ChatMessage, User, AuthToken, EnhancedLLMResponse, QueryAnalysis } from '../../types';
@@ -64,9 +67,10 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
   const [permissionSource, setPermissionSource] = useState<'actual' | 'configured' | 'default'>('default');
   const [permissionRequests, setPermissionRequests] = useState<string[]>([]);  const [useRedirectFlow, setUseRedirectFlow] = useState(false);
   const [userPhotoUrl, setUserPhotoUrl] = useState<string | null>(null);  const [expandedTraces, setExpandedTraces] = useState<Set<string>>(new Set());
-  const [profileDropdownAnchor, setProfileDropdownAnchor] = useState<HTMLElement | null>(null);
-  const [defaultCloudProvider, setDefaultCloudProvider] = useState<'openai' | 'anthropic' | 'gemini' | 'azure-openai' | null>(null);
+  const [profileDropdownAnchor, setProfileDropdownAnchor] = useState<HTMLElement | null>(null);  const [defaultCloudProvider, setDefaultCloudProvider] = useState<'openai' | 'anthropic' | 'gemini' | 'azure-openai' | null>(null);
   const [currentModel, setCurrentModel] = useState<string | null>(null);
+  const [copyStatus, setCopyStatus] = useState<{ [key: string]: boolean }>({});
+  const [sessionId, setSessionId] = useState<string>(() => `session-${Date.now()}`);
   useEffect(() => {
     initializeApp();
   }, []);
@@ -272,9 +276,9 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
     setMessages(prev => [...prev, userMessage]);
     setInputMessage('');
     setIsLoading(true);
-    setError(null);try {
-      // Send message to enhanced LLM service
-      const enhancedResponse = await window.electronAPI.llm.chat([...messages, userMessage]);
+    setError(null);    try {
+      // Send message to enhanced LLM service with session ID
+      const enhancedResponse = await window.electronAPI.llm.chat([...messages, userMessage], sessionId);
       
       // Handle both enhanced response format and backward compatibility
       let content: string;
@@ -405,6 +409,45 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
     });
   };
 
+  // Copy code to clipboard
+  const copyCodeToClipboard = async (code: string, codeId: string) => {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopyStatus(prev => ({ ...prev, [codeId]: true }));
+      // Reset copy status after 2 seconds
+      setTimeout(() => {
+        setCopyStatus(prev => ({ ...prev, [codeId]: false }));
+      }, 2000);
+    } catch (error) {
+      console.error('Failed to copy code:', error);
+    }
+  };  // Start new chat (clear conversation context)
+  const startNewChat = async () => {
+    try {
+      // Clear local messages
+      setMessages([]);
+      setError(null);
+      setPermissionRequests([]);
+      
+      // Generate a new session ID for fresh context
+      const newSessionId = `session-${Date.now()}`;
+      setSessionId(newSessionId);
+      
+      // Add welcome message after clearing
+      const welcomeMessage: ChatMessage = {
+        id: 'welcome-new',
+        role: 'assistant',
+        content: `Welcome to EntraPulse Lite! I'm your Microsoft Entra assistant. I can help you query your Microsoft Graph data, understand identity concepts, and analyze your directory structure. What would you like to explore?`,
+        timestamp: new Date(),
+      };
+      setMessages([welcomeMessage]);
+      
+      console.log('✅ Started new chat session with ID:', newSessionId);
+    } catch (error) {
+      console.error('Failed to start new chat:', error);
+      setError('Failed to start new chat. Please try again.');
+    }
+  };
   const checkAuthenticationStatus = async () => {
     try {
       console.log('🔄 Refreshing authentication status and permissions...');
@@ -581,10 +624,9 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
         </Card>
       </Box>
     );
-  }
-  return (
-    <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
-      {/* Header */}      <Box
+  }  return (
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      {/* Header */}<Box
         sx={{
           p: 2,
           borderBottom: 1,
@@ -640,7 +682,19 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
               variant="outlined"
             />
           )}
-        </Box><Box display="flex" alignItems="center" gap={1}>          {user && <UserProfileAvatar user={user} />}
+        </Box>        <Box display="flex" alignItems="center" gap={1}>
+          <Tooltip title="Start New Chat">
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<ChatIcon />}
+              onClick={startNewChat}
+              sx={{ mr: 1 }}
+            >
+              New Chat
+            </Button>
+          </Tooltip>
+          {user && <UserProfileAvatar user={user} />}
           <Tooltip title="User Profile">
             <IconButton onClick={handleProfileSettings}>
               <SettingsIcon />
@@ -653,7 +707,7 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
           </Tooltip>
         </Box>
       </Box>      {/* Messages */}
-      <Box sx={{ flex: 1, overflow: 'auto', p: 2, pb: 8, minHeight: 0 }}>
+      <Box sx={{ flex: 1, overflow: 'auto', p: 2, minHeight: 0 }}>
         <List sx={{ width: '100%', maxWidth: '100%' }}>
           {messages.map((message) => (
             <ListItem key={message.id} alignItems="flex-start" sx={{ mb: 2, width: '100%', maxWidth: '100%' }}><Box sx={{ mr: 2, mt: 0.5 }}>
@@ -732,13 +786,26 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
                           '& p': {
                             marginBottom: '0.75rem',
                             lineHeight: 1.6,
-                          },
-                          '& ul, & ol': {
-                            marginBottom: '0.75rem',
-                            paddingLeft: '1.5rem',
+                          },                          '& ul, & ol': {
+                            marginBottom: '0.5rem',
+                            paddingLeft: '1.2rem',
+                            marginTop: '0rem',
                           },
                           '& li': {
-                            marginBottom: '0.25rem',
+                            marginBottom: '0.05rem', // Minimal spacing between list items
+                            lineHeight: '1.4', // Tighter line height to reduce internal spacing
+                          },
+                          '& li > ul, & li > ol': {
+                            marginTop: '0.05rem', // Minimal gap after parent list item
+                            marginBottom: '0.05rem',
+                            paddingLeft: '1rem', // Reduced indentation for nested lists
+                          },
+                          '& li > p': {
+                            margin: '0', // Remove paragraph margins within list items
+                            display: 'inline', // Prevent line breaks in list items
+                          },
+                          '& li p:first-child': {
+                            display: 'inline', // Ensure first paragraph in li is inline
                           },
                           '& code': {
                             backgroundColor: 'rgba(175, 184, 193, 0.2)',
@@ -761,9 +828,8 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
                             backgroundColor: 'transparent',
                             padding: 0,
                             overflowWrap: 'anywhere', // Add text wrapping for code blocks
-                          },
-                          '& blockquote': {
-                            borderLeft: '4px solid #1976d2',
+                          },                          '& blockquote': {
+                            borderLeft: (theme) => `4px solid ${theme.palette.mode === 'dark' ? '#87ceeb' : '#1976d2'}`,
                             paddingLeft: '1rem',
                             marginLeft: 0,
                             marginBottom: '0.75rem',
@@ -793,7 +859,7 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
                       >                        <ReactMarkdown 
                           remarkPlugins={[remarkGfm]}
                           components={{
-                            // Override code component to ensure proper wrapping
+                            // Override code component to add copy functionality
                             code: ({node, inline, className, children, ...props}: {
                               node?: any;
                               inline?: boolean;
@@ -802,21 +868,94 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
                               [key: string]: any;
                             }) => {
                               const match = /language-(\w+)/.exec(className || '')
-                              return !inline && match ? (
-                                <pre style={{ overflowX: 'auto', maxWidth: '100%' }}>
-                                  <code 
-                                    className={className} 
-                                    style={{ 
-                                      wordBreak: 'break-all', 
-                                      overflowWrap: 'anywhere',
-                                      whiteSpace: 'pre-wrap'
+                              const codeContent = String(children).replace(/\n$/, '');
+                              const codeId = `code-${message.id}-${Math.random().toString(36).substr(2, 9)}`;
+                              
+                              // Code blocks (multi-line)
+                              if (!inline && match) {
+                                return (
+                                  <Box sx={{ position: 'relative', mb: 1 }}>
+                                    <pre style={{ overflowX: 'auto', maxWidth: '100%', margin: 0 }}>
+                                      <code 
+                                        className={className} 
+                                        style={{ 
+                                          wordBreak: 'break-all', 
+                                          overflowWrap: 'anywhere',
+                                          whiteSpace: 'pre-wrap'
+                                        }}
+                                        {...props}
+                                      >
+                                        {children}
+                                      </code>
+                                    </pre>
+                                    <Tooltip title={copyStatus[codeId] ? "Copied!" : "Copy code"}>
+                                      <IconButton
+                                        size="small"
+                                        onClick={() => copyCodeToClipboard(codeContent, codeId)}
+                                        sx={{
+                                          position: 'absolute',
+                                          top: 8,
+                                          right: 8,
+                                          bgcolor: 'background.paper',
+                                          border: 1,
+                                          borderColor: 'divider',
+                                          '&:hover': {
+                                            bgcolor: 'background.default',
+                                          },
+                                        }}
+                                      >
+                                        <ContentCopyIcon fontSize="small" />
+                                      </IconButton>
+                                    </Tooltip>
+                                  </Box>
+                                );
+                              }
+                              
+                              // Inline code - add copy functionality for longer inline code (like URLs)
+                              if (inline && codeContent.length > 20) {
+                                return (
+                                  <Box 
+                                    component="span" 
+                                    sx={{ 
+                                      position: 'relative', 
+                                      display: 'inline-flex', 
+                                      alignItems: 'center',
+                                      gap: 0.5
                                     }}
-                                    {...props}
                                   >
-                                    {children}
-                                  </code>
-                                </pre>
-                              ) : (
+                                    <code 
+                                      className={className} 
+                                      style={{ wordBreak: 'break-all', overflowWrap: 'anywhere' }}
+                                      {...props}
+                                    >
+                                      {children}
+                                    </code>
+                                    <Tooltip title={copyStatus[codeId] ? "Copied!" : "Copy"}>
+                                      <IconButton
+                                        size="small"
+                                        onClick={() => copyCodeToClipboard(codeContent, codeId)}
+                                        sx={{
+                                          p: 0.25,
+                                          minWidth: 16,
+                                          height: 16,
+                                          bgcolor: 'background.paper',
+                                          border: 1,
+                                          borderColor: 'divider',
+                                          ml: 0.5,
+                                          '&:hover': {
+                                            bgcolor: 'background.default',
+                                          },
+                                        }}
+                                      >
+                                        <ContentCopyIcon sx={{ fontSize: 12 }} />
+                                      </IconButton>
+                                    </Tooltip>
+                                  </Box>
+                                );
+                              }
+                              
+                              // Regular inline code (short)
+                              return (
                                 <code 
                                   className={className} 
                                   style={{ wordBreak: 'break-all', overflowWrap: 'anywhere' }}
@@ -824,7 +963,7 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
                                 >
                                   {children}
                                 </code>
-                              )
+                              );
                             }
                           }}
                         >
@@ -1089,13 +1228,13 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
         </Box>
       )}      {/* Input - Always at the bottom with proper spacing */}
       <Box sx={{ 
-        p: 4, 
-        pb: 15,  // Tripled bottom padding for maximum visibility
+        p: 3, 
+        pb: 3,  // Consistent padding for better appearance
         borderTop: 1, 
         borderColor: 'divider', 
         flexShrink: 0, 
         backgroundColor: 'background.paper',
-        minHeight: 200  // Significantly increased minimum height for input area
+        minHeight: 80  // Reduced for more efficient use of space
       }}>
         <Box display="flex" gap={1} alignItems="flex-start">
           <TextField

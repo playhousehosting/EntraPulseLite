@@ -879,17 +879,18 @@ class EntraPulseLiteApp {
         console.error('Get photo cache stats failed:', error);
         return null;
       }
-    });
-
-    // LLM handlers
-    ipcMain.handle('llm:chat', async (event, messages: any) => {
+    });    // LLM handlers
+    ipcMain.handle('llm:chat', async (event, messages: any, sessionId?: string) => {
       try {
         // Ensure Lokka MCP server is running before chat
         // This handles the case where the user has authenticated but server isn't started
         await this.ensureLokkaMCPServerRunning();
         
-        // Now proceed with enhanced chat
-        return await this.llmService.enhancedChat(messages);
+        // Generate session ID if not provided (use webContents ID for session consistency)
+        const effectiveSessionId = sessionId || `session-${event.sender.id}-${Date.now()}`;
+        
+        // Now proceed with enhanced chat with conversation context
+        return await this.llmService.enhancedChat(messages, effectiveSessionId);
       } catch (error) {
         console.error('LLM chat failed:', error);
         throw error;

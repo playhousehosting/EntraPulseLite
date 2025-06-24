@@ -13,6 +13,8 @@ EntraPulse Lite is built as a modern Electron desktop application that bridges n
 │  │   Chat Interface │  │ Settings Dialog │  │ User Profile    │                 │
 │  │   - Message UI   │  │ - LLM Config   │  │ - Auth Status   │                 │
 │  │   - Trace View   │  │ - Provider Mgmt │  │ - Permissions   │                 │
+│  │   - Copy Code    │  │ - Context Mgmt  │  │ - Session Info  │                 │
+│  │   - New Chat     │  │                │  │                 │                 │
 │  └─────────────────┘  └─────────────────┘  └─────────────────┘                 │
 └─────────────────────────────────────────────────────────────────────────────────┘
                                     │ IPC Communication
@@ -284,7 +286,9 @@ App.tsx
 │   └── ChatProvider
 │       ├── ChatComponent
 │       │   ├── MessageList
+│       │   │   └── EnhancedCodeBlocks (with copy buttons)
 │       │   ├── MessageInput
+│       │   ├── ConversationControls (new chat button)
 │       │   └── TraceVisualization
 │       ├── SettingsDialog
 │       │   ├── LLMConfigCard
@@ -297,9 +301,10 @@ App.tsx
 
 #### State Management
 - **React Context**: Authentication state
-- **Local State**: Component-specific state
+- **Local State**: Component-specific state (copy status, session IDs)
 - **Electron Store**: Persistent configuration
 - **IPC Communication**: Main-renderer data flow
+- **Session Management**: Conversation context tracking
 
 ## 🔄 Data Flow Architecture
 

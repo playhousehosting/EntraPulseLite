@@ -54,7 +54,8 @@ EntraPulse Lite is built with modern TypeScript, Electron, and React technologie
 #### 4. UI Layer
 - **React Components**: Modern functional components with hooks
 - **Material-UI**: Consistent design system
-- **Chat Interface**: Real-time messaging with LLMs
+- **Chat Interface**: Real-time messaging with LLMs, code copy functionality, and conversation management
+- **Enhanced UX**: Copy code blocks, start new conversations, session context tracking
 - **Settings Management**: Multi-provider configuration
 
 ## 🛠️ Development Setup
@@ -108,6 +109,9 @@ src/
 ├── renderer/                  # Renderer process (UI)
 │   ├── components/           # React components
 │   │   ├── chat/            # Chat interface components
+│   │   │   ├── ChatComponent.tsx    # Main chat interface with copy/clear features
+│   │   │   ├── MessageList.tsx      # Message display with code blocks
+│   │   │   └── CodeBlock.tsx        # Enhanced code blocks with copy buttons
 │   │   ├── auth/            # Authentication components
 │   │   ├── settings/        # Settings dialog components
 │   │   └── common/          # Reusable UI components

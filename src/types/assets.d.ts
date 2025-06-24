@@ -72,7 +72,7 @@ interface Window {
       getPhotoCacheStats: () => Promise<{ size: number; maxSize: number; entries: Array<{ userId: string; hasPhoto: boolean; age: number }> } | null>;
     };
     llm: {
-      chat: (messages: any[]) => Promise<any>;
+      chat: (messages: any[], sessionId?: string) => Promise<any>;
       isAvailable: () => Promise<boolean>;
       testConnection: (config: any) => Promise<any>;
       getAvailableModels: (config: any) => Promise<string[]>;

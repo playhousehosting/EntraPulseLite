@@ -8,6 +8,7 @@ import { MCPAuthService } from '../mcp/auth/MCPAuthService';
 import { MCPServerConfig } from '../mcp/types';
 import { AuthService } from '../auth/AuthService';
 import { UnifiedLLMService } from './UnifiedLLMService';
+import { conversationContextManager, ConversationContextManager } from '../shared/ConversationContextManager';
 
 export interface QueryAnalysis {
   needsFetchMcp: boolean;
@@ -87,21 +88,28 @@ export class EnhancedLLMService {
     // Initialize UnifiedLLMService with MCP client for enhanced model discovery
     this.unifiedLLM = new UnifiedLLMService(config, this.mcpClient);
   }
-
   /**
-   * Enhanced chat method that uses MCP tools intelligently
+   * Enhanced chat method that uses MCP tools intelligently with conversation context
    */
-  async enhancedChat(messages: ChatMessage[]): Promise<EnhancedLLMResponse> {
+  async enhancedChat(messages: ChatMessage[], sessionId?: string): Promise<EnhancedLLMResponse> {
     const startTime = Date.now();
     const trace: string[] = [];
     const errors: string[] = [];
 
     try {
-      // Step 1: Analyze the user query
-      trace.push('Starting query analysis');
+      // Step 1: Extract user query and setup context
       const userQuery = messages[messages.length - 1]?.content || '';
-      const analysis = await this.analyzeQuery(userQuery);
-      trace.push(`Query analysis completed: ${analysis.reasoning}`);      // Step 2: MCP servers are automatically initialized in constructor
+      const effectiveSessionId = sessionId || `session-${Date.now()}`;
+      
+      trace.push('Starting enhanced chat with conversation context');
+      
+      // Step 2: Get conversation context for better understanding
+      const conversationContext = conversationContextManager.getFormattedContext(effectiveSessionId, userQuery);
+      trace.push(`Retrieved conversation context for session: ${effectiveSessionId}`);
+      
+      // Step 3: Analyze the query with conversation context
+      const analysis = await this.analyzeQuery(userQuery, conversationContext);
+      trace.push(`Query analysis completed: ${analysis.reasoning}`);// Step 2: MCP servers are automatically initialized in constructor
       trace.push('MCP servers ready');      // Step 3: Execute MCP operations based on analysis
       const mcpResults: { fetchResult?: any; lokkaResult?: any; microsoftDocsResult?: any } = {};      // Microsoft Docs MCP for documentation (preferred)
       if (analysis.needsMicrosoftDocsMcp) {
@@ -204,12 +212,20 @@ export class EnhancedLLMService {
           errors.push(errorMsg);
           trace.push(errorMsg);
         }
-      }
-
-      // Step 4: Generate final response using LLM with MCP results
+      }      // Step 4: Generate final response using LLM with MCP results
       trace.push('Generating final response with LLM');
       const finalResponse = await this.generateFinalResponse(userQuery, analysis, mcpResults);
       trace.push('Final response generated');
+
+      // Step 5: Save conversation turn for context
+      conversationContextManager.addTurn(
+        effectiveSessionId,
+        userQuery,
+        finalResponse,
+        mcpResults,
+        analysis
+      );
+      trace.push(`Conversation turn saved for session: ${effectiveSessionId}`);
 
       return {
         analysis,
@@ -248,16 +264,19 @@ export class EnhancedLLMService {
       };
     }
   }
-
   /**
-   * Analyze the user query to determine what MCP tools are needed
-   */  private async analyzeQuery(query: string): Promise<QueryAnalysis> {    const systemPrompt = `You are an expert analyzer for Microsoft Graph API queries. Analyze the user's query and determine:
+   * Analyze the user query to determine what MCP tools are needed with conversation context
+   */
+  private async analyzeQuery(query: string, conversationContext?: string): Promise<QueryAnalysis> {
+    const systemPrompt = `You are an expert analyzer for Microsoft Graph API queries. Analyze the user's query and determine:
 
 1. Does the query need Microsoft/Azure/Graph/Entra documentation? (Microsoft Docs MCP - DEFAULT for Microsoft content)
 2. Does the query need general web search for non-Microsoft content? (Fetch MCP - only for non-Microsoft searches)
 3. Does the query need to access Microsoft Graph data? (Lokka MCP) 
 4. What specific Graph endpoint should be called?
 5. What parameters should be used?
+
+${conversationContext ? `\n## CONVERSATION CONTEXT:\n${conversationContext}\n\nIMPORTANT: Consider the conversation history when analyzing this query. Follow-up questions should be understood in the context of previous exchanges.\n` : ''}
 
 MICROSOFT DOCS MCP (Priority #1) - Use for ANY Microsoft-related content:
 - "What permissions does User.Read give me?" -> Microsoft Docs MCP

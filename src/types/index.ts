@@ -145,12 +145,14 @@ export interface ElectronAPI {
     clearPhotoCache: () => Promise<{ success: boolean; error?: string }>;
     clearUserPhotoCache: (userId: string) => Promise<{ success: boolean; error?: string }>;
     getPhotoCacheStats: () => Promise<{ size: number; maxSize: number; entries: Array<{ userId: string; hasPhoto: boolean; age: number }> } | null>;
-  };llm: {
-    chat: (messages: ChatMessage[]) => Promise<string>;
+  };  llm: {
+    chat: (messages: ChatMessage[], sessionId?: string) => Promise<string>;
     isAvailable: () => Promise<boolean>;
     testConnection: (config: LLMConfig) => Promise<boolean>;
     getAvailableModels: (config: LLMConfig) => Promise<string[]>;
-  };  mcp: {
+    testProviderConnection: (provider: string, config: any) => Promise<any>;
+    getProviderModels: (provider: string, config: any) => Promise<string[]>;
+  };mcp: {
     call: (server: string, toolName: string, arguments_: any) => Promise<any>;
     listServers: () => Promise<MCPServerConfig[]>;
     restartLokkaMCPServer: () => Promise<void>;

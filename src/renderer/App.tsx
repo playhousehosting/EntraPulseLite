@@ -35,7 +35,6 @@ const AppContent: React.FC<AppContentProps> = ({ settingsOpen, setSettingsOpen }
 
   // Access LLM status context
   const { forceCheck } = useLLMStatus();
-
   // Create dynamic theme based on mode
   const theme = createTheme({
     palette: {
@@ -49,12 +48,57 @@ const AppContent: React.FC<AppContentProps> = ({ settingsOpen, setSettingsOpen }
       background: {
         default: darkMode ? '#1e1e1e' : '#ffffff',
         paper: darkMode ? '#2d2d30' : '#f5f5f5',
-      },
+      },      // Add custom colors for better dark mode contrast
+      ...(darkMode && {
+        text: {
+          primary: '#ffffff',
+          secondary: '#b3b3b3',
+        },
+        info: {
+          main: '#87ceeb', // Light sky blue for better contrast in dark mode
+        },
+      }),
     },
     typography: {
       fontFamily: 'Segoe UI, system-ui, sans-serif',
     },
-  });  useEffect(() => {
+    components: {      // Override Material-UI link styles
+      MuiLink: {
+        styleOverrides: {
+          root: {
+            color: darkMode ? '#87ceeb' : '#1976d2',
+            textDecoration: 'none',
+            '&:hover': {
+              textDecoration: 'underline',
+              color: darkMode ? '#add8e6' : '#1565c0', // Lighter on hover
+            },
+            '&:visited': {
+              color: darkMode ? '#dda0dd' : '#7b1fa2', // Plum for visited links in dark mode
+            },
+          },
+        },
+      },      // Override any anchor tags
+      MuiTypography: {
+        styleOverrides: {
+          root: {
+            '& a': {
+              color: darkMode ? '#87ceeb' : '#1976d2',
+              textDecoration: 'none',
+              '&:hover': {
+                textDecoration: 'underline',
+                color: darkMode ? '#add8e6' : '#1565c0',
+              },
+              '&:visited': {
+                color: darkMode ? '#dda0dd' : '#7b1fa2',
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  useEffect(() => {
     // Check authentication status on app load
     checkAuthStatus();
     // Load saved LLM configuration

@@ -13,7 +13,8 @@ A free community desktop application that provides natural language querying of 
   - Lokka MCP using the official @merill/lokka package for Microsoft Graph API access
   - Microsoft Docs MCP using the official MicrosoftDocs/MCP package for Microsoft Learn documentation and official Microsoft documentation
   - Fetch MCP for general web searches and documentation retrieval
-- **Chat Interface**: Modern UI with trace visualization and permission management
+- **Chat Interface**: Modern UI with trace visualization, permission management, code copy functionality, and conversation context management
+- **Enhanced User Experience**: Copy code blocks with one click, start new conversations to clear context
 - **Free Community Tool**: No App Registration required for basic usage
 
 ## 🏗️ Architecture
@@ -144,11 +145,18 @@ Ask questions in plain English:
 - "List groups with external members"
 - "What permissions does this application have?"
 
+**Enhanced Chat Experience:**
+- **Copy Code Blocks**: One-click copying of code examples and scripts with visual feedback
+- **Conversation Management**: Start new conversations to clear context and begin fresh interactions
+- **Session Tracking**: Maintains conversation context for follow-up questions until manually cleared
+
 ## 📚 Documentation
 
 - [Installation & Setup](docs/INSTALLATION.md)
 - [Development Guide](docs/DEVELOPMENT.md)
 - [Architecture Overview](docs/ARCHITECTURE.md)
+- [UI Enhancements](docs/UI-ENHANCEMENTS.md)
+- [Configuration System](docs/CONFIGURATION.md)
 - [Privacy Policy](docs/PRIVACY-POLICY.md)
 - [Troubleshooting](docs/TROUBLESHOOTING.md)
 - [Contributing](docs/CONTRIBUTING.md)
