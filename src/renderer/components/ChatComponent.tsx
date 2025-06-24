@@ -46,6 +46,7 @@ import { AppIcon } from './AppIcon';
 import { UserProfileAvatar } from './UserProfileAvatar';
 import { UserProfileDropdown } from './UserProfileDropdown';
 import { useLLMStatus } from '../context/LLMStatusContext';
+import { eventManager } from '../../shared/EventManager';
 
 interface ChatComponentProps {}
 
@@ -73,8 +74,7 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
   const [sessionId, setSessionId] = useState<string>(() => `session-${Date.now()}`);
   useEffect(() => {
     initializeApp();
-  }, []);
-  // Listen for default cloud provider changes
+  }, []);  // Listen for default cloud provider changes
   useEffect(() => {
     const handleDefaultProviderChange = (event: any, data: { provider: string; model: string }) => {
       console.log('🔄 Default cloud provider changed via IPC:', data.provider, 'Model:', data.model);
@@ -82,18 +82,21 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
       setCurrentModel(data.model);
     };
 
-    // Add the IPC listener using the exposed API
+    // Add the IPC listener using EventManager
     const electronAPI = window.electronAPI as any;
     if (electronAPI?.on) {
-      electronAPI.on('config:defaultCloudProviderChanged', handleDefaultProviderChange);
+      eventManager.addEventListener(
+        'config:defaultCloudProviderChanged', 
+        handleDefaultProviderChange, 
+        'ChatComponent',
+        electronAPI
+      );
+      
+      // Cleanup function to remove the listener
+      return () => {
+        eventManager.removeEventListener('config:defaultCloudProviderChanged', 'ChatComponent', electronAPI);
+      };
     }
-
-    // Cleanup function to remove the listener
-    return () => {
-      if (electronAPI?.removeListener) {
-        electronAPI.removeListener('config:defaultCloudProviderChanged', handleDefaultProviderChange);
-      }
-    };
   }, []);
 
   // We don't need this useEffect anymore as the UserProfileAvatar component handles photo loading
@@ -625,17 +628,16 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
       </Box>
     );
   }  return (
-    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {/* Header */}<Box
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>      {/* Header */}      <Box
         sx={{
-          p: 2,
+          p: 1, // Further reduced for more compact header
           borderBottom: 1,
           borderColor: 'divider',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
           flexShrink: 0,
-        }}      >        <Box display="flex" alignItems="center" gap={2}>
+        }}><Box display="flex" alignItems="center" gap={2}>
           {/* Show Microsoft Graph connection status and tenant info */}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <Typography variant="body2" color="textSecondary">
@@ -707,10 +709,9 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
           </Tooltip>
         </Box>
       </Box>      {/* Messages */}
-      <Box sx={{ flex: 1, overflow: 'auto', p: 2, minHeight: 0 }}>
-        <List sx={{ width: '100%', maxWidth: '100%' }}>
-          {messages.map((message) => (
-            <ListItem key={message.id} alignItems="flex-start" sx={{ mb: 2, width: '100%', maxWidth: '100%' }}><Box sx={{ mr: 2, mt: 0.5 }}>
+      <Box sx={{ flex: 1, overflow: 'auto', p: 1, minHeight: 0 }}>
+        <List sx={{ width: '100%', maxWidth: '100%' }}>          {messages.map((message) => (
+            <ListItem key={message.id} alignItems="flex-start" sx={{ mb: 0.5, width: '100%', maxWidth: '100%' }}><Box sx={{ mr: 2, mt: 0.5 }}>
                 {message.role === 'user' ? 
                   (user ? 
                     <UserProfileAvatar user={user} size={40} showName={false} /> : 
@@ -774,31 +775,45 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
                             border: '1px solid rgba(211, 47, 47, 0.1)',
                             borderRadius: '4px',
                             padding: '8px',
-                          }),
-                          '& h1, & h2, & h3, & h4, & h5, & h6': {
-                            marginTop: '1rem',
-                            marginBottom: '0.5rem',
+                          }),                          '& h1, & h2, & h3, & h4, & h5, & h6': {
+                            marginTop: '0.3rem',
+                            marginBottom: '0.1rem',
                             fontWeight: 'bold',
                           },
                           '& h1': { fontSize: '1.5rem' },
                           '& h2': { fontSize: '1.3rem' },
-                          '& h3': { fontSize: '1.1rem' },
-                          '& p': {
-                            marginBottom: '0.75rem',
-                            lineHeight: 1.6,
+                          '& h3': { fontSize: '1.1rem' },                          '& p': {
+                            marginBottom: '0.1rem',
+                            lineHeight: 1.4,
                           },                          '& ul, & ol': {
-                            marginBottom: '0.5rem',
-                            paddingLeft: '1.2rem',
+                            marginBottom: '0.1rem',
+                            paddingLeft: '0.8rem', // Reduced padding for better alignment
                             marginTop: '0rem',
+                            listStylePosition: 'outside', // Ensure bullets are positioned outside
+                          },'& ol': {
+                            listStyleType: 'decimal',
+                            listStylePosition: 'inside', // Changed to inside for better alignment control
+                            paddingLeft: '0.5rem', // Reduced since we're using inside positioning
                           },
-                          '& li': {
-                            marginBottom: '0.05rem', // Minimal spacing between list items
-                            lineHeight: '1.4', // Tighter line height to reduce internal spacing
+                          '& ol ol': {
+                            listStyleType: 'lower-alpha',
+                            paddingLeft: '1rem',
                           },
-                          '& li > ul, & li > ol': {
-                            marginTop: '0.05rem', // Minimal gap after parent list item
-                            marginBottom: '0.05rem',
-                            paddingLeft: '1rem', // Reduced indentation for nested lists
+                          '& ol ol ol': {
+                            listStyleType: 'lower-roman',
+                          },                          '& li': {
+                            marginBottom: '0.01rem', // Ultra minimal spacing between list items
+                            lineHeight: '1.4', // Tighter line height for readability
+                          },'& ol li': {
+                            listStyle: 'decimal inside', // Changed to inside positioning
+                            marginLeft: '0',
+                            paddingLeft: '0.3rem', // Small padding for spacing after number
+                            lineHeight: '1.5', // Back to 1.5 for proper alignment
+                            textIndent: '0', // Ensure no text indentation conflicts
+                          },                          '& li > ul, & li > ol': {
+                            marginTop: '0.01rem', // Ultra minimal gap after parent list item
+                            marginBottom: '0.01rem',
+                            paddingLeft: '0.8rem', // Consistent indentation for nested lists
                           },
                           '& li > p': {
                             margin: '0', // Remove paragraph margins within list items
@@ -815,13 +830,12 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
                             fontFamily: 'Monaco, Menlo, "Ubuntu Mono", monospace',
                             overflowWrap: 'anywhere', // Add text wrapping for code
                             maxWidth: '100%', // Ensure code doesn't overflow
-                          },
-                          '& pre': {
+                          },                          '& pre': {
                             backgroundColor: 'rgba(175, 184, 193, 0.1)',
                             padding: '1rem',
                             borderRadius: '0.5rem',
                             overflow: 'auto',
-                            marginBottom: '0.75rem',
+                            marginBottom: '0.2rem',
                             maxWidth: '100%', // Ensure pre doesn't overflow
                           },
                           '& pre code': {
@@ -832,13 +846,13 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
                             borderLeft: (theme) => `4px solid ${theme.palette.mode === 'dark' ? '#87ceeb' : '#1976d2'}`,
                             paddingLeft: '1rem',
                             marginLeft: 0,
-                            marginBottom: '0.75rem',
+                            marginBottom: '0.2rem',
                             fontStyle: 'italic',
                           },
                           '& table': {
                             borderCollapse: 'collapse',
                             width: '100%',
-                            marginBottom: '0.75rem',
+                            marginBottom: '0.2rem',
                           },
                           '& th, & td': {
                             border: '1px solid rgba(175, 184, 193, 0.3)',
@@ -857,8 +871,35 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
                           },
                         }}
                       >                        <ReactMarkdown 
-                          remarkPlugins={[remarkGfm]}
-                          components={{
+                          remarkPlugins={[remarkGfm]}                          components={{                            // Override link component to open in external browser
+                            a: ({node, href, children, ...props}: {
+                              node?: any;
+                              href?: string;
+                              children?: React.ReactNode;
+                              [key: string]: any;
+                            }) => {                              const handleLinkClick = (e: React.MouseEvent) => {
+                                e.preventDefault();
+                                if (href) {
+                                  // Use Electron's shell to open link in external browser
+                                  window.electron?.openExternal(href);
+                                }
+                              };
+
+                              return (
+                                <a
+                                  href={href}
+                                  onClick={handleLinkClick}
+                                  style={{
+                                    color: 'inherit',
+                                    textDecoration: 'underline',
+                                    cursor: 'pointer'
+                                  }}
+                                  {...props}
+                                >
+                                  {children}
+                                </a>
+                              );
+                            },
                             // Override code component to add copy functionality
                             code: ({node, inline, className, children, ...props}: {
                               node?: any;
@@ -1228,13 +1269,13 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
         </Box>
       )}      {/* Input - Always at the bottom with proper spacing */}
       <Box sx={{ 
-        p: 3, 
-        pb: 3,  // Consistent padding for better appearance
+        p: 1.5, // Further reduced for more compact input area
+        pb: 1.5,  // Consistent padding for better appearance
         borderTop: 1, 
         borderColor: 'divider', 
         flexShrink: 0, 
         backgroundColor: 'background.paper',
-        minHeight: 80  // Reduced for more efficient use of space
+        minHeight: 65  // Slightly reduced for more space efficiency
       }}>
         <Box display="flex" gap={1} alignItems="flex-start">
           <TextField
@@ -1250,20 +1291,18 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
             disabled={isLoading}
             variant="outlined"
             size="medium"  // Changed from small to medium for better visibility
-            helperText={!chatAvailable ? "Configure Ollama, LM Studio, or cloud LLM providers to enable chat functionality" : ""}
-            sx={{
+            helperText={!chatAvailable ? "Configure Ollama, LM Studio, or cloud LLM providers to enable chat functionality" : ""}            sx={{
               '& .MuiOutlinedInput-root': {
-                minHeight: 48  // Ensure the input field has good height
+                minHeight: 44  // Reduced to match the more compact button
               }
             }}
           />
           <Button
             variant="contained"
             onClick={handleSendMessage}
-            disabled={!inputMessage.trim() || isLoading || !chatAvailable}
-            sx={{ 
+            disabled={!inputMessage.trim() || isLoading || !chatAvailable}            sx={{ 
               minWidth: 60,
-              height: 48,  // Match the input field height
+              height: 44,  // Slightly reduced to match more compact design
               alignSelf: 'flex-start'
             }}
           >

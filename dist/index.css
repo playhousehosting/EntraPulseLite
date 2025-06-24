@@ -33,37 +33,37 @@ body {
 .markdown-content h1 {
   font-size: 1.5rem;
   font-weight: 600;
-  margin: 1rem 0 0.5rem 0;
+  margin: 0.2rem 0 0.1rem 0;
   color: #1976d2;
   border-bottom: 2px solid #e3f2fd;
-  padding-bottom: 0.3rem;
+  padding-bottom: 0.1rem;
 }
 
 .markdown-content h2 {
   font-size: 1.3rem;
   font-weight: 600;
-  margin: 1.2rem 0 0.5rem 0;
+  margin: 0.3rem 0 0.1rem 0;
   color: #1976d2;
   border-bottom: 1px solid #e3f2fd;
-  padding-bottom: 0.2rem;
+  padding-bottom: 0.05rem;
 }
 
 .markdown-content h3 {
   font-size: 1.1rem;
   font-weight: 600;
-  margin: 1rem 0 0.4rem 0;
+  margin: 0.25rem 0 0.1rem 0;
   color: #1976d2;
 }
 
 .markdown-content h4, .markdown-content h5, .markdown-content h6 {
   font-size: 1rem;
   font-weight: 600;
-  margin: 0.8rem 0 0.3rem 0;
+  margin: 0.2rem 0 0.1rem 0;
   color: #1976d2;
 }
 
 .markdown-content p {
-  margin: 0.5rem 0;
+  margin: 0.1rem 0;
 }
 
 .markdown-content strong {
@@ -90,7 +90,7 @@ body {
   border: 1px solid rgba(25, 118, 210, 0.2);
   border-radius: 6px;
   padding: 1rem;
-  margin: 1rem 0;
+  margin: 0.2rem 0;
   overflow-x: auto;
 }
 
@@ -104,7 +104,7 @@ body {
 .markdown-content blockquote {
   border-left: 4px solid #1976d2;
   background-color: rgba(25, 118, 210, 0.03);
-  margin: 1rem 0;
+  margin: 0.2rem 0;
   padding: 0.5rem 1rem;
   border-radius: 0 4px 4px 0;
   font-style: italic;
@@ -115,24 +115,35 @@ body {
 }
 
 .markdown-content ul, .markdown-content ol {
-  margin: 0.3rem 0;
-  padding-left: 1.2rem;
+  margin: 0.1rem 0;
+  padding-left: 0.8rem;
+  list-style-position: outside;
 }
 
 .markdown-content li {
-  margin: 0.05rem 0;
-  line-height: 1.4;
+  margin: 0.02rem 0;
+  line-height: 1.4; /* Tighter line height for all list items */
 }
 
-.markdown-content li p {
+.markdown-content li > ul, .markdown-content li > ol {
+  margin-top: 0.01rem;
+  margin-bottom: 0.01rem;
+  padding-left: 0.8rem;
+}
+
+.markdown-content li > p {
   margin: 0;
+  display: inline;
+}
+
+.markdown-content li p:first-child {
   display: inline;
 }
 
 .markdown-content table {
   width: 100%;
   border-collapse: collapse;
-  margin: 1rem 0;
+  margin: 0.2rem 0;
   font-size: 0.9rem;
 }
 
@@ -172,4 +183,26 @@ body {
 
 .markdown-content a:hover {
   border-bottom: 1px solid #1976d2;
+}
+
+.markdown-content ol {
+  list-style-type: decimal;
+  list-style-position: inside; /* Changed to inside for better alignment control */
+  padding-left: 0.5rem; /* Reduced since we're using inside positioning */
+}
+
+.markdown-content ol li {
+  margin-left: 0;
+  padding-left: 0.3rem; /* Small padding for spacing after number */
+  line-height: 1.5; /* Back to 1.5 for proper alignment */
+  text-indent: 0; /* Ensure no text indentation conflicts */
+}
+
+.markdown-content ol ol {
+  list-style-type: lower-alpha;
+  padding-left: 1rem;
+}
+
+.markdown-content ol ol ol {
+  list-style-type: lower-roman;
 }

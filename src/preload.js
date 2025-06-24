@@ -77,11 +77,37 @@ contextBridge.exposeInMainWorld('electronAPI', {
     clearEntraConfig: () => ipcRenderer.invoke('config:clearEntraConfig'),
   },
 
-  // Event listeners for real-time updates
+  // Event listeners for real-time updates with better memory management
   on: (channel, callback) => {
     const validChannels = ['auth-status-changed', 'chat-message', 'graph-api-call', 'config:defaultCloudProviderChanged', 'auth:configurationAvailable', 'llm:forceStatusRefresh'];
     if (validChannels.includes(channel)) {
+      // Get current listener count BEFORE adding
+      const beforeCount = ipcRenderer.listenerCount(channel);
+      
+      // Remove any existing listeners for this callback to prevent duplicates
+      ipcRenderer.removeListener(channel, callback);
+      
+      // If we have too many listeners, do aggressive cleanup
+      if (beforeCount > 25) {
+        console.warn(`Too many listeners for ${channel} (${beforeCount}). Performing aggressive cleanup...`);
+        // Remove all listeners and let components re-add as needed
+        ipcRenderer.removeAllListeners(channel);
+      }
+      
+      // Add the new listener
       ipcRenderer.on(channel, callback);
+      
+      const afterCount = ipcRenderer.listenerCount(channel);
+      const currentMaxListeners = ipcRenderer.getMaxListeners();
+      
+      // Dynamically adjust max listeners based on current count
+      if (afterCount >= currentMaxListeners - 2) {
+        const newMaxListeners = Math.min(currentMaxListeners + 5, 50); // Cap at 50 listeners
+        ipcRenderer.setMaxListeners(newMaxListeners);
+        console.log(`Increased max listeners for channel ${channel} to ${newMaxListeners}. Current: ${afterCount}`);
+      }
+      
+      console.log(`Added listener for ${channel}. Before: ${beforeCount}, After: ${afterCount}`);
     }
   },
 
@@ -99,5 +125,33 @@ contextBridge.exposeInMainWorld('electronAPI', {
     if (validChannels.includes(channel)) {
       ipcRenderer.removeAllListeners(channel);
     }
+  },
+
+  // Diagnostic method to check listener counts
+  getListenerDiagnostics: () => {
+    const validChannels = ['auth-status-changed', 'chat-message', 'graph-api-call', 'config:defaultCloudProviderChanged', 'auth:configurationAvailable', 'llm:forceStatusRefresh'];
+    const diagnostics = {};
+    
+    validChannels.forEach(channel => {
+      diagnostics[channel] = {
+        count: ipcRenderer.listenerCount(channel),
+        maxListeners: ipcRenderer.getMaxListeners()
+      };
+    });
+    
+    return diagnostics;
+  },
+
+  // Force cleanup of listeners (aggressive cleanup)
+  forceCleanupListeners: (channel) => {
+    const validChannels = ['auth-status-changed', 'chat-message', 'graph-api-call', 'config:defaultCloudProviderChanged', 'auth:configurationAvailable', 'llm:forceStatusRefresh'];
+    if (validChannels.includes(channel)) {
+      const beforeCount = ipcRenderer.listenerCount(channel);
+      ipcRenderer.removeAllListeners(channel);
+      const afterCount = ipcRenderer.listenerCount(channel);
+      console.log(`Force cleaned ${channel}: ${beforeCount} -> ${afterCount} listeners`);
+      return { before: beforeCount, after: afterCount };
+    }
+    return null;
   },
 });

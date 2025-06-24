@@ -43,7 +43,8 @@ export class EnhancedLLMService {
   private mcpClient: MCPClient;
   private authService: AuthService;
   private mcpAuthService: MCPAuthService;
-  private unifiedLLM: UnifiedLLMService;  constructor(config: LLMConfig, authService: AuthService, mcpClient?: MCPClient) {
+  private unifiedLLM: UnifiedLLMService;
+  private isDisposed: boolean = false;constructor(config: LLMConfig, authService: AuthService, mcpClient?: MCPClient) {
     this.config = config;
     this.authService = authService;
     this.mcpAuthService = new MCPAuthService(authService);
@@ -87,11 +88,15 @@ export class EnhancedLLMService {
     
     // Initialize UnifiedLLMService with MCP client for enhanced model discovery
     this.unifiedLLM = new UnifiedLLMService(config, this.mcpClient);
-  }
-  /**
+  }  /**
    * Enhanced chat method that uses MCP tools intelligently with conversation context
    */
   async enhancedChat(messages: ChatMessage[], sessionId?: string): Promise<EnhancedLLMResponse> {
+    // Check if service has been disposed
+    if (this.isDisposed) {
+      throw new Error('EnhancedLLMService has been disposed and cannot be used');
+    }
+
     const startTime = Date.now();
     const trace: string[] = [];
     const errors: string[] = [];
@@ -1153,5 +1158,44 @@ For specific API endpoints and detailed documentation, please visit the official
     if (this.unifiedLLM && this.unifiedLLM.updateConfig) {
       this.unifiedLLM.updateConfig(newConfig);
     }
+  }
+
+  /**
+   * Dispose of the service and clean up resources to prevent memory leaks
+   */
+  dispose(): void {
+    if (this.isDisposed) {
+      return;
+    }
+
+    console.log('🧹 EnhancedLLMService: Disposing resources...');
+    
+    try {
+      // Clean up conversation context manager
+      if (conversationContextManager) {
+        conversationContextManager.cleanup(1); // Clean up conversations older than 1 hour
+      }
+
+      // Stop MCP client servers
+      if (this.mcpClient) {
+        this.mcpClient.stopAllServers().catch(error => {
+          console.warn('Error stopping MCP servers during disposal:', error);
+        });
+      }
+
+      // Mark as disposed
+      this.isDisposed = true;
+      console.log('✅ EnhancedLLMService: Resources disposed successfully');
+      
+    } catch (error) {
+      console.error('❌ EnhancedLLMService: Error during disposal:', error);
+    }
+  }
+
+  /**
+   * Check if the service has been disposed
+   */
+  isServiceDisposed(): boolean {
+    return this.isDisposed;
   }
 }

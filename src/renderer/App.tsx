@@ -1,5 +1,5 @@
 // Main App component for EntraPulse Lite
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Box, AppBar, Toolbar, Typography, IconButton, Switch, FormControlLabel, Tooltip } from '@mui/material';
 import { Settings as SettingsIcon, Brightness4, Brightness7, Info as InfoIcon } from '@mui/icons-material';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
@@ -11,6 +11,9 @@ import { AboutDialog } from './components/AboutDialog';
 import { LLMConfig } from '../types';
 import { VERSION } from '../shared/version';
 import { LLMStatusProvider, useLLMStatus } from './context/LLMStatusContext';
+import { eventManager } from '../shared/EventManager';
+import { useEventCleanup } from './hooks/useEventCleanup';
+import { setupEventDiagnostics } from './utils/eventDiagnostics';
 
 // Inner App component that uses LLM status context
 interface AppContentProps {
@@ -19,6 +22,9 @@ interface AppContentProps {
 }
 
 const AppContent: React.FC<AppContentProps> = ({ settingsOpen, setSettingsOpen }) => {
+  // Use event cleanup hook to prevent memory leaks
+  useEventCleanup(30); // Clean up every 30 minutes
+  
   const [darkMode, setDarkMode] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
@@ -35,6 +41,50 @@ const AppContent: React.FC<AppContentProps> = ({ settingsOpen, setSettingsOpen }
 
   // Access LLM status context
   const { forceCheck } = useLLMStatus();
+
+  // Refs to hold current state values for event handlers
+  const settingsOpenRef = useRef(settingsOpen);
+  const configReloadTimeoutRef = useRef(configReloadTimeout);
+  
+  // Update refs when state changes
+  useEffect(() => {
+    settingsOpenRef.current = settingsOpen;
+  }, [settingsOpen]);
+  
+  useEffect(() => {
+    configReloadTimeoutRef.current = configReloadTimeout;
+  }, [configReloadTimeout]);
+
+  // Stable callbacks that don't change between renders
+  const stableCheckAuthStatus = useCallback(async () => {
+    try {
+      const token = await window.electronAPI?.auth?.getToken();
+      setIsAuthenticated(!!token);
+    } catch (error) {
+      console.error('Error checking auth status:', error);
+      setIsAuthenticated(false);
+    }
+  }, []);
+
+  const stableLoadLLMConfig = useCallback(async () => {
+    try {
+      const savedConfig = await window.electronAPI?.config?.getLLMConfig();
+      if (savedConfig) {
+        setLlmConfig(savedConfig);
+      }
+    } catch (error) {
+      console.error('Error loading LLM config:', error);
+    }
+  }, []);
+
+  const stableForceCheck = useCallback(() => {
+    forceCheck();
+  }, [forceCheck]);
+
+  // Setup event diagnostics for development
+  useEffect(() => {
+    setupEventDiagnostics();
+  }, []);
   // Create dynamic theme based on mode
   const theme = createTheme({
     palette: {
@@ -100,78 +150,73 @@ const AppContent: React.FC<AppContentProps> = ({ settingsOpen, setSettingsOpen }
 
   useEffect(() => {
     // Check authentication status on app load
-    checkAuthStatus();
+    stableCheckAuthStatus();
     // Load saved LLM configuration
-    loadLLMConfig();    // Listen for authentication configuration availability
+    stableLoadLLMConfig();    // Listen for authentication configuration availability
     const handleConfigurationAvailable = (event: any, data: any) => {
-      console.log('🔄 [App.tsx] Configuration available - checking if settings dialog is open:', settingsOpen);
+      console.log('🔄 [App.tsx] Configuration available - checking if settings dialog is open:', settingsOpenRef.current);
       
       // If settings dialog is open, skip the configuration reload entirely to prevent interference
-      if (settingsOpen) {
+      if (settingsOpenRef.current) {
         console.log('🔄 [App.tsx] Settings dialog is open - skipping configuration reload to prevent form clearing');
         return;
       }
       
       // Clear any existing timeout
-      if (configReloadTimeout) {
-        clearTimeout(configReloadTimeout);
+      if (configReloadTimeoutRef.current) {
+        clearTimeout(configReloadTimeoutRef.current);
       }
       
       // Small delay to ensure stability
       const timeoutId = setTimeout(() => {
         console.log('🔄 [App.tsx] Executing configuration reload');
         // Reload configuration now that authentication is verified
-        loadLLMConfig();
+        stableLoadLLMConfig();
         // Also update authentication status
-        checkAuthStatus();
+        stableCheckAuthStatus();
         // Force LLM status check through the context
-        forceCheck();
+        stableForceCheck();
         setConfigReloadTimeout(null);
       }, 100);
       
       setConfigReloadTimeout(timeoutId);
-    };    // Listen for LLM status refresh requests (e.g., after MCP servers are ready)
+    };
+
+    // Listen for LLM status refresh requests (e.g., after MCP servers are ready)
     const handleLLMStatusRefresh = (event: any, data: any) => {
       console.log('🔄 [App.tsx] LLM status refresh requested from:', data?.source);
       // Force immediate LLM status check and config reload
-      forceCheck();
-      loadLLMConfig();
-    };
-
-    // Add the IPC listener using the exposed API
+      stableForceCheck();
+      stableLoadLLMConfig();
+    };    // Add the IPC listener using the exposed API with EventManager
     const electronAPI = window.electronAPI as any;
     if (electronAPI?.on) {
-      electronAPI.on('auth:configurationAvailable', handleConfigurationAvailable);
-      electronAPI.on('llm:forceStatusRefresh', handleLLMStatusRefresh);
-    }// Cleanup function to remove the listener
-    return () => {
-      if (configReloadTimeout) {
-        clearTimeout(configReloadTimeout);
-      }      if (electronAPI?.removeListener) {
-        electronAPI.removeListener('auth:configurationAvailable', handleConfigurationAvailable);
-        electronAPI.removeListener('llm:forceStatusRefresh', handleLLMStatusRefresh);
-      }
-    };
-  }, [forceCheck, settingsOpen, configReloadTimeout]);
-
-  const checkAuthStatus = async () => {
-    try {
-      const token = await window.electronAPI?.auth?.getToken();
-      setIsAuthenticated(!!token);
-    } catch (error) {
-      console.log('Not authenticated:', error);
-      setIsAuthenticated(false);
-    }
-  };  const loadLLMConfig = async () => {
-    try {
-      const savedConfig = await window.electronAPI?.config?.getLLMConfig();
-      if (savedConfig) {
-        setLlmConfig(savedConfig);
-        console.log('🔍 [App.tsx] LLM config updated:', savedConfig?.provider);
-      }    } catch (error) {
-      console.log('🔍 [App.tsx] No LLM config available:', error);
-    }
-  };
+      // Use EventManager for better memory management
+      eventManager.addEventListener(
+        'auth:configurationAvailable', 
+        handleConfigurationAvailable, 
+        'App.tsx-config',
+        electronAPI
+      );
+      
+      eventManager.addEventListener(
+        'llm:forceStatusRefresh', 
+        handleLLMStatusRefresh, 
+        'App.tsx-refresh',
+        electronAPI
+      );
+      
+      // Cleanup function to remove the listener
+      return () => {
+        if (configReloadTimeout) {
+          clearTimeout(configReloadTimeout);
+        }
+        
+        // Use EventManager for cleanup
+        eventManager.removeEventListener('auth:configurationAvailable', 'App.tsx-config', electronAPI);
+        eventManager.removeEventListener('llm:forceStatusRefresh', 'App.tsx-refresh', electronAPI);
+      };    }
+  }, []); // Remove dependencies to prevent re-running when state changes
 
   const handleThemeToggle = () => {
     setDarkMode(!darkMode);

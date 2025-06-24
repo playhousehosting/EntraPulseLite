@@ -434,8 +434,11 @@ class EntraPulseLiteApp {
       } else {
         console.warn('[Main] No LLM configuration available - neither stored config nor default cloud provider');
       }
-      
-      // Reinitialize LLM service
+        // Reinitialize LLM service
+      if (this.llmService && typeof this.llmService.dispose === 'function') {
+        this.llmService.dispose();
+        console.log('[Main] Disposed previous LLM service instance');
+      }
       this.llmService = new EnhancedLLMService(llmConfig, this.authService, this.mcpClient);
       
       console.log('[Main] Services reinitialized successfully');
@@ -478,11 +481,16 @@ class EntraPulseLiteApp {
       // Prevent default quit and perform cleanup only once
       if (!cleanupDone) {
         event.preventDefault();
-        
-        try {
+          try {
           // Unregister all global shortcuts
           globalShortcut.unregisterAll();
           console.log('Global shortcuts unregistered');
+          
+          // Dispose of LLM service to clean up resources
+          if (this.llmService && typeof this.llmService.dispose === 'function') {
+            this.llmService.dispose();
+            console.log('LLM service disposed');
+          }
           
           // Stop all MCP servers gracefully before quitting
           await this.mcpClient.stopAllServers();
@@ -1176,8 +1184,14 @@ class EntraPulseLiteApp {
           // DEBUG: Check config before LLM service creation
           const preInitConfig = this.configService.getLLMConfig();
           console.log('🔍 DEBUG: Config before LLM service creation - Azure OpenAI exists:', !!preInitConfig.cloudProviders?.['azure-openai']);
+            console.log('🔄 Reinitializing LLM with new default cloud provider:', defaultCloudProvider.provider, 'Model:', defaultCloudProvider.config.model);
           
-          console.log('🔄 Reinitializing LLM with new default cloud provider:', defaultCloudProvider.provider, 'Model:', defaultCloudProvider.config.model);
+          // Dispose of the previous LLM service instance to prevent memory leaks
+          if (this.llmService && typeof this.llmService.dispose === 'function') {
+            this.llmService.dispose();
+            console.log('🧹 Disposed previous LLM service instance before reinitializing');
+          }
+          
           this.llmService = new EnhancedLLMService(llmConfig, this.authService, this.mcpClient);
           
           // DEBUG: Check if config still exists immediately after LLM service creation
@@ -1371,12 +1385,19 @@ class EntraPulseLiteApp {
 
     // Shell handlers for external links
     ipcMain.handle('shell:openExternal', async (event, url) => {
-      try {
-        // Only allow specific URLs to be opened for security
+      try {        // Only allow specific URLs to be opened for security
         const allowedDomains = [
           'https://github.com', 
           'https://learn.microsoft.com',
-          'https://docs.microsoft.com'
+          'https://docs.microsoft.com',
+          'https://portal.azure.com',
+          'https://graph.microsoft.com',
+          'https://developer.microsoft.com',
+          'https://azure.microsoft.com',
+          'https://microsoft.com',
+          'https://www.microsoft.com',
+          'https://techcommunity.microsoft.com',
+          'https://aka.ms'
         ];
         
         if (allowedDomains.some(domain => url.startsWith(domain))) {

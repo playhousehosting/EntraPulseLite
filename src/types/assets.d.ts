@@ -46,6 +46,7 @@ declare module '*.ico' {
 interface Window {
   electron: {
     getAssetPath: (assetName: string) => string;
+    openExternal: (url: string) => Promise<boolean>;
   };
   electronAPI: {
     auth: {

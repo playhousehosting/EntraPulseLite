@@ -67,6 +67,7 @@ interface ElectronAPI {
 
 interface ElectronWindow {
   getAssetPath(assetName: string): Promise<string>;
+  openExternal(url: string): Promise<boolean>;
 }
 
 declare global {
