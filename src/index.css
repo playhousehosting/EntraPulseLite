@@ -116,28 +116,31 @@ body {
 
 .markdown-content ul, .markdown-content ol {
   margin: 0.1rem 0;
-  padding-left: 0.8rem;
+  padding-left: 1.5em; /* Increased padding for proper outside positioning */
   list-style-position: outside;
 }
 
 .markdown-content li {
-  margin: 0.02rem 0;
+  margin: 0; /* Remove margins that can interfere with alignment */
   line-height: 1.4; /* Tighter line height for all list items */
+  display: list-item; /* Ensure proper list item display */
+  text-align: left; /* Ensure left alignment */
 }
 
 .markdown-content li > ul, .markdown-content li > ol {
   margin-top: 0.01rem;
   margin-bottom: 0.01rem;
-  padding-left: 0.8rem;
+  padding-left: 1.5em; /* Consistent with parent list padding */
 }
 
 .markdown-content li > p {
   margin: 0;
-  display: inline;
+  display: block; /* Changed from inline to block for proper alignment */
 }
 
 .markdown-content li p:first-child {
-  display: inline;
+  display: block; /* Changed from inline to block for proper alignment */
+  margin-top: 0; /* Ensure no top margin on first paragraph */
 }
 
 .markdown-content table {
@@ -185,24 +188,29 @@ body {
   border-bottom: 1px solid #1976d2;
 }
 
-.markdown-content ol {
-  list-style-type: decimal;
-  list-style-position: inside; /* Changed to inside for better alignment control */
-  padding-left: 0.5rem; /* Reduced since we're using inside positioning */
-}
+/* Using general ul, ol rule for consistent styling */
 
 .markdown-content ol li {
-  margin-left: 0;
-  padding-left: 0.3rem; /* Small padding for spacing after number */
-  line-height: 1.5; /* Back to 1.5 for proper alignment */
+  margin: 0; /* Remove margin that interferes with alignment */
+  padding-left: 0; /* No extra padding needed with outside positioning */
+  line-height: 1.4; /* Consistent with general li rule */
   text-indent: 0; /* Ensure no text indentation conflicts */
+  display: list-item; /* Ensure proper list item behavior */
+  list-style-type: decimal; /* Explicitly set for top-level */
+  list-style-position: outside; /* Ensure outside positioning */
 }
 
 .markdown-content ol ol {
   list-style-type: lower-alpha;
-  padding-left: 1rem;
+  list-style-position: outside; /* Consistent positioning */
+  padding-left: 1.5em; /* Consistent with parent padding */
+  margin: 0.1rem 0; /* Reduced margin */
 }
 
 .markdown-content ol ol ol {
   list-style-type: lower-roman;
+  list-style-position: outside; /* Consistent positioning */
+  padding-left: 1.5em; /* Consistent padding */
 }
+
+/* Removed duplicate ol rules - using general rules above */

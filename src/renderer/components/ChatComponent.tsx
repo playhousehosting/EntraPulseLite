@@ -1277,7 +1277,7 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
         backgroundColor: 'background.paper',
         minHeight: 65  // Slightly reduced for more space efficiency
       }}>
-        <Box display="flex" gap={1} alignItems="flex-start">
+        <Box display="flex" gap={1} alignItems="center">
           <TextField
             fullWidth
             multiline
@@ -1303,7 +1303,7 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
             disabled={!inputMessage.trim() || isLoading || !chatAvailable}            sx={{ 
               minWidth: 60,
               height: 44,  // Slightly reduced to match more compact design
-              alignSelf: 'flex-start'
+              alignSelf: 'center'
             }}
           >
             <SendIcon />
