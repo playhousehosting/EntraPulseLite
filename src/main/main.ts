@@ -75,9 +75,68 @@ class EntraPulseLiteApp {
     const authMode = useAppCredentials ? 'client-credentials' : 'interactive';
     console.log(`[Main] Setting initial authentication mode: ${authMode} (preference: ${authPreference})`);
     this.configService.setAuthenticationContext(authMode);
-    
-    // Initialize configuration using stored config
+      // Initialize configuration using stored config
     const storedLLMConfig = this.configService.getLLMConfig();
+    const storedEntraConfig = this.configService.getEntraConfig();
+    
+    // Determine the client ID and prepare Lokka environment based on Enhanced Graph Access setting
+    let lokkaClientId = authConfig.clientId;
+    let lokkaEnv: Record<string, string>;
+    
+    // Check if Enhanced Graph Access is enabled and not in application credentials mode
+    if (storedEntraConfig?.useGraphPowerShell && authPreference !== 'application-credentials') {
+      console.log('🔧 Enhanced Graph Access mode detected during initialization');
+      lokkaClientId = '14d82eec-204b-4c2f-b7e8-296a70dab67e'; // Microsoft Graph PowerShell client ID
+      lokkaEnv = {
+        TENANT_ID: 'common', // Use 'common' for multi-tenant Enhanced Graph Access
+        CLIENT_ID: lokkaClientId
+      };
+      
+      // Try to get a PowerShell token for immediate use
+      try {        const graphPowerShellAuthConfig: AppConfig = {
+          auth: {
+            clientId: lokkaClientId,
+            tenantId: authConfig.tenantId,
+            scopes: [
+              'https://graph.microsoft.com/User.Read',
+              'https://graph.microsoft.com/Mail.Read',
+              'https://graph.microsoft.com/Mail.ReadWrite',
+              'https://graph.microsoft.com/Calendars.Read',
+              'https://graph.microsoft.com/Files.Read.All',
+              'https://graph.microsoft.com/Directory.Read.All'
+            ],
+            useClientCredentials: false
+          },
+          llm: storedLLMConfig, // Use existing LLM config
+          mcpServers: [], // Not needed for token acquisition
+          features: {
+            enablePremiumFeatures: false,
+            enableTelemetry: false,
+          }
+        };
+        
+        const tempAuthService = new AuthService(graphPowerShellAuthConfig);
+        const token = await tempAuthService.getToken();
+        
+        if (token && token.accessToken) {
+          console.log('🔐 Successfully obtained Enhanced Graph Access token during initialization');
+          lokkaEnv.ACCESS_TOKEN = token.accessToken;
+          lokkaEnv.USE_INTERACTIVE = 'false';
+        } else {
+          console.log('⚠️ Failed to get Enhanced Graph Access token during initialization, will use client token mode');
+          lokkaEnv.USE_CLIENT_TOKEN = 'true';
+        }
+      } catch (error) {
+        console.log('⚠️ Error getting Enhanced Graph Access token during initialization:', error);
+        lokkaEnv.USE_CLIENT_TOKEN = 'true';
+      }
+    } else {
+      lokkaEnv = {
+        TENANT_ID: authConfig.tenantId,
+        CLIENT_ID: authConfig.clientId,
+        ...(authConfig.clientSecret && { CLIENT_SECRET: authConfig.clientSecret })
+      };
+    }
     
       this.config = {
       auth: {
@@ -96,12 +155,7 @@ class EntraPulseLiteApp {
           enabled: Boolean(canUseTokenAuth), // Enable if we can do token auth OR client credentials
           command: 'npx',
           args: ['-y', '@merill/lokka'],
-          env: {
-            TENANT_ID: authConfig.tenantId,
-            CLIENT_ID: authConfig.clientId,
-            ...(authConfig.clientSecret && { CLIENT_SECRET: authConfig.clientSecret })
-            // ACCESS_TOKEN will be added dynamically in ExternalLokkaMCPStdioServer
-          }
+          env: lokkaEnv
         },
         {
           name: 'fetch',
@@ -124,9 +178,7 @@ class EntraPulseLiteApp {
         enablePremiumFeatures: false, // Set via UI preferences
         enableTelemetry: false, // Set via UI preferences
       },
-    };
-
-    // Log the final Lokka MCP server configuration for debugging
+    };    // Log the final Lokka MCP server configuration for debugging
     const lokkaConfig = this.config.mcpServers.find(server => server.name === 'external-lokka');
     console.log('[Main] Final Lokka MCP server configuration:', {
       enabled: lokkaConfig?.enabled,
@@ -135,7 +187,9 @@ class EntraPulseLiteApp {
       envValues: lokkaConfig?.env ? Object.keys(lokkaConfig.env).reduce((acc, key) => {
         acc[key] = Boolean(lokkaConfig.env![key]);
         return acc;
-      }, {} as Record<string, boolean>) : {}
+      }, {} as Record<string, boolean>) : {},
+      enhancedAccess: Boolean(storedEntraConfig?.useGraphPowerShell),
+      clientId: lokkaClientId.substring(0, 8) + '...'
     });
 
     // Initialize services
@@ -258,28 +312,102 @@ class EntraPulseLiteApp {
           : ['https://graph.microsoft.com/.default'],
         clientSecret: authConfig.clientSecret,
         useClientCredentials: Boolean(useAppCredentials),
-      };// Update MCP server configuration
+      };      // Update MCP server configuration with Enhanced Graph Access support
       const lokkaServerIndex = this.config.mcpServers.findIndex(server => server.name === 'external-lokka');
-      if (lokkaServerIndex !== -1) {        const updatedLokkaConfig: MCPServerConfig = {
+      if (lokkaServerIndex !== -1) {
+        // Get the stored Entra configuration to check for Enhanced Graph Access setting
+        const storedEntraConfig = this.configService.getEntraConfig();
+        
+        // Determine client ID and authentication mode based on Enhanced Graph Access setting
+        let clientId = authConfig.clientId || '';
+        let authMode = 'application-credentials';
+        let env: Record<string, string>;        // Check if Enhanced Graph Access is enabled and not in application credentials mode
+        if (storedEntraConfig?.useGraphPowerShell && 
+            this.configService.getAuthenticationPreference() !== 'application-credentials') {
+          console.log('🔧 Using Enhanced Graph Access mode with Microsoft Graph PowerShell client ID during reinitialize');
+          clientId = '14d82eec-204b-4c2f-b7e8-296a70dab67e'; // Microsoft Graph PowerShell client ID
+          authMode = 'delegated';
+          env = {
+            TENANT_ID: 'common', // Use 'common' for multi-tenant Enhanced Graph Access
+            CLIENT_ID: clientId
+          };
+          
+          // For Enhanced Graph Access, we need to get a token using the Graph PowerShell client ID
+          // and provide it directly to Lokka
+          try {            console.log('🔐 Getting access token for Enhanced Graph Access mode during reinitialize...');
+            
+            // Create a temporary auth service with Microsoft Graph PowerShell client ID
+            const graphPowerShellAuthConfig = {
+              ...this.config,
+              auth: {
+                clientId: '14d82eec-204b-4c2f-b7e8-296a70dab67e',
+                tenantId: storedEntraConfig.tenantId,
+                scopes: [
+                  'https://graph.microsoft.com/User.Read',
+                  'https://graph.microsoft.com/Mail.Read',
+                  'https://graph.microsoft.com/Mail.ReadWrite',
+                  'https://graph.microsoft.com/Calendars.Read',
+                  'https://graph.microsoft.com/Files.Read.All',
+                  'https://graph.microsoft.com/Directory.Read.All'
+                ],
+                useClientCredentials: false
+              }
+            };
+            
+            const tempAuthService = new AuthService(graphPowerShellAuthConfig);
+            const token = await tempAuthService.getToken();
+            
+            if (token && token.accessToken) {
+              console.log('🔐 Successfully obtained Enhanced Graph Access token during reinitialize');
+              env.CLIENT_ID = clientId;
+              env.ACCESS_TOKEN = token.accessToken;
+              env.USE_INTERACTIVE = 'false'; // Use provided token, don't authenticate interactively
+              // Don't set USE_CLIENT_TOKEN when providing ACCESS_TOKEN directly
+            } else {
+              console.error('❌ Failed to get Enhanced Graph Access token during reinitialize, falling back to client token mode');
+              env.CLIENT_ID = clientId;
+              env.USE_CLIENT_TOKEN = 'true';
+            }
+          } catch (error) {
+            console.error('❌ Error getting Enhanced Graph Access token during reinitialize:', error);
+            console.log('🔧 Falling back to standard client token mode');
+            env.USE_CLIENT_TOKEN = 'true';
+          }
+        } else if (authConfig.clientSecret) {
+          console.log('🔧 Using application credentials mode with client secret during reinitialize');
+          env = {
+            TENANT_ID: authConfig.tenantId || '',
+            CLIENT_ID: clientId,
+            CLIENT_SECRET: authConfig.clientSecret
+          };
+        } else {
+          console.log('🔧 Using delegated mode with standard client ID during reinitialize');
+          env = {
+            TENANT_ID: authConfig.tenantId || '',
+            CLIENT_ID: clientId,
+            USE_CLIENT_TOKEN: 'true'
+          };
+        }
+
+        const updatedLokkaConfig: MCPServerConfig = {
           name: 'external-lokka',
           type: 'external-lokka' as const,
           port: 0, // Not used for stdin/stdout MCP servers
-          enabled: Boolean(hasLokkaCreds),
+          enabled: Boolean(hasLokkaCreds || storedEntraConfig?.useGraphPowerShell),
           command: 'npx',
           args: ['-y', '@merill/lokka'],
-          env: {
-            TENANT_ID: authConfig.tenantId,
-            CLIENT_ID: authConfig.clientId,
-            CLIENT_SECRET: authConfig.clientSecret
-          }
+          env
         };
         this.config.mcpServers[lokkaServerIndex] = updatedLokkaConfig;
-          console.log('[Main] Updated Lokka MCP server config:', {
+        
+        console.log(`[Main] Updated Lokka MCP server config (mode: ${authMode}):`, {
           enabled: updatedLokkaConfig.enabled,
           hasTenantId: Boolean(updatedLokkaConfig.env?.TENANT_ID),
           hasClientId: Boolean(updatedLokkaConfig.env?.CLIENT_ID),
           hasClientSecret: Boolean(updatedLokkaConfig.env?.CLIENT_SECRET),
-          hasLokkaCreds
+          useClientToken: Boolean(updatedLokkaConfig.env?.USE_CLIENT_TOKEN),
+          enhancedAccess: Boolean(storedEntraConfig?.useGraphPowerShell),
+          clientId: clientId.substring(0, 8) + '...'
         });
       } else {
         console.warn('[Main] Lokka server not found in config for update');
@@ -410,9 +538,7 @@ class EntraPulseLiteApp {
             temperature: defaultCloudProvider.config.temperature,
             maxTokens: defaultCloudProvider.config.maxTokens,
             organization: defaultCloudProvider.config.organization,
-            preferLocal: storedLLMConfig.preferLocal, // Preserve the preference
-            cloudProviders: storedLLMConfig.cloudProviders, // Preserve cloud providers
-            defaultCloudProvider: storedLLMConfig.defaultCloudProvider // Preserve default
+            preferLocal: storedLLMConfig.preferLocal // Preserve the preference
           };
         } else {
           // Use the stored configuration as-is
@@ -653,22 +779,92 @@ class EntraPulseLiteApp {
           console.log('🔧 Checking for stored Entra credentials after login...');
             if (storedEntraConfig && storedEntraConfig.clientId && storedEntraConfig.tenantId) {
             console.log('🔐 Enabling Lokka MCP server for authenticated user...');
-            
-            // Enable Lokka MCP server for authenticated user
+              // Enable Lokka MCP server for authenticated user
             const lokkaServerIndex = this.config.mcpServers.findIndex(server => server.name === 'external-lokka');
-            if (lokkaServerIndex !== -1) {
+            if (lokkaServerIndex !== -1) {              // Determine client ID and authentication mode based on Enhanced Graph Access setting
+              let clientId = storedEntraConfig.clientId || process.env.MSAL_CLIENT_ID || '';
+              let authMode = 'application-credentials';
+              let env: Record<string, string>;
+              
+              // Check if Enhanced Graph Access is enabled and not in application credentials mode
+              if (storedEntraConfig?.useGraphPowerShell && 
+                  this.configService.getAuthenticationPreference() !== 'application-credentials') {
+                console.log('🔧 Using Enhanced Graph Access mode with Microsoft Graph PowerShell client ID');
+                clientId = '14d82eec-204b-4c2f-b7e8-296a70dab67e'; // Microsoft Graph PowerShell client ID
+                authMode = 'delegated';
+                env = {
+                  TENANT_ID: 'common', // Use 'common' for multi-tenant Enhanced Graph Access
+                  CLIENT_ID: clientId
+                };
+              } else {
+                env = {
+                  TENANT_ID: storedEntraConfig.tenantId || process.env.MSAL_TENANT_ID || '',
+                  CLIENT_ID: storedEntraConfig.clientId || process.env.MSAL_CLIENT_ID || '',
+                  ...(storedEntraConfig.clientSecret && { CLIENT_SECRET: storedEntraConfig.clientSecret })
+                };
+              }
+              
+              // For Enhanced Graph Access, we need to get a token using the Graph PowerShell client ID
+              if (storedEntraConfig?.useGraphPowerShell && 
+                  this.configService.getAuthenticationPreference() !== 'application-credentials') {
+                try {                  console.log('🔐 Getting access token for Enhanced Graph Access mode...');
+                  
+                  // Create a temporary auth service with Microsoft Graph PowerShell client ID
+                  const graphPowerShellAuthConfig = {
+                    ...this.config,
+                    auth: {
+                      clientId: '14d82eec-204b-4c2f-b7e8-296a70dab67e',
+                      tenantId: storedEntraConfig.tenantId,
+                      scopes: [
+                        'https://graph.microsoft.com/User.Read',
+                        'https://graph.microsoft.com/Mail.Read',
+                        'https://graph.microsoft.com/Mail.ReadWrite',
+                        'https://graph.microsoft.com/Calendars.Read',
+                        'https://graph.microsoft.com/Files.Read.All',
+                        'https://graph.microsoft.com/Directory.Read.All'
+                      ],
+                      useClientCredentials: false
+                    }
+                  };
+                  
+                  const tempAuthService = new AuthService(graphPowerShellAuthConfig);
+                  const token = await tempAuthService.getToken();
+                  
+                  if (token && token.accessToken) {
+                    console.log('🔐 Successfully obtained Enhanced Graph Access token');
+                    env.CLIENT_ID = clientId;
+                    env.ACCESS_TOKEN = token.accessToken;
+                    env.USE_INTERACTIVE = 'false'; // Use provided token, don't authenticate interactively
+                    // Don't set USE_CLIENT_TOKEN when providing ACCESS_TOKEN directly
+                  } else {
+                    console.error('❌ Failed to get Enhanced Graph Access token, falling back to client token mode');
+                    env.CLIENT_ID = clientId;
+                    env.USE_CLIENT_TOKEN = 'true';
+                  }
+                } catch (error) {
+                  console.error('❌ Error getting Enhanced Graph Access token:', error);
+                  console.log('🔧 Falling back to standard client token mode');
+                  env.CLIENT_ID = clientId;
+                  env.USE_CLIENT_TOKEN = 'true';
+                }
+              } else if (storedEntraConfig.clientSecret) {
+                console.log('🔧 Using application credentials mode with client secret');
+                env.CLIENT_ID = clientId;
+                env.CLIENT_SECRET = storedEntraConfig.clientSecret;
+              } else {
+                console.log('🔧 Using delegated mode with standard client ID');
+                env.CLIENT_ID = clientId;
+                env.USE_CLIENT_TOKEN = 'true';
+              }
+
               this.config.mcpServers[lokkaServerIndex] = {
                 ...this.config.mcpServers[lokkaServerIndex],
                 enabled: true, // Enable for any authenticated user
-                env: {
-                  TENANT_ID: storedEntraConfig.tenantId || process.env.MSAL_TENANT_ID,
-                  CLIENT_ID: storedEntraConfig.clientId || process.env.MSAL_CLIENT_ID,
-                  ...(storedEntraConfig.clientSecret && { CLIENT_SECRET: storedEntraConfig.clientSecret })
-                }
-              };
-              
-              console.log('✅ Updated Lokka MCP server configuration after login');
-              
+                env
+              };              
+              console.log(`✅ Updated Lokka MCP server configuration after login (mode: ${authMode})`);
+              console.log(`🔧 Lokka client ID: ${clientId.substring(0, 8)}...`);
+              console.log(`🔧 Lokka auth method: ${env.USE_CLIENT_TOKEN ? 'delegated (client token)' : 'application credentials'}`);
               // Reinitialize MCP services with updated config
               const mcpAuthService = new MCPAuthService(this.authService);
               
@@ -816,21 +1012,61 @@ class EntraPulseLiteApp {
         console.error('Force reauthentication failed:', error);
         throw error;
       }
-    });
-
-    ipcMain.handle('auth:testConfiguration', async (event, testConfig) => {
+    });    ipcMain.handle('auth:testConfiguration', async (event, testConfig) => {
       try {
         console.log('🧪 Testing authentication configuration via IPC...');
-          // Create AppConfig from the provided Entra config
+        console.log('🔧 Test config:', {
+          hasClientId: !!testConfig.clientId,
+          hasClientSecret: !!testConfig.clientSecret,
+          useApplicationCredentials: testConfig.useApplicationCredentials,
+          useGraphPowerShell: testConfig.useGraphPowerShell
+        });
+        
+        // Determine authentication configuration based on user's settings
+        let clientId = testConfig.clientId;
+        let useClientCredentials = false;
+        let scopes = ['https://graph.microsoft.com/.default'];
+          // Check if Enhanced Graph Access is enabled and not in application credentials mode
+        if (testConfig.useGraphPowerShell && !testConfig.useApplicationCredentials) {
+          console.log('🔧 Testing Enhanced Graph Access mode with Microsoft Graph PowerShell client ID');
+          clientId = '14d82eec-204b-4c2f-b7e8-296a70dab67e'; // Microsoft Graph PowerShell client ID
+          useClientCredentials = false; // Force delegated mode
+          scopes = [
+            'https://graph.microsoft.com/User.Read',
+            'https://graph.microsoft.com/Mail.Read',
+            'https://graph.microsoft.com/Mail.ReadWrite',
+            'https://graph.microsoft.com/Calendars.Read',
+            'https://graph.microsoft.com/Files.Read.All',
+            'https://graph.microsoft.com/Directory.Read.All'
+          ]; // Request specific mail and other permissions
+        } else if (testConfig.useApplicationCredentials && testConfig.clientSecret) {
+          console.log('🔧 Testing Application Credentials mode');
+          useClientCredentials = true;
+          scopes = ['https://graph.microsoft.com/.default'];
+        } else {
+          console.log('🔧 Testing User Token (delegated) mode');
+          useClientCredentials = false;
+          scopes = ['https://graph.microsoft.com/.default'];
+        }
+        
+        // Create AppConfig from the provided Entra config
         const appConfig = {
           auth: {
-            clientId: testConfig.clientId,
+            clientId,
             tenantId: testConfig.tenantId,
             clientSecret: testConfig.clientSecret,
-            useClientCredentials: !!testConfig.clientSecret,
-            scopes: ['https://graph.microsoft.com/.default']
+            useClientCredentials,
+            scopes
           }
         };
+
+        console.log('🧪 Testing with configuration:', {
+          clientId: clientId.substring(0, 8) + '...',
+          useClientCredentials,
+          scopes,
+          authMode: testConfig.useGraphPowerShell ? 'enhanced-delegated' : 
+                    testConfig.useApplicationCredentials ? 'application-credentials' : 'delegated'
+        });
 
         return await this.authService.testAuthentication(appConfig);
       } catch (error) {
@@ -894,8 +1130,10 @@ class EntraPulseLiteApp {
         // This handles the case where the user has authenticated but server isn't started
         await this.ensureLokkaMCPServerRunning();
         
-        // Generate session ID if not provided (use webContents ID for session consistency)
+        // Use provided session ID if available, otherwise generate a new one
         const effectiveSessionId = sessionId || `session-${event.sender.id}-${Date.now()}`;
+        
+        console.log(`🔄 Main Process: Received sessionId: ${sessionId}, Using: ${effectiveSessionId}, Messages: ${messages.length}`);
         
         // Now proceed with enhanced chat with conversation context
         return await this.llmService.enhancedChat(messages, effectiveSessionId);
@@ -1412,6 +1650,243 @@ class EntraPulseLiteApp {
         return false;
       }
     });
+
+    ipcMain.handle('auth:getTokenPermissions', async () => {
+      try {
+        const token = await this.authService.getToken();
+        if (!token?.accessToken) {
+          return { permissions: [], error: 'No access token available' };
+        }
+
+        // Decode the token to extract permissions
+        const tokenParts = token.accessToken.split('.');
+        if (tokenParts.length !== 3) {
+          return { permissions: [], error: 'Invalid token format' };
+        }
+
+        try {
+          const payload = JSON.parse(Buffer.from(tokenParts[1], 'base64').toString());
+          
+          // Extract permissions from token
+          let permissions: string[] = [];
+          
+          // Check for delegated scopes (scp claim)
+          if (payload.scp) {
+            permissions = payload.scp.split(' ').filter((scope: string) => scope.trim().length > 0);
+          }
+          
+          // Check for app-only permissions (roles claim)
+          if (payload.roles && Array.isArray(payload.roles)) {
+            permissions = [...permissions, ...payload.roles];
+          }
+
+          return { 
+            permissions,
+            tokenInfo: {
+              clientId: payload.appid,
+              tenantId: payload.tid,
+              audience: payload.aud,
+              expiresAt: new Date(payload.exp * 1000).toISOString()
+            }
+          };
+        } catch (decodeError) {
+          console.error('Failed to decode token:', decodeError);
+          return { permissions: [], error: 'Failed to decode token' };
+        }      } catch (error) {
+        console.error('Get token permissions failed:', error);
+        return { permissions: [], error: error instanceof Error ? error.message : String(error) };
+      }
+    });
+
+    // Get current Graph permissions from the actual token
+    ipcMain.handle('auth:getCurrentGraphPermissions', async () => {
+      try {
+        const token = await this.authService.getToken();
+        if (!token?.accessToken) {
+          return { permissions: [], error: 'No access token available' };
+        }
+
+        // Decode the token to extract scopes/permissions
+        const tokenParts = token.accessToken.split('.');
+        if (tokenParts.length !== 3) {
+          return { permissions: [], error: 'Invalid token format' };
+        }
+
+        try {
+          const payload = JSON.parse(Buffer.from(tokenParts[1], 'base64').toString());
+          
+          // Extract permissions from token
+          let permissions: string[] = [];
+          
+          // Check for delegated scopes (scp claim)
+          if (payload.scp) {
+            permissions = payload.scp.split(' ').filter((scope: string) => scope.trim().length > 0);
+          }
+          
+          // Check for app-only permissions (roles claim)
+          if (payload.roles && Array.isArray(payload.roles)) {
+            permissions = [...permissions, ...payload.roles];
+          }
+
+          // Remove duplicates and sort
+          permissions = [...new Set(permissions)].sort();
+
+          console.log('📊 Current Graph permissions from token:', permissions);
+          
+          return { 
+            permissions,
+            clientId: payload.appid,
+            source: 'access_token'
+          };
+        } catch (decodeError) {
+          console.error('Failed to decode token:', decodeError);
+          return { permissions: [], error: 'Failed to decode token' };
+        }      } catch (error) {
+        console.error('Get current Graph permissions failed:', error);
+        return { permissions: [], error: error instanceof Error ? error.message : String(error) };
+      }
+    });
+
+    // Get tenant information including display name
+    ipcMain.handle('auth:getTenantInfo', async () => {
+      try {
+        const token = await this.authService.getToken();
+        if (!token?.accessToken) {
+          return { error: 'No access token available' };
+        }
+
+        // Decode the token to extract tenant information
+        const tokenParts = token.accessToken.split('.');
+        if (tokenParts.length !== 3) {
+          return { error: 'Invalid token format' };
+        }
+
+        try {
+          const payload = JSON.parse(Buffer.from(tokenParts[1], 'base64').toString());
+          
+          console.log('🔍 Token payload tenant info:', {
+            tid: payload.tid,
+            iss: payload.iss,
+            aud: payload.aud,
+            hasDisplayName: !!payload.tenant_display_name
+          });
+          
+          let tenantDisplayName = payload.tid; // Default to tenant ID as fallback
+          
+          // Primary: Try to get tenant display name from Graph API /organization endpoint
+          try {
+            // Use the Lokka MCP to get organization details
+            // Important: Call without any filter - let it return the organization for the authenticated tenant
+            if (this.mcpClient) {
+              console.log('🔍 Calling /organization endpoint without filters for tenant:', payload.tid);
+              
+              const orgInfo = await this.mcpClient.callTool('external-lokka', 'Lokka-Microsoft', {
+                apiType: 'graph',
+                path: '/organization',
+                method: 'get'
+                // No queryParams at all - let it return the org for the authenticated tenant
+              });
+              
+              console.log('🔍 Raw organization info response:', orgInfo);
+              
+              let parsedContent;
+              
+              // Handle different response formats from MCP
+              if (orgInfo?.content) {
+                if (Array.isArray(orgInfo.content) && orgInfo.content.length > 0) {
+                  // Handle array format like [{type: 'text', text: 'Result for graph API...'}]
+                  const firstContent = orgInfo.content[0];
+                  if (firstContent?.type === 'text' && firstContent?.text) {
+                    try {
+                      // Extract JSON from text response like "Result for graph API (v1.0) - get /organization:\n\n{...}"
+                      const textContent = firstContent.text;
+                      const jsonStart = textContent.indexOf('{');
+                      if (jsonStart !== -1) {
+                        const jsonString = textContent.substring(jsonStart);
+                        parsedContent = JSON.parse(jsonString);
+                        console.log('✅ Successfully extracted JSON from text response');
+                      } else {
+                        console.warn('Could not find JSON start in text response');
+                      }
+                    } catch (parseError) {
+                      console.warn('Could not parse JSON from text response:', parseError);
+                    }
+                  }
+                } else if (typeof orgInfo.content === 'string') {
+                  try {
+                    parsedContent = JSON.parse(orgInfo.content);
+                  } catch (parseError) {
+                    console.warn('Could not parse organization info string:', parseError);
+                  }
+                } else if (typeof orgInfo.content === 'object') {
+                  parsedContent = orgInfo.content;
+                }
+              } else if (orgInfo && typeof orgInfo === 'object') {
+                // Sometimes the response might be the data directly
+                parsedContent = orgInfo;
+              }
+              
+              console.log('🔍 Parsed organization content:', parsedContent);
+              
+              if (parsedContent?.value && Array.isArray(parsedContent.value) && parsedContent.value.length > 0) {
+                const org = parsedContent.value[0];
+                console.log('🔍 Organization object:', org);
+                if (org.displayName) {
+                  tenantDisplayName = org.displayName;
+                  console.log('✅ Retrieved tenant display name from Graph API:', tenantDisplayName);
+                } else {
+                  console.warn('⚠️ Organization object found but no displayName property:', org);
+                }
+              } else {
+                console.warn('⚠️ Unexpected organization response structure:', parsedContent);
+              }
+            }
+          } catch (graphError) {
+            console.warn('Could not retrieve organization info from Graph API:', graphError);
+          }
+          
+          // Secondary: Check for tenant_display_name claim in token (rare but valid)
+          if (tenantDisplayName === payload.tid && payload.tenant_display_name) {
+            tenantDisplayName = payload.tenant_display_name;
+            console.log('✅ Using tenant_display_name from token:', tenantDisplayName);
+          }
+          
+          // Note: We intentionally do NOT use tenant_region_scope as it's not a display name
+          
+          // Get stored Entra config to compare tenant IDs
+          let storedEntraConfig: any = null;
+          try {
+            storedEntraConfig = await this.configService.getEntraConfig();
+          } catch (error) {
+            console.warn('Could not retrieve stored Entra config for comparison:', error);
+          }
+          
+          console.log('🏢 Tenant info retrieved:', { 
+            tenantId: payload.tid, 
+            displayName: tenantDisplayName,
+            source: tenantDisplayName === payload.tid ? 'fallback-tenantId' : 
+                   payload.tenant_display_name === tenantDisplayName ? 'token-claim' : 'graph-api',
+            issuedBy: payload.iss,
+            audience: payload.aud,
+            configTenantId: storedEntraConfig?.tenantId,
+            authTokenTenantId: payload.tid,
+            tenantMismatch: storedEntraConfig?.tenantId !== payload.tid
+          });
+          
+          return { 
+            tenantId: payload.tid, // Always use the authenticated token's tenant ID
+            tenantDisplayName: tenantDisplayName,
+            issuedBy: payload.iss,
+            audience: payload.aud
+          };
+        } catch (decodeError) {
+          console.error('Failed to decode token:', decodeError);
+          return { error: 'Failed to decode token' };
+        }      } catch (error) {
+        console.error('Get tenant info failed:', error);
+        return { error: error instanceof Error ? error.message : String(error) };
+      }
+    });
   }
 
   /**
@@ -1441,25 +1916,89 @@ class EntraPulseLiteApp {
           // Check if we have stored Entra credentials and update MCP server config
         console.log('🔧 Checking for stored Entra credentials during initialization...');
           if (storedEntraConfig && storedEntraConfig.clientId && storedEntraConfig.tenantId) {
-          console.log('🔐 Found stored Entra credentials, updating Lokka MCP server configuration...');
-
-          // Enable Lokka MCP server since user is authenticated
+          console.log('🔐 Found stored Entra credentials, updating Lokka MCP server configuration...');          // Enable Lokka MCP server since user is authenticated
           const lokkaServerIndex = this.config.mcpServers.findIndex(server => server.name === 'external-lokka');
-          if (lokkaServerIndex !== -1) {
+          if (lokkaServerIndex !== -1) {            // Determine client ID and authentication mode based on Enhanced Graph Access setting
+            let clientId = storedEntraConfig.clientId || process.env.MSAL_CLIENT_ID || '';
+            let authMode = 'application-credentials';
+            let env: Record<string, string>;            // Check if Enhanced Graph Access is enabled and not in application credentials mode
+            if (storedEntraConfig.useGraphPowerShell && 
+                this.configService.getAuthenticationPreference() !== 'application-credentials') {
+              console.log('🔧 Using Enhanced Graph Access mode with Microsoft Graph PowerShell client ID during startup');
+              clientId = '14d82eec-204b-4c2f-b7e8-296a70dab67e'; // Microsoft Graph PowerShell client ID
+              authMode = 'delegated';
+              env = {
+                TENANT_ID: 'common', // Use 'common' for multi-tenant Enhanced Graph Access
+                CLIENT_ID: clientId
+              };
+            } else {
+              env = {
+                TENANT_ID: storedEntraConfig.tenantId || process.env.MSAL_TENANT_ID || '',
+                CLIENT_ID: clientId,
+                ...(storedEntraConfig.clientSecret && { CLIENT_SECRET: storedEntraConfig.clientSecret })
+              };
+            }
+            
+            // For Enhanced Graph Access, we need to get a token using the Graph PowerShell client ID
+            if (storedEntraConfig.useGraphPowerShell && 
+                this.configService.getAuthenticationPreference() !== 'application-credentials') {
+              try {
+                console.log('🔐 Getting access token for Enhanced Graph Access mode during startup...');
+                // Create a temporary auth service with Microsoft Graph PowerShell client ID
+                const graphPowerShellAuthConfig = {
+                  ...this.config,
+                  auth: {
+                    clientId: '14d82eec-204b-4c2f-b7e8-296a70dab67e',
+                    tenantId: 'common', // Use 'common' for multi-tenant access
+                    scopes: [
+                      'https://graph.microsoft.com/User.Read',
+                      'https://graph.microsoft.com/Mail.Read',
+                      'https://graph.microsoft.com/Mail.ReadWrite',
+                      'https://graph.microsoft.com/Calendars.Read',
+                      'https://graph.microsoft.com/Files.Read.All',
+                      'https://graph.microsoft.com/Directory.Read.All'
+                    ],
+                    useClientCredentials: false
+                  }
+                };
+                
+                const tempAuthService = new AuthService(graphPowerShellAuthConfig);
+                const token = await tempAuthService.getToken();
+                
+                if (token && token.accessToken) {
+                  console.log('🔐 Successfully obtained Enhanced Graph Access token during startup');
+                  env.ACCESS_TOKEN = token.accessToken;
+                  env.USE_INTERACTIVE = 'false'; // Use provided token, don't authenticate interactively
+                  // Don't set USE_CLIENT_TOKEN when providing ACCESS_TOKEN directly
+                } else {
+                  console.error('❌ Failed to get Enhanced Graph Access token during startup, falling back to client token mode');
+                  env.USE_CLIENT_TOKEN = 'true';
+                }
+              } catch (error) {
+                console.error('❌ Error getting Enhanced Graph Access token during startup:', error);
+                console.log('🔧 Falling back to standard client token mode');
+                env.USE_CLIENT_TOKEN = 'true';
+              }
+            } else if (storedEntraConfig.clientSecret) {
+              console.log('🔧 Using application credentials mode with client secret during startup');
+              // Already set in env above
+            } else {
+              console.log('🔧 Using delegated mode with standard client ID during startup');
+              env.USE_CLIENT_TOKEN = 'true';
+            }
+
             this.config.mcpServers[lokkaServerIndex] = {
               ...this.config.mcpServers[lokkaServerIndex],
               enabled: true, // Enable for any authenticated user
-              env: {
-                TENANT_ID: storedEntraConfig.tenantId || process.env.MSAL_TENANT_ID,
-                CLIENT_ID: storedEntraConfig.clientId || process.env.MSAL_CLIENT_ID,
-                ...(storedEntraConfig.clientSecret && { CLIENT_SECRET: storedEntraConfig.clientSecret })
-              }
+              env
             };
 
-            console.log('✅ Updated Lokka MCP server for authenticated user:', {
+            console.log(`✅ Updated Lokka MCP server for authenticated user (mode: ${authMode}):`, {
               enabled: this.config.mcpServers[lokkaServerIndex].enabled,
               authMode: authContext,
-              hasClientSecret: Boolean(storedEntraConfig.clientSecret)
+              hasClientSecret: Boolean(storedEntraConfig.clientSecret),
+              clientId: clientId.substring(0, 8) + '...',
+              enhancedAccess: Boolean(storedEntraConfig.useGraphPowerShell)
             });
             
             // Reinitialize MCP services with updated config
@@ -1515,7 +2054,6 @@ class EntraPulseLiteApp {
       this.configService.setAuthenticationVerified(false);
     }
   }
-
   /**
    * Get authentication configuration from stored settings, falling back to environment variables
    */
@@ -1525,6 +2063,17 @@ class EntraPulseLiteApp {
     
     if (storedEntraConfig && storedEntraConfig.clientId && storedEntraConfig.tenantId) {
       console.log('[Main] Using stored Entra configuration');
+      
+      // Check if Enhanced Graph Access (Microsoft Graph PowerShell) is enabled
+      if (storedEntraConfig.useGraphPowerShell && !storedEntraConfig.useApplicationCredentials) {
+        console.log('[Main] Enhanced Graph Access enabled, using Microsoft Graph PowerShell client ID');
+        return {
+          clientId: '14d82eec-204b-4c2f-b7e8-296a70dab67e', // Microsoft Graph PowerShell client ID
+          tenantId: storedEntraConfig.tenantId,
+          clientSecret: undefined // No client secret for Graph PowerShell delegated access
+        };
+      }
+      
       return {
         clientId: storedEntraConfig.clientId,
         tenantId: storedEntraConfig.tenantId,

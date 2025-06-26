@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -67,15 +67,245 @@ export const EnhancedSettingsDialog: React.FC<EnhancedSettingsDialogProps> = ({
   const [defaultCloudProvider, setDefaultCloudProvider] = useState<'openai' | 'anthropic' | 'gemini' | 'azure-openai' | null>(null);
   const [entraConfig, setEntraConfig] = useState<EntraConfig | null>(null);
   const [isLoadingEntraConfig, setIsLoadingEntraConfig] = useState(false);
+  const [graphPermissions, setGraphPermissions] = useState<{
+    granted: string[];
+    available: string[];
+    loading: boolean;
+    error?: string;
+  }>({ granted: [], available: [], loading: false });
+  const [tenantInfo, setTenantInfo] = useState<{
+    tenantId?: string;
+    tenantDisplayName?: string;
+    loading: boolean;
+    error?: string;
+  }>({ loading: false });
+
+  // Utility functions
+  const getDefaultModel = (provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai'): string => {
+    switch (provider) {
+      case 'openai': return 'gpt-3.5-turbo';
+      case 'anthropic': return 'claude-3-sonnet-20240229';
+      case 'gemini': return 'gemini-pro';
+      case 'azure-openai': return 'gpt-35-turbo';
+      default: return 'gpt-3.5-turbo';
+    }
+  };
+
+  const getProviderDisplayName = (provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai' | null): string => {
+    if (!provider) return 'None';
+    switch (provider) {
+      case 'openai': return 'OpenAI';
+      case 'anthropic': return 'Anthropic (Claude)';
+      case 'gemini': return 'Google Gemini';
+      case 'azure-openai': return 'Azure OpenAI';
+      default: return provider;
+    }
+  };
+
+  const loadGraphPermissions = async () => {
+    // Throttle calls to prevent rapid successive calls
+    const now = Date.now();
+    if (now - lastGraphPermissionsLoadRef.current < 30000) { // 30 second minimum between calls (increased from 10)
+      console.log('🔄 Skipping graph permissions load - too soon since last attempt');
+      return;
+    }
+    
+    if (!entraConfig?.useGraphPowerShell) {
+      setGraphPermissions({ granted: [], available: [], loading: false });
+      return;
+    }
+
+    lastGraphPermissionsLoadRef.current = now;
+
+    try {
+      setGraphPermissions(prev => ({ ...prev, loading: true, error: undefined }));
+      
+      const electronAPI = window.electronAPI as any;
+      
+      // Get the actual current permissions from the access token
+      const currentPermissions = await electronAPI.auth.getCurrentGraphPermissions();
+      
+      if (currentPermissions.error) {
+        throw new Error(currentPermissions.error);
+      }
+      
+      const requiredPermissions = [
+        'User.Read',
+        'User.ReadBasic.All', 
+        'Mail.Read',
+        'Mail.ReadWrite',
+        'Calendars.Read',
+        'Files.Read.All',
+        'Directory.Read.All'
+      ];
+      
+      setGraphPermissions({
+        granted: currentPermissions.permissions || [],
+        available: requiredPermissions,
+        loading: false
+      });
+      
+    } catch (error) {
+      console.error('Failed to load graph permissions:', error);
+      setGraphPermissions(prev => ({ 
+        ...prev, 
+        loading: false, 
+        error: 'Failed to load permissions' 
+      }));
+    }
+  };
+
+  // Add ref to track last successful load time to prevent rapid reloading
+  const lastTenantInfoLoadRef = useRef<number>(0);
+  const lastGraphPermissionsLoadRef = useRef<number>(0);
+
+  const loadTenantInfo = async () => {
+    // Throttle calls to prevent rapid successive calls
+    const now = Date.now();
+    if (now - lastTenantInfoLoadRef.current < 30000) { // 30 second minimum between calls (increased from 10)
+      console.log('🔄 Skipping tenant info load - too soon since last attempt');
+      return;
+    }
+    
+    lastTenantInfoLoadRef.current = now;
+    
+    try {
+      setTenantInfo(prev => ({ ...prev, loading: true, error: undefined }));
+      
+      const electronAPI = window.electronAPI as any;
+      
+      // First check if user is authenticated
+      try {
+        const authStatus = await electronAPI.auth.getAuthenticationInfo();
+        if (!authStatus?.isAuthenticated) {
+          console.log('🔒 User not authenticated, skipping tenant info load');
+          setTenantInfo({
+            loading: false,
+            error: 'User not authenticated'
+          });
+          return;
+        }
+      } catch (authError) {
+        console.log('🔒 Could not check authentication status:', authError);
+        setTenantInfo({
+          loading: false,
+          error: 'Could not verify authentication'
+        });
+        return;
+      }
+      
+      // User is authenticated, proceed with tenant info lookup
+      console.log('🔍 User is authenticated, loading tenant info...');
+      const tenantData = await electronAPI.auth.getTenantInfo();
+      
+      if (tenantData.error) {
+        throw new Error(tenantData.error);
+      }
+      
+      setTenantInfo({
+        tenantId: tenantData.tenantId,
+        tenantDisplayName: tenantData.tenantDisplayName,
+        loading: false
+      });
+      
+      console.log('🏢 Tenant info loaded:', {
+        tenantId: tenantData.tenantId,
+        displayName: tenantData.tenantDisplayName,
+        source: tenantData.tenantDisplayName === tenantData.tenantId ? 'fallback' : 'graph-api'
+      });
+      
+    } catch (error) {
+      console.error('Failed to load tenant info:', error);
+      setTenantInfo(prev => ({ 
+        ...prev, 
+        loading: false, 
+        error: error instanceof Error ? error.message : 'Failed to load tenant information'
+      }));
+    }
+  };
+
   useEffect(() => {
     setConfig(currentConfig);
-  }, [currentConfig]);
-  useEffect(() => {
+  }, [currentConfig]);  useEffect(() => {
     if (open) {
       loadCloudProviders();
       loadEntraConfig();
+      loadGraphPermissions();
+      loadTenantInfo();
     }
   }, [open]); // Only reload when dialog opens, not on every config change
+
+  // Listen for authentication state changes and reload tenant info
+  useEffect(() => {
+    if (!open) return;
+
+    const electronAPI = window.electronAPI as any;
+    
+    // Set up event listeners for authentication events
+    const handleAuthSuccess = () => {
+      console.log('🔐 Authentication success detected, reloading tenant info...');
+      setTimeout(() => {
+        loadTenantInfo();
+        loadGraphPermissions();
+      }, 1000); // Small delay to ensure token is fully available
+    };
+
+    const handleAuthFailure = () => {
+      console.log('🔒 Authentication failure detected, clearing tenant info...');
+      setTenantInfo({
+        loading: false,
+        error: 'Authentication failed'
+      });
+    };
+
+    // Listen for auth events if available
+    if (electronAPI.auth?.onAuthStateChange) {
+      electronAPI.auth.onAuthStateChange((state: { isAuthenticated: boolean }) => {
+        if (state.isAuthenticated) {
+          handleAuthSuccess();
+        } else {
+          handleAuthFailure();
+        }
+      });
+    }
+
+    // Also check periodically if auth state changed while dialog is open
+    const authCheckInterval = setInterval(async () => {
+      try {
+        const authStatus = await electronAPI.auth.getAuthenticationInfo();
+        
+        // Check if we need to load tenant info
+        // Only load if: authenticated, has error indicating no auth, and no tenantId yet
+        const needsTenantInfo = authStatus?.isAuthenticated && 
+                               (tenantInfo.error === 'User not authenticated' || tenantInfo.error === 'Could not verify authentication') &&
+                               !tenantInfo.tenantId &&
+                               !tenantInfo.loading;
+        
+        if (needsTenantInfo) {
+          console.log('🔄 Authentication detected during periodic check, reloading tenant info...');
+          loadTenantInfo();
+        }
+        
+        // Check if we need to load graph permissions (separate condition)
+        // Only load if: authenticated, no permissions granted yet, not loading, and no existing error
+        const needsGraphPermissions = authStatus?.isAuthenticated && 
+                                    graphPermissions.granted.length === 0 && 
+                                    !graphPermissions.loading && 
+                                    !graphPermissions.error;
+        
+        if (needsGraphPermissions) {
+          console.log('🔄 Loading graph permissions during periodic check...');
+          loadGraphPermissions();
+        }
+      } catch (error) {
+        // Ignore errors during periodic check
+      }
+    }, 30000); // Increased to 30 seconds to reduce frequency
+
+    return () => {
+      clearInterval(authCheckInterval);
+    };
+  }, [open]); // Remove tenantInfo.error from dependencies to prevent restart loops
 
   const loadCloudProviders = async () => {
     try {
@@ -447,25 +677,7 @@ export const EnhancedSettingsDialog: React.FC<EnhancedSettingsDialogProps> = ({
     }
   };
   
-  const getProviderDisplayName = (provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai') => {
-    switch (provider) {
-      case 'openai': return 'OpenAI';
-      case 'anthropic': return 'Anthropic (Claude)';
-      case 'gemini': return 'Google Gemini';
-      case 'azure-openai': return 'Azure OpenAI';
-      default: return provider;
-    }
-  };
-
-  const getDefaultModel = (provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai') => {
-    switch (provider) {
-      case 'openai': return 'gpt-4o-mini';
-      case 'anthropic': return 'claude-3-5-sonnet-20241022';
-      case 'gemini': return 'gemini-1.5-flash';
-      case 'azure-openai': return 'gpt-4o';
-      default: return '';
-    }
-  };  const handleSave = async () => {
+  const handleSave = async () => {
     let finalConfig = { ...config };
     
     console.log('[EnhancedSettingsDialog] handleSave - Original config:', {
@@ -571,6 +783,9 @@ export const EnhancedSettingsDialog: React.FC<EnhancedSettingsDialogProps> = ({
                   config={entraConfig}
                   onSave={handleSaveEntraConfig}
                   onClear={handleClearEntraConfig}
+                  graphPermissions={graphPermissions}
+                  loadGraphPermissions={loadGraphPermissions}
+                  tenantInfo={tenantInfo}
                 />
               )}
             </AccordionDetails>
@@ -902,7 +1117,19 @@ const CloudProviderCard: React.FC<CloudProviderCardProps> = ({
   onRemove,
   onFetchModels,
   onTestConnection
-}) => {  const [localConfig, setLocalConfig] = useState<CloudLLMProviderConfig>(
+}) => {
+  // Utility function for provider display names
+  const getProviderDisplayName = (provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai'): string => {
+    switch (provider) {
+      case 'openai': return 'OpenAI';
+      case 'anthropic': return 'Anthropic (Claude)';
+      case 'gemini': return 'Google Gemini';
+      case 'azure-openai': return 'Azure OpenAI';
+      default: return provider;
+    }
+  };
+
+  const [localConfig, setLocalConfig] = useState<CloudLLMProviderConfig>(
     config || {
       provider,
       model: provider === 'openai' ? 'gpt-4o-mini' : 
@@ -924,15 +1151,8 @@ const CloudProviderCard: React.FC<CloudProviderCardProps> = ({
       setLocalConfig(config);
     }
   }, [config]);
-  const getProviderDisplayName = (provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai') => {
-    switch (provider) {
-      case 'openai': return 'OpenAI';
-      case 'anthropic': return 'Anthropic (Claude)';
-      case 'gemini': return 'Google Gemini';
-      case 'azure-openai': return 'Azure OpenAI';
-      default: return provider;
-    }
-  };  const handleSave = () => {
+
+  const handleSave = () => {
     // Validation for Azure OpenAI
     if (provider === 'azure-openai') {
       if (!localConfig.baseUrl || localConfig.baseUrl.trim() === '') {
@@ -1239,9 +1459,22 @@ interface EntraConfigFormProps {
   config: EntraConfig | null;
   onSave: (config: EntraConfig) => Promise<void>;
   onClear: () => Promise<void>;
+  graphPermissions: {
+    granted: string[];
+    available: string[];
+    loading: boolean;
+    error?: string;
+  };
+  loadGraphPermissions: () => Promise<void>;
+  tenantInfo: {
+    tenantId?: string;
+    tenantDisplayName?: string;
+    loading: boolean;
+    error?: string;
+  };
 }
 
-const EntraConfigForm: React.FC<EntraConfigFormProps> = ({ config, onSave, onClear }) => {  const [localConfig, setLocalConfig] = useState<EntraConfig>({
+const EntraConfigForm: React.FC<EntraConfigFormProps> = ({ config, onSave, onClear, graphPermissions, loadGraphPermissions, tenantInfo }) => {  const [localConfig, setLocalConfig] = useState<EntraConfig>({
     clientId: '',
     tenantId: '',
     clientSecret: '',
@@ -1359,8 +1592,7 @@ const EntraConfigForm: React.FC<EntraConfigFormProps> = ({ config, onSave, onCle
                 setIsUserEditing(true);
                 setTestResult(null); // Clear test results when mode changes
               }}
-            >
-              <FormControlLabel
+            >              <FormControlLabel
                 value="user-token"
                 control={<Radio />}
                 label={
@@ -1369,7 +1601,10 @@ const EntraConfigForm: React.FC<EntraConfigFormProps> = ({ config, onSave, onCle
                       User Token (Delegated Permissions)
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
-                      Query Microsoft Graph with your user permissions. Access your profile, email, calendar, and other user-scoped data.
+                      {localConfig.useGraphPowerShell 
+                        ? "Query Microsoft Graph with enhanced user permissions. Access your mailbox, calendar, files, Teams data, and comprehensive user-scoped resources through the Microsoft Graph PowerShell client."
+                        : "Query Microsoft Graph with your user permissions. Access your profile, basic directory data, and other user-scoped data based on your application's configured permissions."
+                      }
                     </Typography>
                   </Box>
                 }
@@ -1390,12 +1625,183 @@ const EntraConfigForm: React.FC<EntraConfigFormProps> = ({ config, onSave, onCle
                 disabled={!localConfig.clientSecret?.trim() || !localConfig.clientId?.trim() || !localConfig.tenantId?.trim()}
               />
             </RadioGroup>
-          </FormControl>
-
-          {localConfig.useApplicationCredentials && (
+          </FormControl>          {localConfig.useApplicationCredentials && (
             <Alert severity="warning" sx={{ mt: 2 }}>
               <strong>Application Permissions Required:</strong> Ensure your Entra application has the necessary application permissions configured for the data you want to access (e.g., AuditLog.Read.All, Directory.Read.All).
             </Alert>
+          )}
+
+          {/* Graph PowerShell Client Toggle - only show for User Token mode */}
+          {!localConfig.useApplicationCredentials && (
+            <>
+              <Box sx={{ mt: 2, p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1, backgroundColor: 'background.paper' }}>
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={localConfig.useGraphPowerShell || false}                      onChange={(e) => {
+                        setLocalConfig({
+                          ...localConfig,
+                          useGraphPowerShell: e.target.checked
+                        });
+                        setIsUserEditing(true);
+                        setTestResult(null);
+                        // Refresh permissions when toggling Enhanced Graph Access
+                        if (e.target.checked) {
+                          setTimeout(() => loadGraphPermissions(), 100);
+                        }
+                      }}
+                      disabled={isSaving}
+                    />
+                  }
+                  label="Enhanced Graph Access (Microsoft Graph PowerShell)"
+                />
+                
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 1, mb: 2 }}>
+                  Enable broader Microsoft Graph API access using the well-known Microsoft Graph PowerShell client ID.
+                  This provides access to mailbox data, calendar events, OneDrive files, Teams content, and other advanced user resources.
+                </Typography>                {localConfig.useGraphPowerShell && (                  <>                    <Alert severity="info" sx={{ mb: 2 }}>
+                      <Typography variant="body2">
+                        <strong>Enhanced Graph Access Mode:</strong> Using Microsoft Graph PowerShell client for broader API access. 
+                        Available resources depend on admin-granted permissions.
+                      </Typography>
+                    </Alert>
+                    
+                    <Alert severity="warning" sx={{ mb: 2 }}>
+                      <Typography variant="body2">
+                        <strong>Permissions Status:</strong> <br/>
+                        {graphPermissions.loading ? (
+                          <>
+                            • <strong>Checking permissions...</strong> <CircularProgress size={12} sx={{ ml: 1 }} />
+                          </>
+                        ) : graphPermissions.error ? (
+                          <>
+                            • <strong>Unable to check current permissions</strong><br/>
+                            • <strong>Default access:</strong> Basic user profile and directory information<br/>
+                            • <strong>Admin consent may be required for:</strong> Mail, calendar, files, and advanced Teams data
+                          </>
+                        ) : (
+                          <>
+                            • <strong>Current access:</strong> {graphPermissions.granted.length > 0 ? 
+                              graphPermissions.granted.slice(0, 3).join(', ') + 
+                              (graphPermissions.granted.length > 3 ? ` and ${graphPermissions.granted.length - 3} more` : '') 
+                              : 'Basic profile only'}<br/>
+                            {graphPermissions.available.length > graphPermissions.granted.length && (
+                              <>• <strong>Admin consent required for:</strong> {
+                                graphPermissions.available
+                                  .filter(p => !graphPermissions.granted.includes(p))
+                                  .slice(0, 3)
+                                  .join(', ')
+                              }{graphPermissions.available.filter(p => !graphPermissions.granted.includes(p)).length > 3 ? ' and more' : ''}<br/></>
+                            )}
+                            • Contact your Azure AD administrator if you encounter "Access is denied" errors.
+                          </>
+                        )}
+                      </Typography>
+                    </Alert>
+                    
+                    <Alert severity="success" sx={{ mb: 2 }}>
+                      <Typography variant="body2">
+                        <strong>Configuration Note:</strong> Changes to Enhanced Graph Access take effect immediately after saving. 
+                        The MCP server will be automatically restarted with the new configuration.
+                      </Typography>
+                    </Alert>
+                    
+                    <Box sx={{ mt: 2, p: 2, bgcolor: 'background.default', borderRadius: 1 }}>
+                      <Typography variant="caption" display="block" gutterBottom>
+                        <strong>Client ID:</strong> 14d82eec-204b-4c2f-b7e8-296a70dab67e (Microsoft Graph PowerShell)
+                      </Typography>
+                      <Typography variant="caption" display="block" gutterBottom>
+                        <strong>User Tenant:</strong> {
+                          tenantInfo.loading ? (
+                            <span>
+                              Loading... <CircularProgress size={10} sx={{ ml: 1 }} />
+                            </span>
+                          ) : tenantInfo.error === 'User not authenticated' || tenantInfo.error === 'Could not verify authentication' ? (
+                            <span style={{ color: 'orange' }}>
+                              Please sign in to authenticate
+                            </span>
+                          ) : tenantInfo.error ? (
+                            <span style={{ color: 'red' }}>
+                              Error: {tenantInfo.error}
+                            </span>
+                          ) : tenantInfo.tenantId ? (
+                            <span>
+                              {tenantInfo.tenantDisplayName && tenantInfo.tenantDisplayName !== tenantInfo.tenantId ? (
+                                <strong>{tenantInfo.tenantDisplayName}</strong>
+                              ) : (
+                                tenantInfo.tenantId
+                              )}
+                              <span style={{ marginLeft: 8, color: '#666', fontSize: '0.9em' }}>
+                                ({tenantInfo.tenantId})
+                              </span>
+                            </span>
+                          ) : (
+                            'Not authenticated'
+                          )
+                        }
+                      </Typography>
+                      <Typography variant="caption" display="block" color="text.secondary" sx={{ mt: 1 }}>
+                        Enhanced Graph Access uses the authenticated user's tenant automatically
+                      </Typography>                      <Typography variant="caption" display="block" color="text.secondary">
+                        <strong>Permissions Status:</strong> {graphPermissions.loading ? (
+                          <CircularProgress size={12} sx={{ ml: 1 }} />
+                        ) : graphPermissions.error ? (
+                          <Chip label="Unable to check" size="small" color="warning" sx={{ ml: 1 }} />
+                        ) : (
+                          <Box component="span" sx={{ ml: 1 }}>
+                            <Chip 
+                              label={`${graphPermissions.granted.length} granted`} 
+                              size="small" 
+                              color={graphPermissions.granted.length > 3 ? "success" : "warning"} 
+                              sx={{ mr: 0.5 }} 
+                            />
+                            <Chip 
+                              label={`${graphPermissions.available.length - graphPermissions.granted.length} pending`} 
+                              size="small" 
+                              color="default" 
+                            />
+                          </Box>
+                        )}
+                      </Typography>
+                      
+                      {!graphPermissions.loading && !graphPermissions.error && (
+                        <Box sx={{ mt: 1 }}>
+                          <Typography variant="caption" display="block" color="text.secondary">
+                            <strong>Granted:</strong> {graphPermissions.granted.length > 0 ? 
+                              graphPermissions.granted.join(', ') : 'Basic profile only'
+                            }
+                          </Typography>
+                          {graphPermissions.available.length > graphPermissions.granted.length && (
+                            <Typography variant="caption" display="block" color="warning.main">
+                              <strong>Requires admin consent:</strong> {
+                                graphPermissions.available
+                                  .filter(p => !graphPermissions.granted.includes(p))
+                                  .join(', ')
+                              }
+                            </Typography>
+                          )}
+                        </Box>
+                      )}
+                      
+                      {graphPermissions.error && (
+                        <Typography variant="caption" display="block" color="text.secondary" sx={{ mt: 1 }}>
+                          <strong>Default Enhanced Permissions:</strong> Mail.Read, Mail.ReadWrite, Calendars.Read, 
+                          Files.Read.All, Directory.Read.All, Team.ReadBasic.All
+                        </Typography>
+                      )}
+                    </Box>
+                  </>
+                )}                {!localConfig.useGraphPowerShell && (
+                  <Alert severity="info" sx={{ mt: 2 }}>
+                    <Typography variant="body2">
+                      <strong>Standard Access:</strong> Currently using your application's registered permissions. 
+                      Enable "Enhanced Graph Access" above to access mailbox, calendar, and other advanced user data 
+                      through the Microsoft Graph PowerShell client ID. Changes take effect immediately after saving.
+                    </Typography>
+                  </Alert>
+                )}
+              </Box>
+            </>
           )}
         </Box>
       </Grid>
@@ -1417,7 +1823,15 @@ const EntraConfigForm: React.FC<EntraConfigFormProps> = ({ config, onSave, onCle
           value={localConfig.tenantId}
           onChange={(e) => handleInputChange('tenantId', e.target.value)}
           placeholder="Enter your Azure Directory (tenant) ID"
-          helperText="The Directory (tenant) ID from your Azure app registration"
+          helperText={
+            tenantInfo.tenantDisplayName && tenantInfo.tenantDisplayName !== tenantInfo.tenantId
+              ? `${tenantInfo.tenantDisplayName} - The Directory (tenant) ID from your Azure app registration`
+              : tenantInfo.error === 'User not authenticated' || tenantInfo.error === 'Could not verify authentication'
+              ? "The Directory (tenant) ID from your Azure app registration (Sign in to see authenticated tenant info)"
+              : tenantInfo.tenantId && tenantInfo.tenantId !== localConfig.tenantId
+              ? `The Directory (tenant) ID from your Azure app registration (Note: You're authenticated to tenant ${tenantInfo.tenantId})`
+              : "The Directory (tenant) ID from your Azure app registration"
+          }
           disabled={isSaving}
         />
       </Grid>
@@ -1442,13 +1856,17 @@ const EntraConfigForm: React.FC<EntraConfigFormProps> = ({ config, onSave, onCle
             >
               Clear Configuration
             </Button>
-          )}
-          <Button 
+          )}          <Button 
             onClick={handleTestConnection}
             disabled={isSaving || isTestingConnection || !localConfig.clientId.trim() || !localConfig.tenantId.trim()}
             variant="outlined"
           >
-            {isTestingConnection ? <CircularProgress size={20} /> : 'Test Connection'}
+            {isTestingConnection ? (
+              <CircularProgress size={20} />
+            ) : (
+              `Test ${localConfig.useApplicationCredentials ? 'Application Credentials' : 
+                      localConfig.useGraphPowerShell ? 'Enhanced Graph Access' : 'User Token'} Connection`
+            )}
           </Button>
           <Button 
             onClick={handleSave}

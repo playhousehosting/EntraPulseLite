@@ -281,6 +281,7 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
     setIsLoading(true);
     setError(null);    try {
       // Send message to enhanced LLM service with session ID
+      console.log(`🔄 ChatComponent: Sending message with sessionId: ${sessionId}`);
       const enhancedResponse = await window.electronAPI.llm.chat([...messages, userMessage], sessionId);
       
       // Handle both enhanced response format and backward compatibility

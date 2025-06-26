@@ -25,6 +25,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     requestPermissions: (permissions) => ipcRenderer.invoke('auth:requestPermissions', permissions),
     getTokenWithPermissions: (permissions) => ipcRenderer.invoke('auth:getTokenWithPermissions', permissions),
     getAuthenticationInfo: () => ipcRenderer.invoke('auth:getAuthenticationInfo'),
+    getTokenPermissions: () => ipcRenderer.invoke('auth:getTokenPermissions'),
+    getCurrentGraphPermissions: () => ipcRenderer.invoke('auth:getCurrentGraphPermissions'),
+    getTenantInfo: () => ipcRenderer.invoke('auth:getTenantInfo'),
     clearTokenCache: () => ipcRenderer.invoke('auth:clearTokenCache'),
     forceReauthentication: () => ipcRenderer.invoke('auth:forceReauthentication'),
     testConfiguration: (config) => ipcRenderer.invoke('auth:testConfiguration', config),
@@ -41,7 +44,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Local LLM methods
   llm: {
-    chat: (messages) => ipcRenderer.invoke('llm:chat', messages),
+    chat: (messages, sessionId) => ipcRenderer.invoke('llm:chat', messages, sessionId),
     isAvailable: () => ipcRenderer.invoke('llm:isAvailable'),
     isLocalAvailable: () => ipcRenderer.invoke('llm:isLocalAvailable'),
     testConnection: (config) => ipcRenderer.invoke('llm:testConnection', config),

@@ -737,7 +737,6 @@ export class ConfigService {
     const config = this.getCurrentContext();
     return config.entraConfig || null;
   }
-
   /**
    * Save Entra application configuration
    * @param entraConfig Entra configuration to save
@@ -751,7 +750,8 @@ export class ConfigService {
       clientId: entraConfig.clientId ? '[REDACTED]' : 'none',
       tenantId: entraConfig.tenantId ? '[REDACTED]' : 'none',
       hasClientSecret: !!entraConfig.clientSecret,
-      useApplicationCredentials: entraConfig.useApplicationCredentials
+      useApplicationCredentials: entraConfig.useApplicationCredentials,
+      useGraphPowerShell: entraConfig.useGraphPowerShell
     });
 
     const currentConfig = this.getCurrentContext();

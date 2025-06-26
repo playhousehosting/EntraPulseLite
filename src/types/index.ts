@@ -70,6 +70,7 @@ export interface EntraConfig {
   tenantId: string;
   clientSecret?: string;
   useApplicationCredentials?: boolean; // Toggle for authentication mode
+  useGraphPowerShell?: boolean; // Toggle for Microsoft Graph PowerShell client ID
 }
 
 export interface LLMConfig {

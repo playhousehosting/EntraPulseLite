@@ -101,11 +101,11 @@ export class EnhancedLLMService {
     const trace: string[] = [];
     const errors: string[] = [];
 
-    try {
-      // Step 1: Extract user query and setup context
+    try {      // Step 1: Extract user query and setup context
       const userQuery = messages[messages.length - 1]?.content || '';
       const effectiveSessionId = sessionId || `session-${Date.now()}`;
       
+      console.log(`🔄 EnhancedLLMService: Received sessionId: ${sessionId}, Using: ${effectiveSessionId}`);
       trace.push('Starting enhanced chat with conversation context');
       
       // Step 2: Get conversation context for better understanding
@@ -497,10 +497,35 @@ Respond ONLY with a JSON object in this exact format:
           // MCP protocol format with content array
           const textContent = mcpResults.lokkaResult.content.find((item: any) => item.type === 'text');
           const jsonContent = mcpResults.lokkaResult.content.find((item: any) => item.type === 'json');
-          
-          if (textContent && textContent.text) {
+            if (textContent && textContent.text) {
             // Handle text content - try to extract actual data
             const text = textContent.text;
+            
+            // Check for Graph API permission errors first
+            if (text.includes('Access is denied') || 
+                text.includes('ErrorAccessDenied') || 
+                (text.includes('statusCode":403') && text.includes('graph.microsoft.com'))) {
+              
+              throw new Error(`🔐 **Enhanced Graph Access Permission Error**
+
+The Microsoft Graph PowerShell client ID requires admin consent for mail and calendar permissions.
+
+**To resolve this issue:**
+
+1. **Admin Consent Required**: Contact your Azure AD administrator to grant admin consent for these delegated permissions to the "Microsoft Graph Command Line Tools" app (ID: 14d82eec-204b-4c2f-b7e8-296a70dab67e):
+   • Mail.Read
+   • Mail.ReadWrite  
+   • Calendars.Read
+   • Files.Read.All
+   • Directory.Read.All
+
+2. **Admin Consent URL**: Use this URL to grant consent:
+   https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=14d82eec-204b-4c2f-b7e8-296a70dab67e&response_type=code&scope=https://graph.microsoft.com/Mail.Read%20https://graph.microsoft.com/Mail.ReadWrite%20https://graph.microsoft.com/Calendars.Read%20https://graph.microsoft.com/Files.Read.All%20https://graph.microsoft.com/Directory.Read.All&response_mode=query&state=12345&prompt=admin_consent
+
+3. **Alternative**: Disable Enhanced Graph Access in the authentication settings and use your own app registration with pre-consented permissions.
+
+**Note**: Enhanced Graph Access provides access to more Microsoft Graph APIs but requires admin consent for sensitive permissions like mail access.`);
+            }
             
             // Check if it's a Lokka API result format
             if (text.includes('Result for graph API')) {
@@ -1198,4 +1223,5 @@ For specific API endpoints and detailed documentation, please visit the official
   isServiceDisposed(): boolean {
     return this.isDisposed;
   }
+
 }

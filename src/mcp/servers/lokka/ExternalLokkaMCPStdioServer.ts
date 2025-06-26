@@ -117,10 +117,17 @@ export class ExternalLokkaMCPStdioServer {
       // Use Lokka's new client-provided token mode
       env.USE_CLIENT_TOKEN = 'true';
       
-      // WORKAROUND: Lokka has a bug where authManager is not initialized in client token mode
-      // without an initial ACCESS_TOKEN. To work around this, we'll provide a dummy token
-      // that will be immediately replaced with the real token.
-      env.ACCESS_TOKEN = 'dummy-token-will-be-replaced';
+      // Check if an ACCESS_TOKEN is already provided (e.g., from Enhanced Graph Access)
+      if (this.config.env?.ACCESS_TOKEN) {
+        console.log('Using pre-provided ACCESS_TOKEN for Enhanced Graph Access mode');
+        env.ACCESS_TOKEN = this.config.env.ACCESS_TOKEN;
+        env.USE_INTERACTIVE = this.config.env.USE_INTERACTIVE || 'false';
+      } else {
+        // WORKAROUND: Lokka has a bug where authManager is not initialized in client token mode
+        // without an initial ACCESS_TOKEN. To work around this, we'll provide a dummy token
+        // that will be immediately replaced with the real token.
+        env.ACCESS_TOKEN = 'dummy-token-will-be-replaced';
+      }
     }// Create the MCP client configuration
     const clientConfig: MCPServerConfig = {
       name: this.config.name,
@@ -133,8 +140,10 @@ export class ExternalLokkaMCPStdioServer {
     };    console.log('Lokka environment setup:', {
       authMethod: env.USE_CLIENT_TOKEN ? 'client-provided-token' : 'client-credentials',
       hasClientSecret: !!env.CLIENT_SECRET,
-      useClientToken: env.USE_CLIENT_TOKEN === 'true'
-    });    this.mcpClient = new StdioMCPClient(clientConfig);
+      useClientToken: env.USE_CLIENT_TOKEN === 'true',
+      hasPreProvidedToken: !!(this.config.env?.ACCESS_TOKEN && this.config.env.ACCESS_TOKEN !== 'dummy-token-will-be-replaced'),
+      useInteractive: env.USE_INTERACTIVE || 'not-set'
+    });this.mcpClient = new StdioMCPClient(clientConfig);
     
     await this.mcpClient.start();
 
@@ -144,7 +153,8 @@ export class ExternalLokkaMCPStdioServer {
     // This must be done before any other operations
     if (env.USE_CLIENT_TOKEN === 'true') {
       console.log('🔧 Setting up access token for client-provided-token mode...');
-        // Verify Lokka is ready for token operations
+        
+      // Verify Lokka is ready for token operations
       try {
         const availableTools = await this.mcpClient.listTools();
         console.log('✅ Lokka MCP tools available:', availableTools.map(t => t.name));
@@ -152,21 +162,34 @@ export class ExternalLokkaMCPStdioServer {
         console.log('⚠️ Could not verify Lokka tools:', toolsError);
       }
       
-      // Get fresh access token from auth service
-      const token = await this.authService.getToken();
+      let accessToken: string;
       
-      if (!token || !token.accessToken) {
-        throw new Error('No valid access token available for user token authentication');
-      }      console.log('Token details:', {
-        hasToken: !!token.accessToken,
-        tokenLength: token.accessToken.length,
-        expiresOn: token.expiresOn
-      });
+      // Check if we have a pre-provided ACCESS_TOKEN (Enhanced Graph Access mode)
+      if (this.config.env?.ACCESS_TOKEN && this.config.env.ACCESS_TOKEN !== 'dummy-token-will-be-replaced') {
+        console.log('🔐 Using pre-provided PowerShell access token for Enhanced Graph Access');
+        accessToken = this.config.env.ACCESS_TOKEN;
+      } else {
+        // Get fresh access token from auth service (standard user token mode)
+        console.log('🔐 Getting access token from auth service for standard user token mode');
+        const token = await this.authService.getToken();
+        
+        if (!token || !token.accessToken) {
+          throw new Error('No valid access token available for user token authentication');
+        }
+        
+        accessToken = token.accessToken;
+        
+        console.log('Token details:', {
+          hasToken: !!token.accessToken,
+          tokenLength: token.accessToken.length,
+          expiresOn: token.expiresOn
+        });
+      }
 
       // Set the access token
       console.log('🔐 Setting access token for Lokka MCP server...');
       const result = await this.mcpClient?.callTool('set-access-token', {
-        accessToken: token.accessToken
+        accessToken: accessToken
       });
       
       console.log('MCP tool set-access-token result:', result);
