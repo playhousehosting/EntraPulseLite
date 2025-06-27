@@ -1,7 +1,7 @@
 // Mock data for testing Microsoft Graph responses
 
 export const mockUser = {
-  id: '12345678-1234-1234-1234-123456789012',
+  id: 'aaaaaaaa-bbbb-cccc-dddd-111111111111',
   displayName: 'Test User',
   mail: 'testuser@contoso.com',
   userPrincipalName: 'testuser@contoso.com',
@@ -14,7 +14,7 @@ export const mockUsers = {
   value: [
     mockUser,
     {
-      id: '12345678-1234-1234-1234-123456789013',
+      id: 'bbbbbbbb-cccc-dddd-eeee-222222222222',
       displayName: 'Another User',
       mail: 'anotheruser@contoso.com',
       userPrincipalName: 'anotheruser@contoso.com',
@@ -28,7 +28,7 @@ export const mockGroups = {
   '@odata.context': 'https://graph.microsoft.com/v1.0/$metadata#groups',
   value: [
     {
-      id: '87654321-4321-4321-4321-210987654321',
+      id: 'cccccccc-dddd-eeee-ffff-333333333333',
       displayName: 'Engineering Team',
       description: 'Engineering team group',
       mailEnabled: true,
@@ -41,8 +41,8 @@ export const mockApplications = {
   '@odata.context': 'https://graph.microsoft.com/v1.0/$metadata#applications',
   value: [
     {
-      id: '11111111-1111-1111-1111-111111111111',
-      appId: '22222222-2222-2222-2222-222222222222',
+      id: 'dddddddd-eeee-ffff-aaaa-444444444444',
+      appId: 'eeeeeeee-ffff-aaaa-bbbb-555555555555',
       displayName: 'Test Application',
       description: 'Test application for unit tests',
     },

@@ -7,7 +7,7 @@ const testResponse = {
   result: {
     content: [{
       type: 'text',
-      text: 'Result for graph API - get /organization:\n\n{"@odata.context": "https://graph.microsoft.com/v1.0/$metadata#organization", "value": [{"id": "b0d6d46e-1567-4953-8649-eaa749619080", "displayName": "Star Banking Corp"}]}'
+      text: 'Result for graph API - get /organization:\n\n{"@odata.context": "https://graph.microsoft.com/v1.0/$metadata#organization", "value": [{"id": "YOUR_ORGANIZATION_ID", "displayName": "Example Organization"}]}'
     }]
   }
 };

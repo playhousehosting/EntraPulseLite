@@ -48,8 +48,8 @@ describe('Fetch MCP Server - EntitlementManagement.Read.All', () => {
               <tbody>
                 <tr>
                   <td>Identifier</td>
-                  <td>c74fd47d-ed3c-45c3-9a9e-b8676de685d2</td>
-                  <td>5449aa12-1393-4ea2-a7c7-d0e06c1a56b2</td>
+                  <td>aaaaaaaa-bbbb-cccc-dddd-example1111</td>
+                  <td>bbbbbbbb-cccc-dddd-eeee-example2222</td>
                 </tr>
                 <tr>
                   <td>AdminConsentRequired</td>

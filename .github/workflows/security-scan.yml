@@ -1,0 +1,46 @@
+name: Security Scan
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  security-scan:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Run security audit script
+      shell: pwsh
+      run: ./scripts/security-audit.ps1 -Verbose
+    
+    - name: Check for hardcoded secrets
+      run: |
+        # Check for common secret patterns (excluding known safe GUIDs)
+        if grep -r -E "(client_secret|api_key|secret_key|access_token|private_key)" \
+           --include="*.ts" --include="*.js" --include="*.json" \
+           --exclude-dir=node_modules --exclude-dir=.git .; then
+          echo "❌ Hardcoded secrets found!"
+          exit 1
+        fi
+        echo "✅ No hardcoded secrets detected"
+    
+    - name: Verify no environment files committed
+      run: |
+        if find . -name ".env*" -not -name ".env.example" -not -path "./node_modules/*" -not -path "./.git/*" | grep -q .; then
+          echo "❌ Environment files found in repository!"
+          exit 1
+        fi
+        echo "✅ No environment files in repository"

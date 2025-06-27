@@ -3,8 +3,8 @@
 ## Issue Resolved
 The tenant display name was not appearing correctly due to a **multi-tenant authentication scenario** where:
 
-1. **App Registration Tenant**: `b0d6d46e-1567-4953-8649-eaa749619080` (where the app is registered)
-2. **Authenticated User Tenant**: `47e144e0-ced3-4f72-a315-f01df2aa767d` (where the user belongs - "Increment" organization)
+1. **App Registration Tenant**: `YOUR_APP_TENANT_ID` (where the app is registered)
+2. **Authenticated User Tenant**: `USER_TENANT_ID` (where the user belongs - example: "Increment" organization)
 
 ## Root Cause
 The application was trying to query the organization info using filters that referenced the **app registration tenant ID** instead of the **authenticated user's tenant ID**. Microsoft Graph was correctly rejecting this with:
@@ -77,8 +77,8 @@ return {
 ## Expected Behavior
 Now when a user signs in and opens the Enhanced Settings dialog, they should see:
 
-- **App Registration Tenant**: `b0d6d46e-1567-4953-8649-eaa749619080`
-- **Authenticated User Tenant**: `47e144e0-ced3-4f72-a315-f01df2aa767d` (Increment)
+- **App Registration Tenant**: `YOUR_APP_TENANT_ID`
+- **Authenticated User Tenant**: `USER_TENANT_ID` (Increment)
 
 The organization name "Increment" should appear next to the authenticated user tenant.
 
