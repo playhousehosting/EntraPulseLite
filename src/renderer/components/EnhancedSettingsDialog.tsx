@@ -721,14 +721,17 @@ export const EnhancedSettingsDialog: React.FC<EnhancedSettingsDialogProps> = ({
       // Validate and fix model for the new provider
       const currentProvider = cloudProviders.find(p => p.provider === provider);
       if (currentProvider) {
-        const validModel = validateAndFixModel(provider, currentProvider.model);
-        if (validModel !== currentProvider.model) {
-          console.log(`Switching model from "${currentProvider.model}" to "${validModel}" for provider "${provider}"`);
+        const validModel = validateAndFixModel(provider, currentProvider.config.model);
+        if (validModel !== currentProvider.config.model) {
+          console.log(`Switching model from "${currentProvider.config.model}" to "${validModel}" for provider "${provider}"`);
           
           // Update the cloud provider with the valid model
           setCloudProviders(prev => prev.map(p => p.provider === provider ? {
             ...p,
-            model: validModel,
+            config: {
+              ...p.config,
+              model: validModel
+            },
             isDefault: true
           } : {
             ...p,
@@ -1400,17 +1403,6 @@ const CloudProviderCard: React.FC<CloudProviderCardProps> = ({
   const isValidModelForProvider = (model: string, provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai'): boolean => {
     const validModels = getValidModelsForProvider(provider);
     return validModels.includes(model);
-  };
-
-  const validateAndFixModel = (provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai', currentModel: string): string => {
-    if (isValidModelForProvider(currentModel, provider)) {
-      return currentModel;
-    }
-    
-    // Return the default model for the provider if current model is invalid
-    const defaultModel = getDefaultModel(provider);
-    console.warn(`Model "${currentModel}" is not valid for provider "${provider}". Using default: "${defaultModel}"`);
-    return defaultModel;
   };
 
   const handleSave = () => {
