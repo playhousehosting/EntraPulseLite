@@ -80,10 +80,9 @@ describe('Microsoft Docs MCP Priority Tests', () => {
         // Verify Microsoft Docs MCP was called
         expect(mockMCPClient.callTool).toHaveBeenCalledWith(
           'microsoft-docs', 
-          'search_docs',
+          'microsoft_docs_search',
           expect.objectContaining({
-            query: expect.any(String),
-            maxResults: 5
+            question: expect.any(String)
           })
         );
 

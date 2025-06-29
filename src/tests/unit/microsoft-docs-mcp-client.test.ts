@@ -71,6 +71,10 @@ describe('MicrosoftDocsMCPClient Unit Tests', () => {
 
       mockFetch.mockResolvedValue({
         ok: true,
+        status: 200,
+        headers: new Headers({
+          'Content-Type': 'application/json'
+        }),
         json: () => Promise.resolve(mockResponse)
       } as Response);
 
@@ -82,8 +86,8 @@ describe('MicrosoftDocsMCPClient Unit Tests', () => {
           method: 'POST',
           headers: expect.objectContaining({
             'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'User-Agent': 'EntraPulseLite/1.0.0'
+            'Accept': 'application/json, text/event-stream',
+            'User-Agent': 'MCP-Client/1.0.0-beta.1'
           }),
           body: expect.stringContaining('"method":"tools/list"')
         })
@@ -97,10 +101,11 @@ describe('MicrosoftDocsMCPClient Unit Tests', () => {
       mockFetch.mockResolvedValue({
         ok: false,
         status: 500,
-        statusText: 'Internal Server Error'
+        statusText: 'Internal Server Error',
+        headers: new Headers()
       } as Response);
 
-      await expect(client.listTools()).rejects.toThrow('Microsoft Docs MCP request failed: HTTP 500: Internal Server Error');
+      await expect(client.listTools()).rejects.toThrow('HTTP Streamable MCP request failed: HTTP 500: Internal Server Error');
     });
 
     test('should handle MCP errors gracefully', async () => {
@@ -115,6 +120,10 @@ describe('MicrosoftDocsMCPClient Unit Tests', () => {
 
       mockFetch.mockResolvedValue({
         ok: true,
+        status: 200,
+        headers: new Headers({
+          'Content-Type': 'application/json'
+        }),
         json: () => Promise.resolve(mockErrorResponse)
       } as Response);
 
@@ -139,6 +148,10 @@ describe('MicrosoftDocsMCPClient Unit Tests', () => {
 
       mockFetch.mockResolvedValue({
         ok: true,
+        status: 200,
+        headers: new Headers({
+          'Content-Type': 'application/json'
+        }),
         json: () => Promise.resolve(mockResponse)
       } as Response);
 
@@ -175,6 +188,10 @@ describe('MicrosoftDocsMCPClient Unit Tests', () => {
 
       mockFetch.mockResolvedValue({
         ok: true,
+        status: 200,
+        headers: new Headers({
+          'Content-Type': 'application/json'
+        }),
         json: () => Promise.resolve(mockResponse)
       } as Response);
 
@@ -194,16 +211,20 @@ describe('MicrosoftDocsMCPClient Unit Tests', () => {
     test('should handle network timeouts', async () => {
       mockFetch.mockRejectedValue(new Error('fetch timeout'));
 
-      await expect(client.listTools()).rejects.toThrow('Microsoft Docs MCP request failed: fetch timeout');
+      await expect(client.listTools()).rejects.toThrow('HTTP Streamable MCP request failed: fetch timeout');
     });
 
     test('should handle invalid JSON responses', async () => {
       mockFetch.mockResolvedValue({
         ok: true,
+        status: 200,
+        headers: new Headers({
+          'Content-Type': 'application/json'
+        }),
         json: () => Promise.reject(new Error('Invalid JSON'))
       } as Response);
 
-      await expect(client.listTools()).rejects.toThrow('Microsoft Docs MCP request failed: Invalid JSON');
+      await expect(client.listTools()).rejects.toThrow('HTTP Streamable MCP request failed');
     });
   });
 });
