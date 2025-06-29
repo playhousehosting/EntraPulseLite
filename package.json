@@ -117,7 +117,18 @@
     "publish": {
       "provider": "github",
       "owner": "darrenjrobinson",
-      "repo": "EntraPulseLite"
+      "repo": "EntraPulseLite",
+      "releaseType": "release"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "assets/icon.ico",
+      "uninstallerIcon": "assets/icon.ico",
+      "installerHeaderIcon": "assets/icon.ico",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
     }
   },
   "dependencies": {

@@ -12,6 +12,7 @@ import { MCPServerManager } from '../mcp/servers/MCPServerManager';
 import { GraphMCPClient } from '../mcp/clients/GraphMCPClient';
 import { MCPErrorHandler, ErrorCode } from '../mcp/utils';
 import { debugMCP, checkMCPServerHealth } from '../mcp/mcp-debug';
+import { AutoUpdaterService } from './AutoUpdaterService';
 import { AppConfig, MCPServerConfig } from '../types';
 
 // Set app ID for Windows taskbar integration
@@ -27,6 +28,7 @@ class EntraPulseLiteApp {
   private llmService!: EnhancedLLMService;
   private mcpClient!: MCPClient;
   private mcpServerManager!: MCPServerManager;
+  private autoUpdaterService!: AutoUpdaterService;
   private config!: AppConfig;
   private configurationAvailabilityNotified: boolean = false;constructor() {
     this.initializeServices().then(() => {
@@ -201,8 +203,8 @@ class EntraPulseLiteApp {
     console.log('Initializing MCP client with server configs:', this.config.mcpServers);
     this.mcpServerManager = new MCPServerManager(this.config.mcpServers, mcpAuthService, this.configService);
       // Initialize MCP client with auth service
-    this.mcpClient = new MCPClient(this.config.mcpServers, mcpAuthService);// Determine LLM configuration based on preferences
-    let llmConfig = this.config.llm;
+    this.mcpClient = new MCPClient(this.config.mcpServers, mcpAuthService);    // Determine LLM configuration based on preferences
+    let llmConfig = { ...this.config.llm }; // Start with the full configuration
     const preferLocal = this.config.llm.preferLocal;
     const hasLocalProvider = (this.config.llm.provider === 'ollama' || this.config.llm.provider === 'lmstudio') && 
                             this.config.llm.baseUrl && this.config.llm.model;
@@ -221,25 +223,36 @@ class EntraPulseLiteApp {
     // Check if we should use local LLM (preferLocal is true and local provider is configured)
     if (preferLocal && hasLocalProvider) {
       console.log('🔧 Using LOCAL LLM as preferred:', this.config.llm.provider, 'Model:', this.config.llm.model);
-      // Use the existing local configuration
-      llmConfig = this.config.llm;
+      // Use the existing local configuration (already copied above)
     } else {
       // Fall back to cloud provider logic
       const defaultCloudProvider = this.configService.getDefaultCloudProvider();
       
       if (defaultCloudProvider) {
-        // Use the default cloud provider configuration
-        llmConfig = {
-          provider: defaultCloudProvider.provider,
-          model: defaultCloudProvider.config.model,
-          apiKey: defaultCloudProvider.config.apiKey,
-          baseUrl: defaultCloudProvider.config.baseUrl,
-          temperature: defaultCloudProvider.config.temperature,
-          maxTokens: defaultCloudProvider.config.maxTokens,
-          organization: defaultCloudProvider.config.organization,
-          preferLocal: this.config.llm.preferLocal // Preserve the preferLocal setting
-        };
+        // Update the main provider fields to match the default cloud provider
+        // but keep the full cloudProviders configuration intact
+        llmConfig.provider = defaultCloudProvider.provider;
+        llmConfig.model = defaultCloudProvider.config.model;
+        
+        // Only update these fields if they're not already set at the root level
+        if (!llmConfig.apiKey || llmConfig.apiKey.trim() === '') {
+          llmConfig.apiKey = defaultCloudProvider.config.apiKey;
+        }
+        if (!llmConfig.baseUrl || llmConfig.baseUrl.trim() === '') {
+          llmConfig.baseUrl = defaultCloudProvider.config.baseUrl;
+        }
+        if (llmConfig.temperature === undefined) {
+          llmConfig.temperature = defaultCloudProvider.config.temperature;
+        }
+        if (llmConfig.maxTokens === undefined) {
+          llmConfig.maxTokens = defaultCloudProvider.config.maxTokens;
+        }
+        if (!llmConfig.organization || llmConfig.organization.trim() === '') {
+          llmConfig.organization = defaultCloudProvider.config.organization;
+        }
+        
         console.log('🔄 Using default cloud provider for LLM:', defaultCloudProvider.provider, 'Model:', defaultCloudProvider.config.model);
+        console.log('🔄 Full llmConfig includes cloudProviders:', !!llmConfig.cloudProviders, 'keys:', llmConfig.cloudProviders ? Object.keys(llmConfig.cloudProviders) : 'none');
       } else {
         console.log('⚠️ No default cloud provider configured, using stored LLM config');
         console.log('⚠️ This means either defaultCloudProvider is not set or the provider is not in cloudProviders');
@@ -248,6 +261,9 @@ class EntraPulseLiteApp {
     
     // Initialize LLM service with the appropriate configuration
     this.llmService = new EnhancedLLMService(llmConfig, this.authService, this.mcpClient);
+    
+    // Initialize auto-updater service
+    this.autoUpdaterService = new AutoUpdaterService(this.configService);
     
     // Log successful initialization
     console.log('Services initialized successfully');
@@ -658,6 +674,14 @@ class EntraPulseLiteApp {
     // Show window when ready
     this.mainWindow.once('ready-to-show', () => {
       this.mainWindow?.show();
+      
+      // Set up auto-updater with the main window reference
+      if (this.autoUpdaterService && this.mainWindow) {
+        this.autoUpdaterService.setMainWindow(this.mainWindow);
+        
+        // Check for updates on startup (with delay)
+        this.autoUpdaterService.checkForUpdatesOnStartup();
+      }
     });
 
     // Open DevTools in development
@@ -1402,21 +1426,21 @@ class EntraPulseLiteApp {
           // Reinitialize LLM service with the new default provider
         const defaultCloudProvider = this.configService.getDefaultCloudProvider();
         if (defaultCloudProvider) {
-          // Get current LLM config to preserve settings like preferLocal
+          // Get current LLM config to preserve all settings and cloud provider configurations
           const currentLLMConfig = this.configService.getLLMConfig();
           
+          // Create the updated config by modifying the current config rather than creating a new object
           const llmConfig = {
+            ...currentLLMConfig, // Start with all current settings
+            // Update the main provider fields to match the new default
             provider: defaultCloudProvider.provider,
             model: defaultCloudProvider.config.model,
-            apiKey: defaultCloudProvider.config.apiKey,
-            baseUrl: defaultCloudProvider.config.baseUrl,
-            temperature: defaultCloudProvider.config.temperature,
-            maxTokens: defaultCloudProvider.config.maxTokens,
-            organization: defaultCloudProvider.config.organization,
-            // Preserve existing settings
-            preferLocal: currentLLMConfig.preferLocal,
-            cloudProviders: currentLLMConfig.cloudProviders,
-            defaultCloudProvider: currentLLMConfig.defaultCloudProvider
+            // Only override root-level credentials if they're not already set
+            apiKey: currentLLMConfig.apiKey || defaultCloudProvider.config.apiKey,
+            baseUrl: currentLLMConfig.baseUrl || defaultCloudProvider.config.baseUrl,
+            temperature: currentLLMConfig.temperature !== undefined ? currentLLMConfig.temperature : defaultCloudProvider.config.temperature,
+            maxTokens: currentLLMConfig.maxTokens !== undefined ? currentLLMConfig.maxTokens : defaultCloudProvider.config.maxTokens,
+            organization: currentLLMConfig.organization || defaultCloudProvider.config.organization
           };
           
           // DEBUG: Check config before LLM service creation
@@ -1524,6 +1548,74 @@ class EntraPulseLiteApp {
       } catch (error) {
         console.error('Clear Entra config failed:', error);
         throw error;
+      }
+    });
+
+    // Auto-updater handlers
+    ipcMain.handle('updater:checkForUpdates', async () => {
+      try {
+        await this.autoUpdaterService.checkForUpdates();
+        return { success: true };
+      } catch (error) {
+        console.error('Check for updates failed:', error);
+        return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+      }
+    });
+
+    ipcMain.handle('updater:downloadUpdate', async () => {
+      try {
+        this.autoUpdaterService.downloadUpdate();
+        return { success: true };
+      } catch (error) {
+        console.error('Download update failed:', error);
+        return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+      }
+    });
+
+    ipcMain.handle('updater:installUpdate', async () => {
+      try {
+        this.autoUpdaterService.installUpdate();
+        return { success: true };
+      } catch (error) {
+        console.error('Install update failed:', error);
+        return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+      }
+    });
+
+    ipcMain.handle('updater:getCurrentVersion', async () => {
+      try {
+        return this.autoUpdaterService.getCurrentVersion();
+      } catch (error) {
+        console.error('Get current version failed:', error);
+        return '1.0.0-beta.1';
+      }
+    });
+
+    ipcMain.handle('updater:isUpdatePending', async () => {
+      try {
+        return this.autoUpdaterService.isUpdatePending();
+      } catch (error) {
+        console.error('Check update pending failed:', error);
+        return false;
+      }
+    });
+
+    ipcMain.handle('updater:setAutoUpdateEnabled', async (event, enabled: boolean) => {
+      try {
+        this.autoUpdaterService.setAutoUpdateEnabled(enabled);
+        return { success: true };
+      } catch (error) {
+        console.error('Set auto-update enabled failed:', error);
+        return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+      }
+    });
+
+    ipcMain.handle('updater:getAutoUpdateEnabled', async () => {
+      try {
+        return this.autoUpdaterService.getAutoUpdateEnabled();
+      } catch (error) {
+        console.error('Get auto-update enabled failed:', error);
+        return true; // Default to enabled
       }
     });
 

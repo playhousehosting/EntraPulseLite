@@ -172,6 +172,15 @@ export interface ElectronAPI {
     saveEntraConfig: (config: EntraConfig) => Promise<void>;
     clearEntraConfig: () => Promise<void>;
   };
+  updater: {
+    checkForUpdates: () => Promise<{ success: boolean; error?: string }>;
+    downloadUpdate: () => Promise<{ success: boolean; error?: string }>;
+    installUpdate: () => Promise<{ success: boolean; error?: string }>;
+    getCurrentVersion: () => Promise<string>;
+    isUpdatePending: () => Promise<boolean>;
+    setAutoUpdateEnabled: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
+    getAutoUpdateEnabled: () => Promise<boolean>;
+  };
 }
 
 export interface QueryAnalysis {

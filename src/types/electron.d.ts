@@ -44,15 +44,25 @@ interface ConfigAPI {
   saveLLMConfig(config: any): Promise<void>;
   clearModelCache(provider?: string): Promise<void>;
   getCachedModels(provider: string): Promise<string[]>;
-  saveCloudProviderConfig(provider: 'openai' | 'anthropic' | 'gemini', config: any): Promise<void>;
-  getCloudProviderConfig(provider: 'openai' | 'anthropic' | 'gemini'): Promise<any>;
-  getConfiguredCloudProviders(): Promise<Array<{ provider: 'openai' | 'anthropic' | 'gemini'; config: any }>>;
-  setDefaultCloudProvider(provider: 'openai' | 'anthropic' | 'gemini'): Promise<void>;
-  getDefaultCloudProvider(): Promise<{ provider: 'openai' | 'anthropic' | 'gemini'; config: any } | null>;
-  removeCloudProviderConfig(provider: 'openai' | 'anthropic' | 'gemini'): Promise<void>;
+  saveCloudProviderConfig(provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai', config: any): Promise<void>;
+  getCloudProviderConfig(provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai'): Promise<any>;
+  getConfiguredCloudProviders(): Promise<Array<{ provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai'; config: any }>>;
+  setDefaultCloudProvider(provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai'): Promise<void>;
+  getDefaultCloudProvider(): Promise<{ provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai'; config: any } | null>;
+  removeCloudProviderConfig(provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai'): Promise<void>;
   getEntraConfig(): Promise<any>;
   saveEntraConfig(config: any): Promise<void>;
   clearEntraConfig(): Promise<void>;
+}
+
+interface UpdaterAPI {
+  checkForUpdates(): Promise<{ success: boolean; error?: string }>;
+  downloadUpdate(): Promise<{ success: boolean; error?: string }>;
+  installUpdate(): Promise<{ success: boolean; error?: string }>;
+  getCurrentVersion(): Promise<string>;
+  isUpdatePending(): Promise<boolean>;
+  setAutoUpdateEnabled(enabled: boolean): Promise<{ success: boolean; error?: string }>;
+  getAutoUpdateEnabled(): Promise<boolean>;
 }
 
 interface ElectronAPI {
@@ -61,6 +71,7 @@ interface ElectronAPI {
   llm: LLMAPI;
   mcp: MCPAPI;
   config: ConfigAPI;
+  updater: UpdaterAPI;
   on(channel: string, callback: (...args: any[]) => void): void;
   removeAllListeners(channel: string): void;
 }

@@ -97,5 +97,16 @@ interface Window {
       checkMCPServerHealth: () => Promise<any>;
       debugMCP: () => Promise<any>;
     };
+    updater: {
+      checkForUpdates: () => Promise<{ success: boolean; error?: string }>;
+      downloadUpdate: () => Promise<{ success: boolean; error?: string }>;
+      installUpdate: () => Promise<{ success: boolean; error?: string }>;
+      getCurrentVersion: () => Promise<string>;
+      isUpdatePending: () => Promise<boolean>;
+      setAutoUpdateEnabled: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
+      getAutoUpdateEnabled: () => Promise<boolean>;
+    };
+    on: (channel: string, callback: (...args: any[]) => void) => void;
+    removeAllListeners: (channel: string) => void;
   };
 }

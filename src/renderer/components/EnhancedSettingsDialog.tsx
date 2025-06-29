@@ -36,6 +36,7 @@ import StarIcon from '@mui/icons-material/Star';
 import StarBorderIcon from '@mui/icons-material/StarBorder';
 import CloudIcon from '@mui/icons-material/Cloud';
 import ComputerIcon from '@mui/icons-material/Computer';
+import UpdateIcon from '@mui/icons-material/Update';
 import { LLMConfig, CloudLLMProviderConfig, EntraConfig } from '../../types';
 
 interface EnhancedSettingsDialogProps {
@@ -50,6 +51,103 @@ interface CloudProviderState {
   config: CloudLLMProviderConfig;
   isDefault: boolean;
 }
+
+// Auto-Update Settings Component
+const AutoUpdateSettings: React.FC = () => {
+  const [autoUpdateEnabled, setAutoUpdateEnabled] = useState(true);
+  const [currentVersion, setCurrentVersion] = useState('');
+  const [isCheckingUpdates, setIsCheckingUpdates] = useState(false);
+  const [lastUpdateCheck, setLastUpdateCheck] = useState<Date | null>(null);
+
+  useEffect(() => {
+    // Load current auto-update preference
+    const loadAutoUpdatePreference = async () => {
+      try {
+        const enabled = await window.electronAPI?.updater?.getAutoUpdateEnabled();
+        setAutoUpdateEnabled(enabled !== false);
+        
+        const version = await window.electronAPI?.updater?.getCurrentVersion();
+        setCurrentVersion(version || '1.0.0-beta.1');
+      } catch (error) {
+        console.error('Failed to load auto-update preference:', error);
+      }
+    };
+
+    loadAutoUpdatePreference();
+  }, []);
+
+  const handleAutoUpdateToggle = async (enabled: boolean) => {
+    try {
+      await window.electronAPI?.updater?.setAutoUpdateEnabled(enabled);
+      setAutoUpdateEnabled(enabled);
+    } catch (error) {
+      console.error('Failed to update auto-update preference:', error);
+    }
+  };
+
+  const handleCheckForUpdates = async () => {
+    setIsCheckingUpdates(true);
+    try {
+      await window.electronAPI?.updater?.checkForUpdates();
+      setLastUpdateCheck(new Date());
+    } catch (error) {
+      console.error('Failed to check for updates:', error);
+    } finally {
+      setIsCheckingUpdates(false);
+    }
+  };
+
+  return (
+    <Grid container spacing={2}>
+      <Grid item xs={12}>
+        <FormControlLabel
+          control={
+            <Switch
+              checked={autoUpdateEnabled}
+              onChange={(e) => handleAutoUpdateToggle(e.target.checked)}
+              color="primary"
+            />
+          }
+          label="Enable automatic updates"
+        />
+        <Typography variant="caption" color="textSecondary" sx={{ display: 'block', ml: 4 }}>
+          Automatically download and install updates when they become available.
+        </Typography>
+      </Grid>
+
+      <Grid item xs={12}>
+        <Box display="flex" alignItems="center" gap={2}>
+          <Typography variant="body2" color="textSecondary">
+            Current version: {currentVersion}
+          </Typography>
+          <Button
+            size="small"
+            variant="outlined"
+            startIcon={isCheckingUpdates ? <CircularProgress size={16} /> : <UpdateIcon />}
+            onClick={handleCheckForUpdates}
+            disabled={isCheckingUpdates}
+          >
+            {isCheckingUpdates ? 'Checking...' : 'Check for Updates'}
+          </Button>
+        </Box>
+        {lastUpdateCheck && (
+          <Typography variant="caption" color="textSecondary" sx={{ display: 'block', mt: 1 }}>
+            Last checked: {lastUpdateCheck.toLocaleString()}
+          </Typography>
+        )}
+      </Grid>
+
+      {!autoUpdateEnabled && (
+        <Grid item xs={12}>
+          <Alert severity="warning" sx={{ mt: 1 }}>
+            <strong>Auto-updates disabled:</strong> You will need to manually check for and install updates.
+            We recommend keeping auto-updates enabled to ensure you have the latest features and security fixes.
+          </Alert>
+        </Grid>
+      )}
+    </Grid>
+  );
+};
 
 export const EnhancedSettingsDialog: React.FC<EnhancedSettingsDialogProps> = ({
   open,
@@ -83,11 +181,11 @@ export const EnhancedSettingsDialog: React.FC<EnhancedSettingsDialogProps> = ({
   // Utility functions
   const getDefaultModel = (provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai'): string => {
     switch (provider) {
-      case 'openai': return 'gpt-3.5-turbo';
-      case 'anthropic': return 'claude-3-sonnet-20240229';
-      case 'gemini': return 'gemini-pro';
+      case 'openai': return 'gpt-4o-mini';
+      case 'anthropic': return 'claude-3-5-sonnet-20241022';
+      case 'gemini': return 'gemini-1.5-pro';
       case 'azure-openai': return 'gpt-35-turbo';
-      default: return 'gpt-3.5-turbo';
+      default: return 'gpt-4o-mini';
     }
   };
 
@@ -100,6 +198,62 @@ export const EnhancedSettingsDialog: React.FC<EnhancedSettingsDialogProps> = ({
       case 'azure-openai': return 'Azure OpenAI';
       default: return provider;
     }
+  };
+
+  // Model validation functions
+  const getValidModelsForProvider = (provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai'): string[] => {
+    switch (provider) {
+      case 'openai':
+        return [
+          'gpt-4o',
+          'gpt-4o-mini', 
+          'gpt-4-turbo',
+          'gpt-4',
+          'gpt-3.5-turbo'
+        ];
+      case 'anthropic':
+        return [
+          'claude-3-5-sonnet-20241022',
+          'claude-3-5-haiku-20241022',
+          'claude-3-opus-20240229',
+          'claude-3-sonnet-20240229',
+          'claude-3-haiku-20240307'
+        ];
+      case 'gemini':
+        return [
+          'gemini-1.5-pro',
+          'gemini-1.5-flash',
+          'gemini-1.0-pro',
+          'gemini-pro',
+          'gemini-pro-vision'
+        ];
+      case 'azure-openai':
+        return [
+          'gpt-4o',
+          'gpt-4o-mini',
+          'gpt-4-turbo',
+          'gpt-4',
+          'gpt-35-turbo'
+        ];
+      default:
+        return [];
+    }
+  };
+
+  const isValidModelForProvider = (model: string, provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai'): boolean => {
+    const validModels = getValidModelsForProvider(provider);
+    return validModels.includes(model);
+  };
+
+  const validateAndFixModel = (provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai', currentModel: string): string => {
+    if (isValidModelForProvider(currentModel, provider)) {
+      return currentModel;
+    }
+    
+    // Return the default model for the provider if current model is invalid
+    const defaultModel = getDefaultModel(provider);
+    console.warn(`Model "${currentModel}" is not valid for provider "${provider}". Using default: "${defaultModel}"`);
+    return defaultModel;
   };
 
   const loadGraphPermissions = async () => {
@@ -564,11 +718,42 @@ export const EnhancedSettingsDialog: React.FC<EnhancedSettingsDialogProps> = ({
       await electronAPI.config.setDefaultCloudProvider(provider);
       setDefaultCloudProvider(provider);
       
-      // Update local state
-      setCloudProviders(prev => prev.map(p => ({
-        ...p,
-        isDefault: p.provider === provider
-      })));
+      // Validate and fix model for the new provider
+      const currentProvider = cloudProviders.find(p => p.provider === provider);
+      if (currentProvider) {
+        const validModel = validateAndFixModel(provider, currentProvider.model);
+        if (validModel !== currentProvider.model) {
+          console.log(`Switching model from "${currentProvider.model}" to "${validModel}" for provider "${provider}"`);
+          
+          // Update the cloud provider with the valid model
+          setCloudProviders(prev => prev.map(p => p.provider === provider ? {
+            ...p,
+            model: validModel,
+            isDefault: true
+          } : {
+            ...p,
+            isDefault: false
+          }));
+          
+          // Save the updated model to the backend
+          await electronAPI.config.updateCloudProvider(provider, {
+            ...currentProvider,
+            model: validModel
+          });
+        } else {
+          // Just update the default status
+          setCloudProviders(prev => prev.map(p => ({
+            ...p,
+            isDefault: p.provider === provider
+          })));
+        }
+      } else {
+        // Provider not found, just update default status
+        setCloudProviders(prev => prev.map(p => ({
+          ...p,
+          isDefault: p.provider === provider
+        })));
+      }
     } catch (error) {
       console.error('Failed to set default provider:', error);
     }
@@ -1076,6 +1261,26 @@ export const EnhancedSettingsDialog: React.FC<EnhancedSettingsDialogProps> = ({
               </Grid>
             </AccordionDetails>
           </Accordion>
+
+          {/* Application Settings */}
+          <Accordion>
+            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+              <Typography variant="h6">Application Settings</Typography>
+            </AccordionSummary>
+            <AccordionDetails>
+              <Grid container spacing={3}>
+                <Grid item xs={12}>
+                  <Typography variant="body2" color="textSecondary" gutterBottom>
+                    Configure application-wide settings including auto-updates.
+                  </Typography>
+                </Grid>
+
+                <Grid item xs={12}>
+                  <AutoUpdateSettings />
+                </Grid>
+              </Grid>
+            </AccordionDetails>
+          </Accordion>
         </Box>
       </DialogContent>
       <DialogActions>
@@ -1151,6 +1356,62 @@ const CloudProviderCard: React.FC<CloudProviderCardProps> = ({
       setLocalConfig(config);
     }
   }, [config]);
+
+  // Model validation functions for this component
+  const getValidModelsForProvider = (provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai'): string[] => {
+    switch (provider) {
+      case 'openai':
+        return [
+          'gpt-4o',
+          'gpt-4o-mini', 
+          'gpt-4-turbo',
+          'gpt-4',
+          'gpt-3.5-turbo'
+        ];
+      case 'anthropic':
+        return [
+          'claude-3-5-sonnet-20241022',
+          'claude-3-5-haiku-20241022',
+          'claude-3-opus-20240229',
+          'claude-3-sonnet-20240229',
+          'claude-3-haiku-20240307'
+        ];
+      case 'gemini':
+        return [
+          'gemini-1.5-pro',
+          'gemini-1.5-flash',
+          'gemini-1.0-pro',
+          'gemini-pro',
+          'gemini-pro-vision'
+        ];
+      case 'azure-openai':
+        return [
+          'gpt-4o',
+          'gpt-4o-mini',
+          'gpt-4-turbo',
+          'gpt-4',
+          'gpt-35-turbo'
+        ];
+      default:
+        return [];
+    }
+  };
+
+  const isValidModelForProvider = (model: string, provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai'): boolean => {
+    const validModels = getValidModelsForProvider(provider);
+    return validModels.includes(model);
+  };
+
+  const validateAndFixModel = (provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai', currentModel: string): string => {
+    if (isValidModelForProvider(currentModel, provider)) {
+      return currentModel;
+    }
+    
+    // Return the default model for the provider if current model is invalid
+    const defaultModel = getDefaultModel(provider);
+    console.warn(`Model "${currentModel}" is not valid for provider "${provider}". Using default: "${defaultModel}"`);
+    return defaultModel;
+  };
 
   const handleSave = () => {
     // Validation for Azure OpenAI
@@ -1384,7 +1645,19 @@ const CloudProviderCard: React.FC<CloudProviderCardProps> = ({
             <Select
               value={localConfig.model}
               label="Model"
-              onChange={(e) => setLocalConfig({ ...localConfig, model: e.target.value })}
+              onChange={(e) => {
+                const selectedModel = e.target.value;
+                
+                // Validate the model for the current provider
+                if (!isValidModelForProvider(selectedModel, provider)) {
+                  console.warn(`Selected model "${selectedModel}" is not valid for provider "${provider}"`);
+                  // Note: Model validation warning will be shown through the existing modelFetchError prop
+                } else {
+                  console.log(`Selected model "${selectedModel}" is valid for provider "${provider}"`);
+                }
+                
+                setLocalConfig({ ...localConfig, model: selectedModel });
+              }}
               disabled={isLoadingModels}
             >
               {models.map((model) => (
@@ -1393,6 +1666,12 @@ const CloudProviderCard: React.FC<CloudProviderCardProps> = ({
                 </MenuItem>
               ))}
             </Select>
+            {/* Model validation warning */}
+            {localConfig.model && !isValidModelForProvider(localConfig.model, provider) && (
+              <Typography variant="caption" color="warning.main" sx={{ mt: 0.5, display: 'block' }}>
+                ⚠️ Warning: "{localConfig.model}" may not be a valid model for {provider}. Please verify this model exists.
+              </Typography>
+            )}
           </FormControl>
         ) : (
           <TextField
@@ -1736,6 +2015,7 @@ const EntraConfigForm: React.FC<EntraConfigFormProps> = ({ config, onSave, onCle
                               </span>
                             </span>
                           ) : (
+
                             'Not authenticated'
                           )
                         }

@@ -9,6 +9,7 @@ A free community desktop application that provides natural language querying of 
 - **Natural Language Querying**: Chat with your Microsoft Graph data using plain English
 - **Multi-Provider LLM Integration**: Works with local (Ollama, LM Studio) and cloud (OpenAI, Anthropic, Google Gemini) AI models
 - **Real-time LLM Status Monitoring**: Dynamic tracking of LLM availability with automatic UI updates
+- **Automatic Updates**: Seamless updates delivered through GitHub Releases with user control
 - **Built-in MCP Servers**: 
   - Lokka MCP using the official @merill/lokka package for Microsoft Graph API access
   - Microsoft Docs MCP using the official MicrosoftDocs/MCP package for Microsoft Learn documentation and official Microsoft documentation
@@ -155,6 +156,7 @@ Ask questions in plain English:
 - [Installation & Setup](docs/INSTALLATION.md)
 - [Development Guide](docs/DEVELOPMENT.md)
 - [Architecture Overview](docs/ARCHITECTURE.md)
+- [Auto-Updater Setup](docs/AUTO-UPDATER.md)
 - [UI Enhancements](docs/UI-ENHANCEMENTS.md)
 - [Configuration System](docs/CONFIGURATION.md)
 - [Privacy Policy](docs/PRIVACY-POLICY.md)

@@ -40,10 +40,12 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           release: true
-          build_script_name: build:release
+          max_attempts: 3
         env:
           # Windows code signing (optional for beta)
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
           # macOS code signing (optional for beta)
           CSC_IDENTITY_AUTO_DISCOVERY: false
+          # Publish to GitHub releases
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

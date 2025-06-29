@@ -57,11 +57,32 @@ jobs:
       - name: Run security checks
         run: npm run security:check
 
+      - name: Update package.json for prerelease
+        if: ${{ github.event.inputs.prerelease == 'true' }}
+        run: |
+          npm version --no-git-tag-version ${{ github.event.inputs.version }}
+          # Update publish config for prerelease
+          node -e "
+            const pkg = require('./package.json');
+            pkg.build.publish.releaseType = 'prerelease';
+            require('fs').writeFileSync('./package.json', JSON.stringify(pkg, null, 2));
+          "
+
+      - name: Update package.json for release
+        if: ${{ github.event.inputs.prerelease != 'true' }}
+        run: |
+          npm version --no-git-tag-version ${{ github.event.inputs.version }}
+          # Ensure publish config is set for release
+          node -e "
+            const pkg = require('./package.json');
+            pkg.build.publish.releaseType = 'release';
+            require('fs').writeFileSync('./package.json', JSON.stringify(pkg, null, 2));
+          "
+
       - name: Build and release
         uses: samuelmeuli/action-electron-builder@v1
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           release: true
-          prerelease: ${{ github.event.inputs.prerelease }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

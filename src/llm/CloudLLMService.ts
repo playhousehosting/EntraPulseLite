@@ -132,6 +132,11 @@ export class CloudLLMService {
   }
   async chat(messages: ChatMessage[]): Promise<string> {
     try {
+      // Validate and get a valid model for the current provider
+      const validModel = this.validateAndGetModel();
+      
+      console.log(`[CloudLLMService] Using model "${validModel}" for provider "${this.config.provider}"`);
+      
       if (this.config.provider === 'openai') {
         return this.chatWithOpenAI(messages);
       } else if (this.config.provider === 'anthropic') {
@@ -145,7 +150,19 @@ export class CloudLLMService {
       }
     } catch (error) {
       console.error('Cloud LLM chat failed:', error);
-      throw new Error('Failed to communicate with cloud LLM');
+      
+      // Provide more specific error messages for common issues
+      if (error instanceof AxiosError) {
+        if (error.response?.status === 404) {
+          throw new Error(`Model "${this.config.model}" not found for provider "${this.config.provider}". Please check your model configuration.`);
+        } else if (error.response?.status === 401) {
+          throw new Error(`Authentication failed for ${this.config.provider}. Please check your API key.`);
+        } else if (error.response?.status === 429) {
+          throw new Error(`Rate limit exceeded for ${this.config.provider}. Please try again later.`);
+        }
+      }
+      
+      throw new Error(`Failed to communicate with ${this.config.provider}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }  async isAvailable(): Promise<boolean> {
     // Check cache first to avoid excessive network requests
@@ -838,12 +855,15 @@ export class CloudLLMService {
    */
   private getFallbackAnthropicModels(): string[] {
     return [
-      'claude-sonnet-4-20250514',       // New model mentioned by user
-      'claude-3-5-sonnet-20241022',
-      'claude-3-5-haiku-20241022', 
-      'claude-3-opus-20240229',
-      'claude-3-sonnet-20240229',
-      'claude-3-haiku-20240307'
+      'claude-opus-4-20250514',         // Latest Claude Opus 4
+      'claude-sonnet-4-20250514',       // Latest Claude Sonnet 4
+      'claude-3-7-sonnet-20250219',     // Claude Sonnet 3.7
+      'claude-3-5-sonnet-20241022',     // Latest Claude 3.5 Sonnet v2
+      'claude-3-5-haiku-20241022',      // Latest Claude 3.5 Haiku
+      'claude-3-5-sonnet-20240620',     // Claude 3.5 Sonnet v1
+      'claude-3-opus-20240229',         // Claude 3 Opus
+      'claude-3-sonnet-20240229',       // Claude 3 Sonnet
+      'claude-3-haiku-20240307'         // Claude 3 Haiku
     ];
   }
 
@@ -894,5 +914,91 @@ export class CloudLLMService {
       return this.getFallbackAzureOpenAIModels();
     } else {      return [];
     }
+  }
+
+  /**
+   * Validates the current model for the provider and returns a valid model
+   * If the current model is invalid, returns the first fallback model
+   */
+  private validateAndGetModel(): string {
+    let currentModel = this.config.model;
+    
+    // First, try to resolve any aliases
+    const resolvedModel = this.getModelAlias(currentModel);
+    if (resolvedModel !== currentModel) {
+      console.log(`[CloudLLMService] Resolved model alias "${currentModel}" to "${resolvedModel}"`);
+      currentModel = resolvedModel;
+      // Update the config with the resolved model
+      this.config.model = resolvedModel;
+    }
+    
+    let validModels: string[] = [];
+
+    // Get valid models for the current provider
+    switch (this.config.provider) {
+      case 'openai':
+        validModels = this.getFallbackOpenAIModels();
+        break;
+      case 'anthropic':
+        validModels = this.getFallbackAnthropicModels();
+        break;
+      case 'gemini':
+        validModels = this.getFallbackGeminiModels();
+        break;
+      case 'azure-openai':
+        validModels = this.getFallbackOpenAIModels(); // Azure OpenAI uses OpenAI models
+        break;
+      default:
+        console.warn(`[CloudLLMService] Unknown provider: ${this.config.provider}`);
+        return currentModel;
+    }
+
+    // Check if current model is valid
+    if (validModels.includes(currentModel)) {
+      console.log(`[CloudLLMService] Model "${currentModel}" is valid for provider "${this.config.provider}"`);
+      return currentModel;
+    }
+
+    // If current model is invalid, use the first fallback model
+    const fallbackModel = validModels[0];
+    console.warn(`[CloudLLMService] Model "${currentModel}" is not valid for provider "${this.config.provider}". Using fallback model: "${fallbackModel}"`);
+    
+    // Update the config with the fallback model
+    this.config.model = fallbackModel;
+    
+    return fallbackModel;
+  }
+
+  /**
+   * Map common model aliases to their full model names
+   */
+  private getModelAlias(model: string): string {
+    const aliases: Record<string, string> = {
+      // Claude 4 aliases
+      'claude-opus-4': 'claude-opus-4-20250514',
+      'claude-sonnet-4': 'claude-sonnet-4-20250514',
+      'claude-opus-4-0': 'claude-opus-4-20250514',
+      'claude-sonnet-4-0': 'claude-sonnet-4-20250514',
+      
+      // Claude 3.7 aliases
+      'claude-3-7-sonnet-latest': 'claude-3-7-sonnet-20250219',
+      
+      // Claude 3.5 aliases
+      'claude-3-5-sonnet-latest': 'claude-3-5-sonnet-20241022',
+      'claude-3-5-haiku-latest': 'claude-3-5-haiku-20241022',
+      
+      // Claude 3 aliases
+      'claude-3-opus-latest': 'claude-3-opus-20240229',
+      
+      // OpenAI aliases
+      'gpt-4-latest': 'gpt-4o',
+      'gpt-3.5': 'gpt-3.5-turbo',
+      
+      // Gemini aliases
+      'gemini-latest': 'gemini-1.5-pro',
+      'gemini': 'gemini-1.5-pro'
+    };
+    
+    return aliases[model] || model;
   }
 }

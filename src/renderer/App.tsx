@@ -8,6 +8,7 @@ import { AppIcon } from './components/AppIcon';
 import { SettingsDialog } from './components/SettingsDialog';
 import { EnhancedSettingsDialog } from './components/EnhancedSettingsDialog';
 import { AboutDialog } from './components/AboutDialog';
+import { UpdateNotification } from './components/common/UpdateNotification';
 import { LLMConfig } from '../types';
 import { VERSION } from '../shared/version';
 import { LLMStatusProvider, useLLMStatus } from './context/LLMStatusContext';
@@ -351,6 +352,9 @@ const AppContent: React.FC<AppContentProps> = ({ settingsOpen, setSettingsOpen }
           open={aboutOpen}
           onClose={handleAboutClose}
         />
+
+        {/* Update Notification Component */}
+        <UpdateNotification />
       </Box>
     </ThemeProvider>
   );

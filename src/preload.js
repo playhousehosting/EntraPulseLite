@@ -80,9 +80,33 @@ contextBridge.exposeInMainWorld('electronAPI', {
     clearEntraConfig: () => ipcRenderer.invoke('config:clearEntraConfig'),
   },
 
+  // Auto-updater methods
+  updater: {
+    checkForUpdates: () => ipcRenderer.invoke('updater:checkForUpdates'),
+    downloadUpdate: () => ipcRenderer.invoke('updater:downloadUpdate'),
+    installUpdate: () => ipcRenderer.invoke('updater:installUpdate'),
+    getCurrentVersion: () => ipcRenderer.invoke('updater:getCurrentVersion'),
+    isUpdatePending: () => ipcRenderer.invoke('updater:isUpdatePending'),
+    setAutoUpdateEnabled: (enabled) => ipcRenderer.invoke('updater:setAutoUpdateEnabled', enabled),
+    getAutoUpdateEnabled: () => ipcRenderer.invoke('updater:getAutoUpdateEnabled'),
+  },
+
   // Event listeners for real-time updates with better memory management
   on: (channel, callback) => {
-    const validChannels = ['auth-status-changed', 'chat-message', 'graph-api-call', 'config:defaultCloudProviderChanged', 'auth:configurationAvailable', 'llm:forceStatusRefresh'];
+    const validChannels = [
+      'auth-status-changed', 
+      'chat-message', 
+      'graph-api-call', 
+      'config:defaultCloudProviderChanged', 
+      'auth:configurationAvailable', 
+      'llm:forceStatusRefresh',
+      'update:checking-for-update',
+      'update:available',
+      'update:not-available',
+      'update:error',
+      'update:download-progress',
+      'update:downloaded'
+    ];
     if (validChannels.includes(channel)) {
       // Get current listener count BEFORE adding
       const beforeCount = ipcRenderer.listenerCount(channel);
@@ -116,7 +140,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Remove specific event listener
   removeListener: (channel, callback) => {
-    const validChannels = ['auth-status-changed', 'chat-message', 'graph-api-call', 'config:defaultCloudProviderChanged', 'auth:configurationAvailable', 'llm:forceStatusRefresh'];
+    const validChannels = [
+      'auth-status-changed', 
+      'chat-message', 
+      'graph-api-call', 
+      'config:defaultCloudProviderChanged', 
+      'auth:configurationAvailable', 
+      'llm:forceStatusRefresh',
+      'update:checking-for-update',
+      'update:available',
+      'update:not-available',
+      'update:error',
+      'update:download-progress',
+      'update:downloaded'
+    ];
     if (validChannels.includes(channel)) {
       ipcRenderer.removeListener(channel, callback);
     }
@@ -124,7 +161,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Remove event listeners
   removeAllListeners: (channel) => {
-    const validChannels = ['auth-status-changed', 'chat-message', 'graph-api-call', 'config:defaultCloudProviderChanged', 'auth:configurationAvailable', 'llm:forceStatusRefresh'];
+    const validChannels = [
+      'auth-status-changed', 
+      'chat-message', 
+      'graph-api-call', 
+      'config:defaultCloudProviderChanged', 
+      'auth:configurationAvailable', 
+      'llm:forceStatusRefresh',
+      'update:checking-for-update',
+      'update:available',
+      'update:not-available',
+      'update:error',
+      'update:download-progress',
+      'update:downloaded'
+    ];
     if (validChannels.includes(channel)) {
       ipcRenderer.removeAllListeners(channel);
     }
@@ -132,7 +182,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Diagnostic method to check listener counts
   getListenerDiagnostics: () => {
-    const validChannels = ['auth-status-changed', 'chat-message', 'graph-api-call', 'config:defaultCloudProviderChanged', 'auth:configurationAvailable', 'llm:forceStatusRefresh'];
+    const validChannels = [
+      'auth-status-changed', 
+      'chat-message', 
+      'graph-api-call', 
+      'config:defaultCloudProviderChanged', 
+      'auth:configurationAvailable', 
+      'llm:forceStatusRefresh',
+      'update:checking-for-update',
+      'update:available',
+      'update:not-available',
+      'update:error',
+      'update:download-progress',
+      'update:downloaded'
+    ];
     const diagnostics = {};
     
     validChannels.forEach(channel => {

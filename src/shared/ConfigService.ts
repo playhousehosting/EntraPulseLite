@@ -809,4 +809,48 @@ export class ConfigService {
       hasClientCredentials
     });
   }
+
+  /**
+   * Set auto-update preference
+   * @param enabled Whether auto-updates should be enabled
+   */
+  setAutoUpdatePreference(enabled: boolean): void {
+    if (!this.isServiceLevelAccess && !this.isAuthenticationVerified) {
+      console.warn('[ConfigService] Cannot set auto-update preference - authentication not verified');
+      return;
+    }
+    
+    try {
+      const context = this.getCurrentContext();
+      if (context) {
+        (context as any).autoUpdate = enabled;
+        this.saveCurrentContext(context);
+        console.log(`[ConfigService] Auto-update preference set to: ${enabled}`);
+      }
+    } catch (error) {
+      console.warn('Error setting auto-update preference:', error);
+    }
+  }
+
+  /**
+   * Get auto-update preference
+   * @returns Whether auto-updates are enabled (defaults to true)
+   */
+  getAutoUpdatePreference(): boolean {
+    if (!this.isServiceLevelAccess && !this.isAuthenticationVerified) {
+      console.warn('[ConfigService] Cannot get auto-update preference - authentication not verified');
+      return true; // Default to enabled for security
+    }
+    
+    try {
+      const context = this.getCurrentContext();
+      if (context) {
+        return (context as any).autoUpdate !== false; // Default to true unless explicitly disabled
+      }
+    } catch (error) {
+      console.warn('Error getting auto-update preference:', error);
+    }
+    
+    return true; // Default to enabled
+  }
 }

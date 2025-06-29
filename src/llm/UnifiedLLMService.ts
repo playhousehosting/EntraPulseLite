@@ -584,7 +584,45 @@ export class UnifiedLLMService {
       return null;
     }
 
-    // Priority order for cloud providers
+    // If a default cloud provider is set and it's valid, prioritize it
+    if (config.defaultCloudProvider && config.cloudProviders[config.defaultCloudProvider]) {
+      const defaultProviderConfig = config.cloudProviders[config.defaultCloudProvider];
+      if (defaultProviderConfig && defaultProviderConfig.apiKey && defaultProviderConfig.apiKey.trim() !== '') {
+        // Additional validation for Azure OpenAI
+        if (config.defaultCloudProvider === 'azure-openai' && (!defaultProviderConfig.baseUrl || defaultProviderConfig.baseUrl.trim() === '')) {
+          console.warn(`[UnifiedLLMService] Default provider ${config.defaultCloudProvider} is missing baseUrl, checking other providers`);
+        } else {
+          console.log(`[UnifiedLLMService] Using default cloud provider: ${config.defaultCloudProvider}`);
+          // Return the config with the provider name explicitly set and global settings inherited
+          const cloudConfig = {
+            ...defaultProviderConfig,
+            provider: config.defaultCloudProvider,
+            // Global LLM settings from Advanced Settings take precedence
+            temperature: config.temperature,
+            maxTokens: config.maxTokens,
+            // Only use provider-specific settings if global settings are not defined
+            ...(config.temperature === undefined && defaultProviderConfig.temperature !== undefined && { temperature: defaultProviderConfig.temperature }),
+            ...(config.maxTokens === undefined && defaultProviderConfig.maxTokens !== undefined && { maxTokens: defaultProviderConfig.maxTokens })
+          };
+          
+          console.log(`[UnifiedLLMService] Created cloud config for default provider ${config.defaultCloudProvider}:`, {
+            temperature: cloudConfig.temperature,
+            maxTokens: cloudConfig.maxTokens,
+            globalTemperature: config.temperature,
+            globalMaxTokens: config.maxTokens,
+            providerTemperature: defaultProviderConfig.temperature,
+            providerMaxTokens: defaultProviderConfig.maxTokens,
+            usingGlobalSettings: config.temperature !== undefined && config.maxTokens !== undefined
+          });
+          
+          return cloudConfig;
+        }
+      }
+    }
+
+    console.log(`[UnifiedLLMService] Default provider not available or not set, falling back to priority order`);
+
+    // Fallback: Priority order for cloud providers
     const providerPriority: Array<'azure-openai' | 'openai' | 'anthropic' | 'gemini'> = [
       'azure-openai', 'openai', 'anthropic', 'gemini'
     ];
