@@ -176,7 +176,7 @@ Remember granted permissions to avoid repeated consent prompts.
 ## Troubleshooting
 
 ### Permission Denied Errors
-1. Check if the user has the required role in Azure AD
+1. Check if the user has the required role in Entra ID
 2. Verify if admin consent is required for the permission
 3. Ensure the app registration (if custom) has the permission configured
 
@@ -200,7 +200,7 @@ Remember granted permissions to avoid repeated consent prompts.
 5. Test with users who have different permission levels
 
 ### Upgrading to Custom App Registration
-1. Create app registration in Azure AD
+1. Create app registration in Entra ID
 2. Configure required permissions
 3. Update environment variables
 4. Test with different user roles

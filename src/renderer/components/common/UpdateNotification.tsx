@@ -83,7 +83,21 @@ export const UpdateNotification: React.FC = () => {
       electronAPI.on('update:error', (error: string) => {
         setIsDownloading(false);
         setDownloadProgress(null);
-        showSnackbar(`Update error: ${error}`, 'error');
+        
+        // Ensure error is always a string to prevent "[object Object]" display
+        let errorMessage = 'Update check failed';
+        
+        if (typeof error === 'string' && error.trim() !== '' && error !== '[object Object]') {
+          errorMessage = error;
+        } else if (error && typeof error === 'object') {
+          // If somehow an object still gets through, try to extract meaningful info
+          errorMessage = error.message || error.toString() || 'Update check failed';
+          if (errorMessage === '[object Object]') {
+            errorMessage = 'Update check failed - network or server error';
+          }
+        }
+        
+        showSnackbar(`Update error: ${errorMessage}`, 'error');
       });
     }
 

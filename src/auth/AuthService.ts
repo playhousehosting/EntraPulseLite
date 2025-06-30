@@ -140,7 +140,7 @@ export class AuthService {
       const tenantId = this.config!.auth.tenantId;
       const clientId = this.config!.auth.clientId;
       const scopes = encodeURIComponent(this.config!.auth.scopes.join(' '));
-      // Use the correct redirect URI that matches Azure AD configuration
+      // Use the correct redirect URI that matches Entra app configuration
       const redirectUri = encodeURIComponent('http://localhost');
       const state = Date.now().toString();
       

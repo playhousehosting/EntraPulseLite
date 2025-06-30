@@ -37,7 +37,7 @@ if (text.includes('Access is denied') ||
   
   **To resolve this issue:**
   
-  1. **Admin Consent Required**: Contact your Azure AD administrator...
+  1. **Admin Consent Required**: Contact your Entra Administrator...
   2. **Admin Consent URL**: Use this URL to grant consent...
   3. **Alternative**: Disable Enhanced Graph Access...`);
 }
@@ -55,7 +55,7 @@ The Enhanced Settings Dialog now includes prominent warnings about admin consent
 
 ### Option 1: Admin Consent (Recommended)
 
-1. **Contact your Azure AD Administrator** to request admin consent for the Microsoft Graph PowerShell application
+1. **Contact your Entra Administrator** to request admin consent for the Microsoft Graph PowerShell application
 2. **Required Permissions** (delegated):
    - Mail.Read
    - Mail.ReadWrite
@@ -133,4 +133,4 @@ When Enhanced Graph Access is enabled:
 
 - [Enhanced Graph Access Implementation](./ENHANCED-GRAPH-ACCESS-IMPLEMENTATION-COMPLETE.md)
 - [Microsoft Graph PowerShell Documentation](https://docs.microsoft.com/en-us/powershell/microsoftgraph/)
-- [Azure AD Admin Consent](https://docs.microsoft.com/en-us/azure/active-directory/manage-apps/grant-admin-consent)
+- [Entra ID Admin Consent](https://docs.microsoft.com/en-us/azure/active-directory/manage-apps/grant-admin-consent)

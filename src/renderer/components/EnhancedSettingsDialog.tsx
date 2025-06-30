@@ -1966,7 +1966,7 @@ const EntraConfigForm: React.FC<EntraConfigFormProps> = ({ config, onSave, onCle
                                   .join(', ')
                               }{graphPermissions.available.filter(p => !graphPermissions.granted.includes(p)).length > 3 ? ' and more' : ''}<br/></>
                             )}
-                            • Contact your Azure AD administrator if you encounter "Access is denied" errors.
+                            • Contact your Entra Administrator if you encounter "Access is denied" errors.
                           </>
                         )}
                       </Typography>

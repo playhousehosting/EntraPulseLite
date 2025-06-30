@@ -39,7 +39,7 @@ describe('Microsoft Docs MCP Priority Tests', () => {
     const microsoftQueries = [
       'What permissions does User.Read give me?',
       'How do I authenticate to Microsoft Graph?',
-      'Tell me about Azure Active Directory',
+      'Tell me about Microsoft Entra ID',
       'What are the latest Graph API features?',
       'How do I configure authentication?',
       'Explain Microsoft Entra',
@@ -165,7 +165,7 @@ describe('Microsoft Docs MCP Priority Tests', () => {
       // Test the heuristic analysis directly
       const heuristicAnalysis = (enhancedLLMService as any).heuristicAnalysis;
 
-      const microsoftQuery = 'How do I authenticate to Azure AD?';
+      const microsoftQuery = 'How do I authenticate to Entra ID?';
       const result = heuristicAnalysis(microsoftQuery);
 
       expect(result.needsMicrosoftDocsMcp).toBe(true);

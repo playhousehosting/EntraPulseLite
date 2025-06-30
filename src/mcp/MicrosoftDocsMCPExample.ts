@@ -51,7 +51,7 @@ export async function testMicrosoftDocsMCP(authService?: MCPAuthService): Promis
         // Example queries for common Microsoft Docs MCP tools
         const testQueries = [
           'Microsoft Graph API authentication',
-          'Azure Active Directory setup',
+          'Microsoft Entra ID setup',
           'Microsoft Entra permissions',
           'Graph API user management'
         ];

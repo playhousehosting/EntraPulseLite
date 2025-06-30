@@ -47,26 +47,61 @@ export class AutoUpdaterService {
     autoUpdater.on('error', (err) => {
       console.error('❌ Auto-updater error:', err);
       
-      // Better error message handling
+      // Better error message handling - ensure we always get a string
       let errorMessage = 'Unknown update error';
-      if (err && typeof err === 'object') {
-        if (err.message) {
-          errorMessage = err.message;
-        } else if (err.toString && err.toString() !== '[object Object]') {
-          errorMessage = err.toString();
-        } else {
-          errorMessage = 'Failed to check for updates. This may be normal for pre-release builds.';
+      
+      try {
+        if (err && typeof err === 'object') {
+          // Check for specific HttpError properties from electron-updater
+          if ((err as any).statusCode && (err as any).description) {
+            const statusCode = (err as any).statusCode;
+            const description = (err as any).description;
+            
+            if (statusCode === 404) {
+              errorMessage = 'No releases available yet. This is normal for development builds.';
+              console.log('ℹ️ Auto-updater: No releases found in repository - this is expected for development builds');
+            } else {
+              errorMessage = `HTTP ${statusCode}: Update server error`;
+            }
+          } else if (err.message && typeof err.message === 'string') {
+            errorMessage = err.message;
+          } else if (err.toString && typeof err.toString === 'function') {
+            const stringified = err.toString();
+            if (stringified !== '[object Object]') {
+              errorMessage = stringified;
+            } else {
+              // Fallback for complex objects
+              errorMessage = 'Failed to check for updates. This may be normal for pre-release builds.';
+            }
+          } else {
+            // Extract meaningful info from object
+            errorMessage = JSON.stringify(err, Object.getOwnPropertyNames(err)).slice(0, 200) || 'Failed to check for updates';
+          }
+        } else if (typeof err === 'string') {
+          errorMessage = err;
         }
-      } else if (typeof err === 'string') {
-        errorMessage = err;
+        
+        // Additional check for 404 errors in the message
+        if (errorMessage.includes('404') || errorMessage.includes('Not Found')) {
+          errorMessage = 'No releases available yet. This is normal for development builds.';
+          console.log('ℹ️ Auto-updater: No releases found in repository - this is expected for development builds');
+        }
+      } catch (parseError) {
+        console.error('Error parsing auto-updater error:', parseError);
+        errorMessage = 'Failed to check for updates. This may be normal for pre-release builds.';
       }
       
-      // Check if this is a 404 error (no releases available)
-      if (errorMessage.includes('404') || errorMessage.includes('Not Found')) {
-        errorMessage = 'No releases available yet. This is normal for development builds.';
-        console.log('ℹ️ Auto-updater: No releases found in repository - this is expected for development builds');
+      // Ensure errorMessage is always a string and not too long
+      if (typeof errorMessage !== 'string') {
+        errorMessage = 'Update check failed';
       }
       
+      // Truncate very long error messages
+      if (errorMessage.length > 500) {
+        errorMessage = errorMessage.substring(0, 497) + '...';
+      }
+      
+      console.log('🔧 Auto-updater sending processed error message to renderer:', errorMessage);
       this.sendToRenderer('update:error', errorMessage);
     });
 
@@ -142,18 +177,54 @@ export class AutoUpdaterService {
     } catch (error) {
       console.error('Error checking for updates:', error);
       
-      // Handle common error scenarios gracefully
+      // Handle common error scenarios gracefully with robust error parsing
       let errorMessage = 'Failed to check for updates';
-      if (error && typeof error === 'object' && (error as any).message) {
-        const msg = (error as any).message;
-        if (msg.includes('404') || msg.includes('Not Found')) {
-          errorMessage = 'No releases available yet. This is normal for development builds.';
-          console.log('ℹ️ No releases found - expected for development builds');
-        } else {
-          errorMessage = msg;
+      
+      try {
+        if (error && typeof error === 'object') {
+          // Check for specific HttpError properties from electron-updater
+          if ((error as any).statusCode && (error as any).description) {
+            const statusCode = (error as any).statusCode;
+            
+            if (statusCode === 404) {
+              errorMessage = 'No releases available yet. This is normal for development builds.';
+              console.log('ℹ️ No releases found - expected for development builds');
+            } else {
+              errorMessage = `HTTP ${statusCode}: Update server error`;
+            }
+          } else if ((error as any).message && typeof (error as any).message === 'string') {
+            const msg = (error as any).message;
+            if (msg.includes('404') || msg.includes('Not Found')) {
+              errorMessage = 'No releases available yet. This is normal for development builds.';
+              console.log('ℹ️ No releases found - expected for development builds');
+            } else {
+              errorMessage = msg;
+            }
+          } else if (error.toString && typeof error.toString === 'function') {
+            const stringified = error.toString();
+            if (stringified !== '[object Object]') {
+              errorMessage = stringified;
+            }
+          }
+        } else if (typeof error === 'string') {
+          errorMessage = error;
         }
+      } catch (parseError) {
+        console.error('Error parsing checkForUpdates error:', parseError);
+        errorMessage = 'Failed to check for updates. This may be normal for pre-release builds.';
       }
       
+      // Ensure errorMessage is always a string
+      if (typeof errorMessage !== 'string') {
+        errorMessage = 'Update check failed';
+      }
+      
+      // Truncate very long error messages
+      if (errorMessage.length > 500) {
+        errorMessage = errorMessage.substring(0, 497) + '...';
+      }
+      
+      console.log('🔧 checkForUpdates sending processed error message to renderer:', errorMessage);
       this.sendToRenderer('update:error', errorMessage);
     }
   }

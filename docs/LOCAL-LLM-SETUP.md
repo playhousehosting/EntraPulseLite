@@ -95,7 +95,7 @@ def query_llm(prompt, model="codellama:13b"):
     return response.json()["response"]
 
 # Example usage
-result = query_llm("Generate code to create a user in Azure AD using Microsoft Graph API")
+result = query_llm("Generate code to create a user in Entra ID using Microsoft Graph API")
 ```
 
 ## System Requirements

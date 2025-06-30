@@ -92,7 +92,7 @@ The External Lokka MCP Server supports client credentials flow for scenarios whe
 To use client credentials flow:
 
 1. **Register an Application in Azure Portal**
-   - Navigate to Azure Active Directory > App registrations
+   - Navigate to Microsoft Entra ID > App registrations
    - Create a new registration or use an existing one
    - Record the Application (client) ID and Directory (tenant) ID
    - Create a client secret under Certificates & secrets
@@ -123,7 +123,7 @@ When client credentials are not provided, the External Lokka MCP Server will fal
 - **Client Secret Management**: Store your client secret securely. Never commit it directly to source control.
 - **Least Privilege**: Grant only the permissions that your application needs.
 - **Secret Rotation**: Regularly rotate your client secret according to your organization's security policies.
-- **Audit Logging**: Enable audit logs in Azure AD to monitor activities performed with the service principal.
+- **Audit Logging**: Enable audit logs in Entra ID to monitor activities performed with the service principal.
 
 ## Troubleshooting
 

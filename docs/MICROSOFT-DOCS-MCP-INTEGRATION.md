@@ -70,7 +70,7 @@ The Microsoft Docs MCP is integrated into the query analysis flow:
 3. **Response Generation**: The LLM uses the documentation results to generate informed responses
 
 Example queries that would trigger Microsoft Docs MCP:
-- "Tell me about Azure Active Directory"
+- "Tell me about Microsoft Entra ID"
 - "How do I authenticate to Graph API?"
 - "What are the latest Graph API features?"
 - "What permissions does User.Read give me?"

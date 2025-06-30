@@ -691,6 +691,13 @@ class EntraPulseLiteApp {
   }
 
   private setupMenu(): void {
+    // In production, hide the menu entirely for a cleaner app experience
+    if (process.env.NODE_ENV !== 'development') {
+      Menu.setApplicationMenu(null);
+      return;
+    }
+
+    // Development menu with DevTools and debug options
     const template: Electron.MenuItemConstructorOptions[] = [
       {
         label: 'File',
@@ -755,6 +762,12 @@ class EntraPulseLiteApp {
   }
 
   private setupGlobalShortcuts(): void {
+    // Only register development shortcuts in development mode
+    if (process.env.NODE_ENV !== 'development') {
+      console.log('Production mode: Development shortcuts disabled');
+      return;
+    }
+
     // Register F12 to toggle DevTools - this ensures it works even if menu doesn't respond
     globalShortcut.register('F12', () => {
       if (this.mainWindow && !this.mainWindow.isDestroyed()) {
@@ -769,7 +782,7 @@ class EntraPulseLiteApp {
       }
     });
 
-    console.log('Global shortcuts registered: F12 and Ctrl+Shift+I for DevTools');
+    console.log('Development mode: Global shortcuts registered: F12 and Ctrl+Shift+I for DevTools');
   }
 
   private setupIpcHandlers(): void {

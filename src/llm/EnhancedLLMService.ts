@@ -286,7 +286,7 @@ ${conversationContext ? `\n## CONVERSATION CONTEXT:\n${conversationContext}\n\nI
 MICROSOFT DOCS MCP (Priority #1) - Use for ANY Microsoft-related content:
 - "What permissions does User.Read give me?" -> Microsoft Docs MCP
 - "How do I authenticate to Graph?" -> Microsoft Docs MCP
-- "Tell me about Azure Active Directory" -> Microsoft Docs MCP
+- "Tell me about Microsoft Entra ID" -> Microsoft Docs MCP
 - "What are the latest Graph API features?" -> Microsoft Docs MCP
 - "How do I configure authentication?" -> Microsoft Docs MCP
 - "Explain Microsoft Entra" -> Microsoft Docs MCP
@@ -512,7 +512,7 @@ The Microsoft Graph PowerShell client ID requires admin consent for mail and cal
 
 **To resolve this issue:**
 
-1. **Admin Consent Required**: Contact your Azure AD administrator to grant admin consent for these delegated permissions to the "Microsoft Graph Command Line Tools" app (ID: 14d82eec-204b-4c2f-b7e8-296a70dab67e):
+1. **Admin Consent Required**: Contact your Entra Administrator to grant admin consent for these delegated permissions to the "Microsoft Graph Command Line Tools" app (ID: 14d82eec-204b-4c2f-b7e8-296a70dab67e):
    • Mail.Read
    • Mail.ReadWrite  
    • Calendars.Read

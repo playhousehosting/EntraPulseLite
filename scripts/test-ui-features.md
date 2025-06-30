@@ -2,7 +2,7 @@
 
 ## Copy Code Feature Test
 
-1. Ask a question that would generate code (e.g., "Show me a PowerShell script to get Azure AD users")
+1. Ask a question that would generate code (e.g., "Show me a PowerShell script to get Entra ID users")
 2. Look for the copy button (clipboard icon) in the top-right corner of any code blocks
 3. Click the copy button and verify the code is copied to clipboard
 4. The button should show "Copied!" tooltip briefly after clicking
@@ -30,7 +30,7 @@
 
 Ask for these to generate code blocks with copy buttons:
 
-1. "Show me a PowerShell script to list Azure AD users"
+1. "Show me a PowerShell script to list Entra ID users"
 2. "Write a Microsoft Graph API query to get group memberships"
 3. "Create a JSON configuration for an Azure app registration"
 4. "Show me a REST API call to get user profile information"
