@@ -379,10 +379,10 @@ export class CloudLLMService {
 
     // Use retry logic for the actual request
     return await this.retryWithBackoff(async () => {
-      console.log(`Making Anthropic request with model: ${this.config.model || 'claude-3-5-sonnet-20241022'}, temperature: ${this.config.temperature || 0.1}, max_tokens: ${this.config.maxTokens || 2048}`);
+      console.log(`Making Anthropic request with model: ${this.config.model || 'claude-sonnet-4-20250514'}, temperature: ${this.config.temperature || 0.1}, max_tokens: ${this.config.maxTokens || 2048}`);
       
       const response = await axios.post('https://api.anthropic.com/v1/messages', {
-        model: this.config.model || 'claude-3-5-sonnet-20241022', // Use latest stable model as default
+        model: this.config.model || 'claude-sonnet-4-20250514', // Use latest stable model as default
         max_tokens: this.config.maxTokens || 2048,
         temperature: this.config.temperature || 0.1,
         system: systemPrompt,
@@ -855,6 +855,7 @@ export class CloudLLMService {
    */
   private getFallbackAnthropicModels(): string[] {
     return [
+      'claude-sonnet-4-20250514',       // Latest Claude 4 Sonnet (June 2025)
       'claude-3-5-sonnet-20241022',     // Latest Claude 3.5 Sonnet
       'claude-3-5-haiku-20241022',      // Latest Claude 3.5 Haiku
       'claude-3-opus-20240229',         // Claude 3 Opus

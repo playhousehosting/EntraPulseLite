@@ -182,7 +182,7 @@ export const EnhancedSettingsDialog: React.FC<EnhancedSettingsDialogProps> = ({
   const getDefaultModel = (provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai'): string => {
     switch (provider) {
       case 'openai': return 'gpt-4o-mini';
-      case 'anthropic': return 'claude-3-5-sonnet-20241022';
+      case 'anthropic': return 'claude-sonnet-4-20250514';
       case 'gemini': return 'gemini-1.5-pro';
       case 'azure-openai': return 'gpt-35-turbo';
       default: return 'gpt-4o-mini';
@@ -213,6 +213,7 @@ export const EnhancedSettingsDialog: React.FC<EnhancedSettingsDialogProps> = ({
         ];
       case 'anthropic':
         return [
+          'claude-sonnet-4-20250514',      // Latest Claude 4 Sonnet (June 2025)
           'claude-3-5-sonnet-20241022',
           'claude-3-5-haiku-20241022',
           'claude-3-opus-20240229',
@@ -1341,7 +1342,7 @@ const CloudProviderCard: React.FC<CloudProviderCardProps> = ({
     config || {
       provider,
       model: provider === 'openai' ? 'gpt-4o-mini' : 
-             provider === 'anthropic' ? 'claude-3-5-sonnet-20241022' : 
+             provider === 'anthropic' ? 'claude-sonnet-4-20250514' : 
              provider === 'gemini' ? 'gemini-1.5-flash' :
              provider === 'azure-openai' ? 'gpt-4o' : 'gpt-4o-mini',      apiKey: '',
       temperature: 0.2,
@@ -1373,6 +1374,7 @@ const CloudProviderCard: React.FC<CloudProviderCardProps> = ({
         ];
       case 'anthropic':
         return [
+          'claude-sonnet-4-20250514',      // Latest Claude 4 Sonnet (June 2025)
           'claude-3-5-sonnet-20241022',
           'claude-3-5-haiku-20241022',
           'claude-3-opus-20240229',

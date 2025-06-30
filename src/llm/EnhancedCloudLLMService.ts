@@ -176,7 +176,7 @@ When users ask questions, you can:
 4. Help with troubleshooting and security analysis
 
 Always be helpful, accurate, and security-conscious in your responses.`;    const response = await axios.post('https://api.anthropic.com/v1/messages', {
-      model: this.config.model || 'claude-3-5-sonnet-20241022',
+      model: this.config.model || 'claude-sonnet-4-20250514',
       max_tokens: this.config.maxTokens || 2048,
       temperature: this.config.temperature || 0.2,
       system: systemPrompt,
@@ -411,8 +411,8 @@ Always be helpful, accurate, and security-conscious in your responses.`;
    * Extract Anthropic model names from HTML content
    */
   private extractAnthropicModelsFromHTML(htmlContent: string): string[] {
-    // Look for patterns like "claude-3-5-sonnet-20241022" in the documentation
-    const modelRegex = /claude-[0-9](?:\.[0-9])?-(?:opus|sonnet|haiku)-[0-9]{8}/gi;
+    // Look for patterns like "claude-3-5-sonnet-20241022" or "claude-sonnet-4-20250514" in the documentation
+    const modelRegex = /claude-(?:[0-9](?:\.[0-9])?-)?(?:opus|sonnet|haiku)(?:-[0-9])?-[0-9]{8}/gi;
     const matches = htmlContent.match(modelRegex);
     
     if (matches && matches.length > 0) {
@@ -646,6 +646,7 @@ Always be helpful, accurate, and security-conscious in your responses.`;
    */
   private getFallbackAnthropicModels(): string[] {
     return [
+      'claude-sonnet-4-20250514',       // Latest Claude 4 Sonnet (June 2025)
       'claude-3-5-sonnet-20241022',
       'claude-3-5-haiku-20241022', 
       'claude-3-opus-20240229',
