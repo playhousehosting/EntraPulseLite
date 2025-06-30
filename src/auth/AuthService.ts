@@ -53,10 +53,9 @@ export class AuthService {
   }
   /**
    * Sign in the user (alias for login)
-   * @param useRedirectFlow Whether to use redirect flow for authentication
    * @returns Authentication token
    */
-  async login(useRedirectFlow: boolean = false): Promise<AuthToken | null> {
+  async login(): Promise<AuthToken | null> {
     return this.signIn();
   }
 

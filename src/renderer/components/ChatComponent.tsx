@@ -17,8 +17,6 @@ import {
   Alert,  Divider,
   IconButton,
   Tooltip,
-  FormControlLabel,
-  Checkbox,
 } from '@mui/material';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -66,7 +64,7 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
   } = useLLMStatus();const [currentPermissions, setCurrentPermissions] = useState<string[]>(['User.Read']);
   const [authMode, setAuthMode] = useState<'client-credentials' | 'interactive' | null>(null);
   const [permissionSource, setPermissionSource] = useState<'actual' | 'configured' | 'default'>('default');
-  const [permissionRequests, setPermissionRequests] = useState<string[]>([]);  const [useRedirectFlow, setUseRedirectFlow] = useState(false);
+  const [permissionRequests, setPermissionRequests] = useState<string[]>([]);
   const [userPhotoUrl, setUserPhotoUrl] = useState<string | null>(null);  const [expandedTraces, setExpandedTraces] = useState<Set<string>>(new Set());
   const [profileDropdownAnchor, setProfileDropdownAnchor] = useState<HTMLElement | null>(null);  const [defaultCloudProvider, setDefaultCloudProvider] = useState<'openai' | 'anthropic' | 'gemini' | 'azure-openai' | null>(null);
   const [currentModel, setCurrentModel] = useState<string | null>(null);
@@ -183,9 +181,8 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
   };  const handleLogin = async () => {
     try {
       setIsLoading(true);
-      // Pass the redirect flow preference to the login function
-      // The actual implementation will need to be added to AuthService
-      const token = await window.electronAPI.auth.login(useRedirectFlow);
+      // Login with Microsoft
+      const token = await window.electronAPI.auth.login();
       setAuthToken(token);
       const currentUser = await window.electronAPI.auth.getCurrentUser();      setUser(currentUser);
       setError(null);
@@ -605,18 +602,7 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
             {isLoading ? <CircularProgress size={24} /> : 'Sign in with Microsoft'}
           </Button>
           
-          <Box sx={{ mt: 2, width: '100%' }}>
-            <FormControlLabel
-              control={
-                <Checkbox 
-                  size="small" 
-                  checked={useRedirectFlow}
-                  onChange={(e) => setUseRedirectFlow(e.target.checked)}
-                />
-              }
-              label="Use redirect flow (mobile-friendly)"
-            />
-          </Box>            <Typography variant="caption" align="center" sx={{ mt: 1 }}>
+          <Typography variant="caption" align="center" sx={{ mt: 2 }}>
             By signing in, you acknowledge this app only accesses and processes data based on your permissions in your tenant. See About (Info).
           </Typography>
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5, mt: 1 }}>

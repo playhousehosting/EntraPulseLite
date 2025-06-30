@@ -73,6 +73,7 @@ jspm_packages/
 
 # Build outputs
 dist/
+dist-release/
 build/
 out/
 release/

@@ -38,7 +38,16 @@
     "security:check": "npm audit --audit-level=moderate && echo 'Security check passed'",
     "pre-release": "npm run test && npm run security:check && npm run build",
     "build:release": "npm run build && electron-builder",
+    "build:sign": "cross-env PATH=\"C:\\Program Files (x86)\\Windows Kits\\10\\bin\\10.0.22621.0\\x64;%PATH%\" electron-builder",
     "release": "electron-builder --publish=always",
+    "release:local": "electron-builder --publish=never",
+    "release:local:unsigned": "npm run build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false WIN_CSC_IDENTITY_AUTO_DISCOVERY=false CSC_NAME= WIN_CSC_LINK= electron-builder --publish=never",
+    "build:portable": "npm run build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win portable --publish=never",
+    "build:unsigned": "npm run build && electron-builder --config electron-builder-unsigned.json --publish=never",
+    "build:win": "npm run build && electron-builder --win",
+    "sign:verify-cert": "powershell -ExecutionPolicy Bypass -File scripts/verify-certificate.ps1",
+    "build:signed": "powershell -ExecutionPolicy Bypass -File scripts/build-and-sign.ps1",
+    "build:signed:publish": "powershell -ExecutionPolicy Bypass -File scripts/build-and-sign.ps1 -Publish",
     "create-release": "pwsh scripts/create-release.ps1"
   },
   "keywords": [
@@ -60,7 +69,7 @@
   },
   "license": "MIT",
   "build": {
-    "appId": "com.increment.entrapulselite",
+    "appId": "com.darrenjrobinson.entrapulselite",
     "productName": "EntraPulse Lite",
     "directories": {
       "output": "dist-release"
@@ -86,8 +95,10 @@
         }
       ],
       "icon": "assets/icon.ico",
-      "publisherName": "Increment",
-      "verifyUpdateCodeSignature": false
+      "verifyUpdateCodeSignature": false,
+      "certificateSubjectName": "Darren J Robinson",
+      "signingHashAlgorithms": ["sha256"],
+      "signDlls": true
     },
     "mac": {
       "target": [
@@ -174,6 +185,7 @@
     "assert": "^2.1.0",
     "buffer": "^6.0.3",
     "copy-webpack-plugin": "^13.0.0",
+    "cross-env": "^7.0.3",
     "crypto-browserify": "^3.12.1",
     "css-loader": "^7.1.2",
     "dotenv": "^16.4.7",

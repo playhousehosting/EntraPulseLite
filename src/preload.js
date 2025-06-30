@@ -17,7 +17,7 @@ contextBridge.exposeInMainWorld('electron', {
 contextBridge.exposeInMainWorld('electronAPI', {
   // Authentication methods
   auth: {
-    login: (useRedirectFlow = false) => ipcRenderer.invoke('auth:login', useRedirectFlow),
+    login: () => ipcRenderer.invoke('auth:login'),
     logout: () => ipcRenderer.invoke('auth:logout'),
     getToken: () => ipcRenderer.invoke('auth:getToken'),
     getCurrentUser: () => ipcRenderer.invoke('auth:getCurrentUser'),

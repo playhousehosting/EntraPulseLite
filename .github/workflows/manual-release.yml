@@ -57,32 +57,37 @@ jobs:
       - name: Run security checks
         run: npm run security:check
 
-      - name: Update package.json for prerelease
-        if: ${{ github.event.inputs.prerelease == 'true' }}
+      - name: Update package.json version
         run: |
           npm version --no-git-tag-version ${{ github.event.inputs.version }}
-          # Update publish config for prerelease
+
+      - name: Set prerelease flag
+        if: ${{ github.event.inputs.prerelease == 'true' }}
+        run: |
           node -e "
             const pkg = require('./package.json');
             pkg.build.publish.releaseType = 'prerelease';
-            require('fs').writeFileSync('./package.json', JSON.stringify(pkg, null, 2));
+            require('fs').writeFileSync('./package.json', JSON.stringify(pkg, null, 2) + '\n');
           "
 
-      - name: Update package.json for release
+      - name: Set release flag
         if: ${{ github.event.inputs.prerelease != 'true' }}
         run: |
-          npm version --no-git-tag-version ${{ github.event.inputs.version }}
-          # Ensure publish config is set for release
           node -e "
             const pkg = require('./package.json');
             pkg.build.publish.releaseType = 'release';
-            require('fs').writeFileSync('./package.json', JSON.stringify(pkg, null, 2));
+            require('fs').writeFileSync('./package.json', JSON.stringify(pkg, null, 2) + '\n');
           "
 
+      - name: Verify configuration
+        run: |
+          echo "Package version: $(node -p "require('./package.json').version")"
+          echo "Release type: $(node -p "require('./package.json').build.publish.releaseType")"
+          echo "Prerelease input: ${{ github.event.inputs.prerelease }}"
+
       - name: Build and release
-        uses: samuelmeuli/action-electron-builder@v1
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          release: true
+        run: npm run release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_NAME: "Darren J Robinson"
+          WIN_CSC_IDENTITY_AUTO_DISCOVERY: true

@@ -780,9 +780,9 @@ class EntraPulseLiteApp {
     });
 
     // Authentication handlers
-    ipcMain.handle('auth:login', async (_, useRedirectFlow = false) => {
+    ipcMain.handle('auth:login', async () => {
       try {
-        const result = await this.authService.login(useRedirectFlow);
+        const result = await this.authService.login();
           // After successful login, reinitialize LLM service with full configuration
         if (result) {
           console.log('🔐 Login successful, reloading LLM configuration...');

@@ -1,0 +1,49 @@
+{
+  "appId": "com.darrenjrobinson.entrapulselite",
+  "productName": "EntraPulse Lite",
+  "directories": {
+    "output": "dist-release"
+  },
+  "files": [
+    "dist/**/*",
+    "package.json",
+    "assets/**/*"
+  ],
+  "win": {
+    "target": [
+      {
+        "target": "portable",
+        "arch": ["x64"]
+      }
+    ],
+    "icon": "assets/icon.ico",
+    "forceCodeSigning": false,
+    "verifyUpdateCodeSignature": false
+  },
+  "mac": {
+    "target": [
+      {
+        "target": "dmg",
+        "arch": ["x64", "arm64"]
+      }
+    ],
+    "icon": "assets/icon.png",
+    "category": "public.app-category.productivity"
+  },
+  "linux": {
+    "target": [
+      {
+        "target": "AppImage",
+        "arch": ["x64"]
+      }
+    ],
+    "icon": "assets/icon.png",
+    "category": "Office"
+  },
+  "publish": {
+    "provider": "github",
+    "owner": "darrenjrobinson",
+    "repo": "EntraPulseLite",
+    "releaseType": "release"
+  }
+}
