@@ -150,6 +150,51 @@ Follow semantic versioning:
 
 ## Troubleshooting
 
+### Development Builds and Pre-Release Issues
+
+**Issue**: Auto-updater shows "[object Object]" error or "Update error" on startup.
+
+**Cause**: This is normal for development builds (beta, alpha, dev versions) when no GitHub releases exist yet.
+
+**Solutions**:
+1. **Expected Behavior**: Development builds will show update errors until the first official release is published to GitHub.
+2. **Error Message**: Recent updates provide clearer error messages like "No releases available yet. This is normal for development builds."
+3. **Disable Auto-Updates**: In Settings > General, disable "Check for updates automatically" for development environments.
+
+### Common Error Scenarios
+
+#### 404 Not Found Error
+- **Cause**: GitHub repository doesn't have any releases yet
+- **Resolution**: This is expected for new projects; publish first release to resolve
+
+#### Network Connection Issues
+- **Cause**: Firewall or network blocking GitHub API access
+- **Resolution**: Check network connectivity and firewall settings
+
+#### Certificate/Signing Issues
+- **Cause**: Code signing verification failures
+- **Resolution**: Ensure proper certificate configuration in build process
+
+### Debug Information
+
+Enable verbose logging for auto-updater debugging:
+
+```typescript
+// In development, check console logs for:
+// 🔍 Checking for updates...
+// ❌ Auto-updater error: [detailed error message]
+// ℹ️ Development build detected - auto-update checking may not work until official releases are available
+```
+
+### Manual Update Testing
+
+For testing update functionality:
+
+1. Create a test release on GitHub
+2. Bump version number in development build
+3. Test update detection and download process
+4. Verify installation and rollback scenarios
+
 ### Common Issues
 
 1. **Update Check Fails**

@@ -58,25 +58,25 @@
 ### Solution 2: Lokka MCP Client Secret Requirement
 
 #### Understanding Lokka MCP Authentication
-Based on official Lokka documentation, the MCP server requires:
+Based on official Lokka documentation, the MCP server supports multiple authentication flows:
 - `TENANT_ID` - Microsoft Entra tenant ID
 - `CLIENT_ID` - Azure app registration client ID  
-- `CLIENT_SECRET` - Azure app registration client secret
+- `CLIENT_SECRET` - Azure app registration client secret (optional for interactive flows)
 
-**Why Client Secret is Required:**
-- Lokka uses **client credentials flow** for non-interactive authentication
-- This flow is designed for server-to-server authentication
-- Client credentials flow requires a client secret for security
-- Interactive flows (which don't need client secret) aren't suitable for MCP servers
+**Authentication Options:**
+- **Interactive Authentication** - Uses user permissions with interactive sign-in (no client secret required)
+- **App-only Authentication** - Uses client credentials flow for server-to-server authentication (requires client secret)
+- Both flows are supported by the current Lokka MCP implementation
+- Interactive flows provide access to user-scoped data, while app-only provides broader organizational access
 
 #### UI Enhancement
-Added warning message in Entra Application Settings:
+Added informational message in Entra Application Settings:
 ```tsx
 {!localConfig.clientSecret && (
-  <Alert severity="warning">
-    <strong>Note:</strong> The Lokka MCP server for Microsoft Graph queries requires a Client Secret. 
-    Without a Client Secret, you can still authenticate interactively, but Graph queries through the AI assistant will not work.
-    To enable full functionality, please provide a Client Secret from your Azure app registration.
+  <Alert severity="info">
+    <strong>Note:</strong> Microsoft Graph queries through the AI assistant support both interactive authentication and app-only authentication. 
+    Without a Client Secret, you can still perform Graph queries using interactive authentication with your user permissions.
+    To enable app-only authentication for broader organizational data access, provide a Client Secret from your Azure app registration.
   </Alert>
 )}
 ```

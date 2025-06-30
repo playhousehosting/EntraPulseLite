@@ -46,7 +46,28 @@ export class AutoUpdaterService {
 
     autoUpdater.on('error', (err) => {
       console.error('❌ Auto-updater error:', err);
-      this.sendToRenderer('update:error', err.message);
+      
+      // Better error message handling
+      let errorMessage = 'Unknown update error';
+      if (err && typeof err === 'object') {
+        if (err.message) {
+          errorMessage = err.message;
+        } else if (err.toString && err.toString() !== '[object Object]') {
+          errorMessage = err.toString();
+        } else {
+          errorMessage = 'Failed to check for updates. This may be normal for pre-release builds.';
+        }
+      } else if (typeof err === 'string') {
+        errorMessage = err;
+      }
+      
+      // Check if this is a 404 error (no releases available)
+      if (errorMessage.includes('404') || errorMessage.includes('Not Found')) {
+        errorMessage = 'No releases available yet. This is normal for development builds.';
+        console.log('ℹ️ Auto-updater: No releases found in repository - this is expected for development builds');
+      }
+      
+      this.sendToRenderer('update:error', errorMessage);
     });
 
     autoUpdater.on('download-progress', (progressObj) => {
@@ -116,9 +137,24 @@ export class AutoUpdaterService {
   // Public methods for manual update checking
   async checkForUpdates(): Promise<void> {
     try {
+      console.log('🔍 Checking for updates...');
       await autoUpdater.checkForUpdatesAndNotify();
     } catch (error) {
       console.error('Error checking for updates:', error);
+      
+      // Handle common error scenarios gracefully
+      let errorMessage = 'Failed to check for updates';
+      if (error && typeof error === 'object' && (error as any).message) {
+        const msg = (error as any).message;
+        if (msg.includes('404') || msg.includes('Not Found')) {
+          errorMessage = 'No releases available yet. This is normal for development builds.';
+          console.log('ℹ️ No releases found - expected for development builds');
+        } else {
+          errorMessage = msg;
+        }
+      }
+      
+      this.sendToRenderer('update:error', errorMessage);
     }
   }
 
@@ -144,6 +180,14 @@ export class AutoUpdaterService {
     const autoUpdateEnabled = this.configService.getAutoUpdatePreference();
     
     if (autoUpdateEnabled !== false) { // Default to true unless explicitly disabled
+      // For beta/development builds, be more conservative about update checking
+      const currentVersion = this.getCurrentVersion();
+      const isDevelopmentBuild = currentVersion.includes('beta') || currentVersion.includes('dev') || currentVersion.includes('alpha');
+      
+      if (isDevelopmentBuild) {
+        console.log('ℹ️ Development build detected - auto-update checking may not work until official releases are available');
+      }
+      
       // Wait 10 seconds after startup before checking for updates
       setTimeout(() => {
         this.checkForUpdates();

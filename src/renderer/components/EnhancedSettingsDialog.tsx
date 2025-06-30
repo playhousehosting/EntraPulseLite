@@ -2188,10 +2188,10 @@ const EntraConfigForm: React.FC<EntraConfigFormProps> = ({ config, onSave, onCle
       )}
       {!localConfig.clientSecret && (
         <Grid item xs={12}>
-          <Alert severity="warning">
-            <strong>Note:</strong> The Lokka MCP server for Microsoft Graph queries requires a Client Secret. 
-            Without a Client Secret, you can still authenticate interactively, but Graph queries through the AI assistant will not work.
-            To enable full functionality, please provide a Client Secret from your Azure app registration.
+          <Alert severity="info">
+            <strong>Note:</strong> Microsoft Graph queries through the AI assistant support both interactive authentication and app-only authentication. 
+            Without a Client Secret, you can still perform Graph queries using interactive authentication with your user permissions.
+            To enable app-only authentication for broader organizational data access, provide a Client Secret from your Azure app registration.
           </Alert>
         </Grid>
       )}
