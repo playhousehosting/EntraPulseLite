@@ -97,7 +97,9 @@
       "icon": "assets/icon.ico",
       "verifyUpdateCodeSignature": false,
       "certificateSubjectName": "Darren J Robinson",
-      "signingHashAlgorithms": ["sha256"],
+      "signingHashAlgorithms": [
+        "sha256"
+      ],
       "signDlls": true
     },
     "mac": {
@@ -189,7 +191,7 @@
     "crypto-browserify": "^3.12.1",
     "css-loader": "^7.1.2",
     "dotenv": "^16.4.7",
-    "electron": "36.4.0",
+    "electron": "^36.4.0",
     "electron-builder": "^26.0.12",
     "html-webpack-plugin": "^5.6.3",
     "husky": "^9.1.7",
