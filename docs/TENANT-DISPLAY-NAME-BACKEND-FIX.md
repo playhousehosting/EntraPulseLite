@@ -78,9 +78,9 @@ return {
 Now when a user signs in and opens the Enhanced Settings dialog, they should see:
 
 - **App Registration Tenant**: `YOUR_APP_TENANT_ID`
-- **Authenticated User Tenant**: `USER_TENANT_ID` (Increment)
+- **Authenticated User Tenant**: `USER_TENANT_ID` (darrenjrobinson)
 
-The organization name "Increment" should appear next to the authenticated user tenant.
+The organization name "darrenjrobinson" should appear next to the authenticated user tenant.
 
 ## Multi-Tenant Architecture
 This fix properly supports the common Microsoft Graph multi-tenant pattern where:
@@ -94,7 +94,7 @@ This fix properly supports the common Microsoft Graph multi-tenant pattern where
 2. Sign in with your Microsoft account
 3. Open Enhanced Settings dialog
 4. Verify both tenant IDs are shown clearly
-5. Confirm "Increment" appears next to the authenticated user tenant
+5. Confirm "darrenjrobinson" appears next to the authenticated user tenant
 
 ## Files Modified
 - `src/main/main.ts`: Fixed organization lookup to use authenticated tenant

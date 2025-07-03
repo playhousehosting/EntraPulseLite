@@ -188,15 +188,25 @@ export class ConfigService {
    */
   private saveCurrentContext(config: UserConfigSchema): void {
     try {
+      console.log(`[ConfigService] saveCurrentContext - Mode: ${this.currentAuthMode}, UserKey: ${this.currentUserKey}`);
+      
       if (this.currentAuthMode === 'client-credentials') {
+        console.log('[ConfigService] Saving to application config (client-credentials mode)');
         this.store.set('application', config);
       } else if (this.currentAuthMode === 'interactive' && this.currentUserKey) {
+        console.log(`[ConfigService] Saving to user config for ${this.currentUserKey}`);
         const users = this.store.get('users') || {};
         users[this.currentUserKey] = config;
         this.store.set('users', users);
       } else {
-        // Fallback to application config
+        // Fallback to application config when user context is not available
+        console.log('[ConfigService] Fallback: Saving to application config (no user context)');
         this.store.set('application', config);
+        
+        // For Enhanced Graph Access settings, also ensure they're preserved in application config
+        if (config.entraConfig?.useGraphPowerShell !== undefined) {
+          console.log('[ConfigService] Preserving Enhanced Graph Access setting in application config:', config.entraConfig.useGraphPowerShell);
+        }
       }
     } catch (error) {
       console.warn('Error saving configuration:', error);
@@ -626,18 +636,46 @@ export class ConfigService {
    * Remove a cloud provider configuration
    */
   removeCloudProviderConfig(provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai'): void {
-    const config = this.getLLMConfig();
+    console.log(`[ConfigService] removeCloudProviderConfig - Removing provider: ${provider}`);
+    
+    const currentContext = this.getCurrentContext();
+    const config = currentContext.llm || {};
     
     if (config.cloudProviders?.[provider]) {
-      delete config.cloudProviders[provider];
+      console.log(`[ConfigService] removeCloudProviderConfig - Provider ${provider} found, removing...`);
+      
+      // Create a deep copy to avoid reference issues
+      const updatedCloudProviders = { ...config.cloudProviders };
+      delete updatedCloudProviders[provider];
       
       // If this was the default provider, choose a new default
+      let newDefaultProvider = config.defaultCloudProvider;
       if (config.defaultCloudProvider === provider) {
-        const remainingProviders = Object.keys(config.cloudProviders) as Array<'openai' | 'anthropic' | 'gemini' | 'azure-openai'>;
-        config.defaultCloudProvider = remainingProviders.length > 0 ? remainingProviders[0] : undefined;
+        const remainingProviders = Object.keys(updatedCloudProviders) as Array<'openai' | 'anthropic' | 'gemini' | 'azure-openai'>;
+        newDefaultProvider = remainingProviders.length > 0 ? remainingProviders[0] : undefined;
+        console.log(`[ConfigService] removeCloudProviderConfig - Default provider was ${provider}, changed to: ${newDefaultProvider || 'none'}`);
       }
       
-      this.saveLLMConfig(config);
+      // Update the context directly to avoid the complex merging logic in saveLLMConfig
+      currentContext.llm = {
+        ...config,
+        cloudProviders: Object.keys(updatedCloudProviders).length > 0 ? updatedCloudProviders : undefined,
+        defaultCloudProvider: newDefaultProvider
+      };
+      
+      console.log(`[ConfigService] removeCloudProviderConfig - Updated config provider keys: [${Object.keys(updatedCloudProviders).join(', ')}]`);
+      console.log(`[ConfigService] removeCloudProviderConfig - New default provider: ${newDefaultProvider || 'none'}`);
+      
+      // Save directly to avoid merging conflicts
+      this.saveCurrentContext(currentContext);
+      
+      // Verify the deletion worked
+      const verifyContext = this.getCurrentContext();
+      const remainingKeys = verifyContext.llm?.cloudProviders ? Object.keys(verifyContext.llm.cloudProviders) : [];
+      console.log(`[ConfigService] removeCloudProviderConfig - Verification: remaining providers [${remainingKeys.join(', ')}]`);
+      console.log(`[ConfigService] removeCloudProviderConfig - Verification: provider ${provider} still exists: ${!!verifyContext.llm?.cloudProviders?.[provider]}`);
+    } else {
+      console.log(`[ConfigService] removeCloudProviderConfig - Provider ${provider} not found in config`);
     }
   }
 
@@ -735,12 +773,32 @@ export class ConfigService {
     }
 
     const config = this.getCurrentContext();
-    return config.entraConfig || null;
+    let entraConfig = config.entraConfig || null;
+    
+    // Fallback: If no Entra config in current context, check application config
+    if (!entraConfig) {
+      try {
+        const appConfig = this.store.get('application');
+        entraConfig = appConfig?.entraConfig || null;
+        if (entraConfig) {
+          console.log('[ConfigService] getEntraConfig - Using fallback from application config');
+        }
+      } catch (error) {
+        console.warn('[ConfigService] Failed to get Entra config fallback:', error);
+      }
+    }
+    
+    if (entraConfig) {
+      console.log('[ConfigService] getEntraConfig - Found config with Enhanced Graph Access:', entraConfig.useGraphPowerShell);
+    }
+    
+    return entraConfig;
   }
   /**
    * Save Entra application configuration
    * @param entraConfig Entra configuration to save
-   */  saveEntraConfig(entraConfig: EntraConfig): void {
+   */  
+  saveEntraConfig(entraConfig: EntraConfig): void {
     if (!this.isAuthenticationVerified) {
       console.log('[ConfigService] 🔒 Save Entra config blocked - authentication not verified');
       return;
@@ -757,6 +815,19 @@ export class ConfigService {
     const currentConfig = this.getCurrentContext();
     currentConfig.entraConfig = entraConfig;
     this.saveCurrentContext(currentConfig);
+
+    // Additional safety: For Enhanced Graph Access, also save to application config as fallback
+    // This ensures the setting is available even if user context is not properly maintained
+    if (entraConfig.useGraphPowerShell !== undefined) {
+      try {
+        console.log('[ConfigService] Saving Enhanced Graph Access setting to application config as backup:', entraConfig.useGraphPowerShell);
+        const appConfig = this.store.get('application') || this.getDefaultUserConfig();
+        appConfig.entraConfig = { ...appConfig.entraConfig, ...entraConfig };
+        this.store.set('application', appConfig);
+      } catch (error) {
+        console.warn('[ConfigService] Failed to save Enhanced Graph Access backup:', error);
+      }
+    }
 
     // Update authentication context based on new config
     this.updateAuthenticationContext();

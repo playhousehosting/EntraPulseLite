@@ -97,6 +97,40 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
     }
   }, []);
 
+  // Listen for authentication logout events (e.g., from Enhanced Graph Access changes)
+  useEffect(() => {
+    const handleAuthLogout = (event: any, data: { reason?: string }) => {
+      console.log('🔐 [ChatComponent] Authentication logout event received:', data);
+      
+      // Reset all authentication-related state
+      setAuthToken(null);
+      setUser(null);
+      setUserPhotoUrl(null);
+      setMessages([]);
+      setCurrentPermissions(['User.Read']);
+      setPermissionSource('default');
+      setAuthMode('interactive');
+      
+      console.log('✅ [ChatComponent] Authentication state reset after logout');
+    };
+
+    // Add the IPC listener using EventManager
+    const electronAPI = window.electronAPI as any;
+    if (electronAPI?.on) {
+      eventManager.addEventListener(
+        'auth:logout', 
+        handleAuthLogout, 
+        'ChatComponent',
+        electronAPI
+      );
+      
+      // Cleanup function to remove the listener
+      return () => {
+        eventManager.removeEventListener('auth:logout', 'ChatComponent', electronAPI);
+      };
+    }
+  }, []);
+
   // We don't need this useEffect anymore as the UserProfileAvatar component handles photo loading
   // But we keep the state for shared use cases
   useEffect(() => {
@@ -512,7 +546,11 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
       const welcomeMessage: ChatMessage = {
         id: 'welcome',
         role: 'assistant',
-        content: `Welcome to EntraPulse Lite! I'm your Microsoft Entra assistant. I can help you query your Microsoft Graph data, understand identity concepts, and analyze your directory structure. What would you like to explore?`,
+        content: `Welcome to EntraPulse Lite.
+
+I'm your Microsoft assistant. I can help you query your Microsoft Entra environment, understand Microsoft Graph and identity concepts, and assist you managing and orchestrating your tenant.
+
+What would you like to explore?`,
         timestamp: new Date(),
       };
       setMessages([welcomeMessage]);
@@ -1119,133 +1157,6 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
             </ListItem>
           )}
         </List>      </Box>
-
-      {/* Permissions Status Panel - Show for client-credentials mode or when permission requests are needed */}
-      {(authMode === 'client-credentials' || permissionRequests.length > 0) && (
-        <Box sx={{ p: 2, backgroundColor: 'background.paper', borderTop: 1, borderColor: 'divider', flexShrink: 0 }}>
-        {/* Authentication Mode Display */}
-        {authMode && (
-          <Box display="flex" alignItems="center" gap={1} mb={2}>
-            <Typography variant="subtitle2">Authentication Mode:</Typography>
-            <Chip 
-              label={authMode === 'client-credentials' ? 'Application (Client Credentials)' : 'Interactive (User Login)'}
-              size="small"
-              color={authMode === 'client-credentials' ? 'success' : 'info'}
-              variant="filled"
-            />
-          </Box>
-        )}        {/* Show detailed permissions only for client-credentials mode */}
-        {authMode === 'client-credentials' && (
-          <>
-            <Box display="flex" alignItems="center" gap={1} mb={1}>
-              <Typography variant="subtitle2" gutterBottom>Current Permissions:</Typography>
-              {permissionSource === 'actual' && (
-                <Chip 
-                  label="From Token" 
-                  size="small" 
-                  color="success" 
-                  variant="outlined"
-                />
-              )}
-              {permissionSource === 'configured' && (
-                <Chip 
-                  label="Configured" 
-                  size="small" 
-                  color="warning" 
-                  variant="outlined"
-                />
-              )}
-            </Box>
-            <Box display="flex" flexWrap="wrap" gap={1} mb={2}>
-              {currentPermissions.map((permission) => (
-                <Chip 
-                  key={permission}
-                  label={permission}
-                  size="small"
-                  color="primary"
-                  variant="outlined"
-                />
-              ))}
-            </Box>
-
-            {/* Quick Test Buttons for client-credentials mode */}
-            <Typography variant="subtitle2" gutterBottom>Quick Tests:</Typography>
-            <Box display="flex" flexWrap="wrap" gap={1}>
-              <Button
-                size="small"
-                variant="outlined"
-                onClick={() => testGraphQuery('/me', ['User.Read'])}
-                disabled={isLoading}
-              >
-                Get My Profile
-              </Button>
-              <Button
-                size="small"
-                variant="outlined"
-                onClick={() => testGraphQuery('/users', ['User.ReadBasic.All'])}
-                disabled={isLoading}
-              >
-                List Users
-              </Button>
-              <Button
-                size="small"
-                variant="outlined"
-                onClick={() => testGraphQuery('/groups', ['Group.Read.All'])}
-                disabled={isLoading}
-              >
-                List Groups
-              </Button>
-              <Button
-                size="small"
-                variant="outlined"
-                onClick={() => testGraphQuery('/applications', ['Application.Read.All'])}
-                disabled={isLoading}
-              >
-                List Applications
-              </Button>
-              <Button
-                size="small"
-                variant="contained"
-                color="secondary"
-                onClick={async () => {
-                  try {
-                    setIsLoading(true);
-                    console.log('🔄 Clearing token cache and forcing reauthentication...');
-                    const result = await window.electronAPI.auth.forceReauthentication();
-                    if (result) {
-                      console.log('✅ Reauthentication successful, refreshing permissions...');
-                      // Refresh the authentication info to get new permissions
-                      await checkAuthenticationStatus();
-                    }
-                  } catch (error) {
-                    console.error('Failed to refresh permissions:', error);
-                  } finally {
-                    setIsLoading(false);
-                  }
-                }}
-                disabled={isLoading}
-              >
-                Refresh Permissions
-              </Button>
-            </Box>
-          </>
-        )}
-          {/* Permission Request Buttons */}
-        {permissionRequests.length > 0 && (
-          <Box mt={2}>
-            <Typography variant="subtitle2" gutterBottom>Grant Required Permissions:</Typography>
-            <Button
-              size="small"
-              variant="contained"
-              onClick={() => requestPermissions(permissionRequests)}
-              disabled={isLoading}
-            >
-              Grant {permissionRequests.join(', ')}
-            </Button>
-          </Box>
-        )}
-        </Box>
-      )}
 
       {/* Error Alert */}
       {error && (

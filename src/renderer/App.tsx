@@ -189,7 +189,9 @@ const AppContent: React.FC<AppContentProps> = ({ settingsOpen, setSettingsOpen }
       // Force immediate LLM status check and config reload
       stableForceCheck();
       stableLoadLLMConfig();
-    };    // Add the IPC listener using the exposed API with EventManager
+    };
+
+    // Add the IPC listener using the exposed API with EventManager
     const electronAPI = window.electronAPI as any;
     if (electronAPI?.on) {
       // Use EventManager for better memory management

@@ -91,6 +91,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getAutoUpdateEnabled: () => ipcRenderer.invoke('updater:getAutoUpdateEnabled'),
   },
 
+  // Send events to main process for broadcasting
+  send: (channel, data) => {
+    const validChannels = ['auth:logoutBroadcast'];
+    if (validChannels.includes(channel)) {
+      ipcRenderer.send(channel, data);
+    } else {
+      console.warn(`Invalid send channel: ${channel}`);
+    }
+  },
+
   // Event listeners for real-time updates with better memory management
   on: (channel, callback) => {
     const validChannels = [
@@ -99,6 +109,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       'graph-api-call', 
       'config:defaultCloudProviderChanged', 
       'auth:configurationAvailable', 
+      'auth:enhancedGraphAccessChanged',
+      'auth:logout',
       'llm:forceStatusRefresh',
       'update:checking-for-update',
       'update:available',
@@ -146,6 +158,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       'graph-api-call', 
       'config:defaultCloudProviderChanged', 
       'auth:configurationAvailable', 
+      'auth:enhancedGraphAccessChanged',
       'llm:forceStatusRefresh',
       'update:checking-for-update',
       'update:available',
@@ -167,6 +180,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       'graph-api-call', 
       'config:defaultCloudProviderChanged', 
       'auth:configurationAvailable', 
+      'auth:enhancedGraphAccessChanged',
       'llm:forceStatusRefresh',
       'update:checking-for-update',
       'update:available',
@@ -188,6 +202,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       'graph-api-call', 
       'config:defaultCloudProviderChanged', 
       'auth:configurationAvailable', 
+      'auth:enhancedGraphAccessChanged',
       'llm:forceStatusRefresh',
       'update:checking-for-update',
       'update:available',
@@ -210,7 +225,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Force cleanup of listeners (aggressive cleanup)
   forceCleanupListeners: (channel) => {
-    const validChannels = ['auth-status-changed', 'chat-message', 'graph-api-call', 'config:defaultCloudProviderChanged', 'auth:configurationAvailable', 'llm:forceStatusRefresh'];
+    const validChannels = [
+      'auth-status-changed', 
+      'chat-message', 
+      'graph-api-call', 
+      'config:defaultCloudProviderChanged', 
+      'auth:configurationAvailable', 
+      'auth:enhancedGraphAccessChanged',
+      'auth:logout',
+      'llm:forceStatusRefresh'
+    ];
     if (validChannels.includes(channel)) {
       const beforeCount = ipcRenderer.listenerCount(channel);
       ipcRenderer.removeAllListeners(channel);

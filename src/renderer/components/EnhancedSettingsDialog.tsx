@@ -553,8 +553,7 @@ export const EnhancedSettingsDialog: React.FC<EnhancedSettingsDialogProps> = ({
         if (providerConfig.baseUrl) {
           // Trim whitespace and normalize URL
           const cleanUrl = providerConfig.baseUrl.trim();
-          console.log(`🔍 [Azure OpenAI Debug] Processing URL for save: "${cleanUrl}"`);
-          
+          console.log(`🔍 [Azure OpenAI Debug] Processing URL for save: "${cleanUrl}"`);          
           // Check if URL has all required components
           const hasDeploymentPath = cleanUrl.includes('/deployments/');
           const hasChatCompletions = cleanUrl.includes('/chat/completions');
@@ -764,11 +763,19 @@ export const EnhancedSettingsDialog: React.FC<EnhancedSettingsDialogProps> = ({
   };
   const handleRemoveProvider = async (provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai') => {
     try {
+      console.log(`🗑️ [CloudProvider] Removing provider: ${provider}`);
+      
       const electronAPI = window.electronAPI as any; // Temporary type assertion
       await electronAPI.config.removeCloudProviderConfig(provider);
+      
+      console.log(`🗑️ [CloudProvider] Provider ${provider} removal completed, reloading providers...`);
+      
+      // Reload the providers to update the UI
       await loadCloudProviders();
+      
+      console.log(`🗑️ [CloudProvider] UI updated after removing ${provider}`);
     } catch (error) {
-      console.error('Failed to remove provider:', error);
+      console.error(`Failed to remove provider ${provider}:`, error);
     }
   };  const handleTestConnection = async (config: CloudLLMProviderConfig): Promise<boolean> => {
     try {
@@ -1358,8 +1365,21 @@ const CloudProviderCard: React.FC<CloudProviderCardProps> = ({
   useEffect(() => {
     if (config) {
       setLocalConfig(config);
+    } else {
+      // Reset to default when config is undefined (provider deleted)
+      setLocalConfig({
+        provider,
+        model: provider === 'openai' ? 'gpt-4o-mini' : 
+               provider === 'anthropic' ? 'claude-sonnet-4-20250514' : 
+               provider === 'gemini' ? 'gemini-1.5-flash' :
+               provider === 'azure-openai' ? 'gpt-4o' : 'gpt-4o-mini',
+        apiKey: '',
+        temperature: 0.2,
+        maxTokens: 4096,
+        baseUrl: provider === 'azure-openai' ? '' : undefined
+      });
     }
-  }, [config]);
+  }, [config, provider]);
 
   // Model validation functions for this component
   const getValidModelsForProvider = (provider: 'openai' | 'anthropic' | 'gemini' | 'azure-openai'): string[] => {
@@ -1765,6 +1785,7 @@ const EntraConfigForm: React.FC<EntraConfigFormProps> = ({ config, onSave, onCle
       setLocalConfig(config);
     }
   }, [config, isUserEditing]);
+
   const handleSave = async () => {
     try {
       setIsSaving(true);
@@ -1839,7 +1860,8 @@ const EntraConfigForm: React.FC<EntraConfigFormProps> = ({ config, onSave, onCle
 
   const isConfigured = !!(config?.clientId && config?.tenantId);
   return (
-    <Grid container spacing={2}>
+    <>
+      <Grid container spacing={2}>
       {/* Authentication Mode Selection */}
       <Grid item xs={12}>
         <Box sx={{ mb: 2, p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
@@ -1850,20 +1872,74 @@ const EntraConfigForm: React.FC<EntraConfigFormProps> = ({ config, onSave, onCle
           <FormControl component="fieldset">
             <RadioGroup
               value={localConfig.useApplicationCredentials ? 'application-credentials' : 'user-token'}
-              onChange={(e) => {
+              onChange={async (e) => {
                 const newMode = e.target.value === 'application-credentials';
+                const previousMode = localConfig.useApplicationCredentials;
+                
+                console.log('🎯 AUTHENTICATION MODE CHANGE HANDLER CALLED - START');
+                console.log('🔧 Authentication mode changing from:', previousMode ? 'application-credentials' : 'user-token', 'to:', newMode ? 'application-credentials' : 'user-token');
                 
                 if (newMode && (!localConfig.clientSecret?.trim() || !localConfig.clientId?.trim() || !localConfig.tenantId?.trim())) {
                   // For now, just show a warning - don't block the change
                   console.warn('Client credentials mode requires Client ID, Tenant ID, and Client Secret');
                 }
 
-                setLocalConfig({
+                // Update local state first
+                const updatedConfig = {
                   ...localConfig,
                   useApplicationCredentials: newMode
-                });
+                };
+                setLocalConfig(updatedConfig);
                 setIsUserEditing(true);
                 setTestResult(null); // Clear test results when mode changes
+                
+                // Check if this is a significant mode change that requires re-authentication
+                if (previousMode !== newMode) {
+                  console.log('🔄 Authentication mode changed significantly, auto-saving and signing out...');
+                  
+                  try {
+                    // Immediately save the authentication mode change
+                    console.log('💾 Auto-saving authentication mode change...');
+                    await onSave(updatedConfig);
+                    console.log('✅ Authentication mode setting saved successfully');
+                    
+                    // Trigger UI update event to notify other components
+                    const electronAPI = window.electronAPI as any;
+                    if (electronAPI?.events?.emit) {
+                      electronAPI.events.emit('auth:configurationAvailable');
+                      console.log('📡 Emitted auth:configurationAvailable after authentication mode save');
+                    }
+                    
+                    // Auto sign-out for authentication mode change
+                    console.log('🔔 Auto-signing out for authentication mode change...');
+                    try {
+                      await electronAPI.auth.logout();
+                      console.log('✅ Automatic sign out completed for mode change');
+                      
+                      // Emit logout event to notify other components
+                      console.log('🔔 Sending auth:logoutBroadcast to main process for mode change');
+                      electronAPI.send('auth:logoutBroadcast', { reason: 'authentication-mode-change' });
+                      
+                      // Show success message
+                      setTimeout(() => {
+                        alert(`Authentication mode changed to ${newMode ? 'Application Credentials' : 'User Token'}. You have been signed out and the application will reset to the sign-in screen.`);
+                      }, 100);
+                    } catch (logoutError) {
+                      console.error('❌ Failed to sign out automatically for mode change:', logoutError);
+                      setTimeout(() => {
+                        alert(`Authentication mode changed to ${newMode ? 'Application Credentials' : 'User Token'}, but automatic sign out failed. Please manually sign out and sign in again from the main screen.`);
+                      }, 100);
+                    }
+                  } catch (error) {
+                    console.error('❌ Failed to auto-save authentication mode setting:', error);
+                    // Revert the local state on save failure
+                    setLocalConfig({
+                      ...localConfig,
+                      useApplicationCredentials: previousMode
+                    });
+                    alert('Failed to save authentication mode setting. Please try again.');
+                  }
+                }
               }}
             >              <FormControlLabel
                 value="user-token"
@@ -1911,15 +1987,71 @@ const EntraConfigForm: React.FC<EntraConfigFormProps> = ({ config, onSave, onCle
                 <FormControlLabel
                   control={
                     <Switch
-                      checked={localConfig.useGraphPowerShell || false}                      onChange={(e) => {
-                        setLocalConfig({
+                      checked={localConfig.useGraphPowerShell || false}                      onChange={async (e) => {
+                        console.log('🎯 ENHANCED GRAPH ACCESS TOGGLE HANDLER CALLED - START');
+                        const newUseGraphPowerShell = e.target.checked;
+                        const previousUseGraphPowerShell = localConfig.useGraphPowerShell;
+                        console.log('🔧 Enhanced Graph Access toggle changing from:', previousUseGraphPowerShell, 'to:', newUseGraphPowerShell);
+                        
+                        // Update local state first
+                        const updatedConfig = {
                           ...localConfig,
-                          useGraphPowerShell: e.target.checked
-                        });
+                          useGraphPowerShell: newUseGraphPowerShell
+                        };
+                        setLocalConfig(updatedConfig);
                         setIsUserEditing(true);
                         setTestResult(null);
+                        
+                        // Check if this is a significant change that requires re-authentication
+                        if (previousUseGraphPowerShell !== newUseGraphPowerShell) {
+                          console.log('🔄 Enhanced Graph Access changed significantly, auto-saving and signing out...');
+                          
+                          try {
+                            // Immediately save the Enhanced Graph Access setting
+                            console.log('💾 Auto-saving Enhanced Graph Access setting...');
+                            await onSave(updatedConfig);
+                            console.log('✅ Enhanced Graph Access setting saved successfully');
+                            
+                            // Trigger UI update event to notify other components
+                            const electronAPI = window.electronAPI as any;
+                            if (electronAPI?.events?.emit) {
+                              electronAPI.events.emit('auth:configurationAvailable');
+                              console.log('� Emitted auth:configurationAvailable after Enhanced Graph Access save');
+                            }
+                            
+                            // Auto sign-out for Enhanced Graph Access change (same pattern as auth mode change)
+                            console.log('🔔 Auto-signing out for Enhanced Graph Access change...');
+                            try {
+                              await electronAPI.auth.logout();
+                              console.log('✅ Automatic sign out completed for Enhanced Graph Access change');
+                              
+                              // Emit logout event to notify other components
+                              console.log('🔔 Sending auth:logoutBroadcast to main process for Enhanced Graph Access change');
+                              electronAPI.send('auth:logoutBroadcast', { reason: 'enhanced-graph-access-change' });
+                              
+                              // Show success message with consistent timing as auth mode change
+                              setTimeout(() => {
+                                alert(`Enhanced Graph Access has been ${newUseGraphPowerShell ? 'enabled' : 'disabled'}. You have been signed out and the application will reset to the sign-in screen.`);
+                              }, 100);
+                            } catch (signOutError) {
+                              console.error('❌ Failed to sign out automatically for Enhanced Graph Access change:', signOutError);
+                              setTimeout(() => {
+                                alert(`Enhanced Graph Access has been ${newUseGraphPowerShell ? 'enabled' : 'disabled'}, but automatic sign out failed. Please manually sign out and sign in again from the main screen.`);
+                              }, 100);
+                            }
+                          } catch (error) {
+                            console.error('❌ Failed to auto-save Enhanced Graph Access setting:', error);
+                            // Revert the local state on save failure
+                            setLocalConfig({
+                              ...localConfig,
+                              useGraphPowerShell: previousUseGraphPowerShell
+                            });
+                            alert('Failed to save Enhanced Graph Access setting. Please try again.');
+                          }
+                        }
+                        
                         // Refresh permissions when toggling Enhanced Graph Access
-                        if (e.target.checked) {
+                        if (newUseGraphPowerShell) {
                           setTimeout(() => loadGraphPermissions(), 100);
                         }
                       }}
@@ -1932,7 +2064,14 @@ const EntraConfigForm: React.FC<EntraConfigFormProps> = ({ config, onSave, onCle
                 <Typography variant="body2" color="text.secondary" sx={{ mt: 1, mb: 2 }}>
                   Enable broader Microsoft Graph API access using the well-known Microsoft Graph PowerShell client ID.
                   This provides access to mailbox data, calendar events, OneDrive files, Teams content, and other advanced user resources.
-                </Typography>                {localConfig.useGraphPowerShell && (                  <>                    <Alert severity="info" sx={{ mb: 2 }}>
+                </Typography>
+                
+                <Alert severity="info" sx={{ mb: 2 }}>
+                  <Typography variant="body2">
+                    <strong>Note:</strong> Changing this setting requires signing out and signing back in to switch authentication contexts. 
+                    You will be automatically signed out when you toggle this setting.
+                  </Typography>
+                </Alert>                {localConfig.useGraphPowerShell && (                  <>                    <Alert severity="info" sx={{ mb: 2 }}>
                       <Typography variant="body2">
                         <strong>Enhanced Graph Access Mode:</strong> Using Microsoft Graph PowerShell client for broader API access. 
                         Available resources depend on admin-granted permissions.
@@ -2197,5 +2336,9 @@ const EntraConfigForm: React.FC<EntraConfigFormProps> = ({ config, onSave, onCle
           </Alert>
         </Grid>
       )}
-    </Grid>  );
+    </Grid>
+    </>
+  );
 };
+
+export default EnhancedSettingsDialog;
