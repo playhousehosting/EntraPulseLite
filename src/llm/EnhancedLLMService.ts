@@ -45,7 +45,9 @@ export class EnhancedLLMService {
   private authService: AuthService;
   private mcpAuthService: MCPAuthService;
   private unifiedLLM: UnifiedLLMService;
-  private isDisposed: boolean = false;constructor(config: LLMConfig, authService: AuthService, mcpClient?: MCPClient) {
+  private isDisposed: boolean = false;
+
+  constructor(config: LLMConfig, authService: AuthService, mcpClient?: MCPClient) {
     this.config = config;
     this.authService = authService;
     this.mcpAuthService = new MCPAuthService(authService);
@@ -89,7 +91,9 @@ export class EnhancedLLMService {
     
     // Initialize UnifiedLLMService with MCP client for enhanced model discovery
     this.unifiedLLM = new UnifiedLLMService(config, this.mcpClient);
-  }  /**
+  }
+
+  /**
    * Get current permission context from auth service
    */
   private async getPermissionContext(): Promise<PermissionContext | undefined> {
@@ -325,12 +329,15 @@ LOKKA MCP (Graph Data):
 - "List all users" -> Lokka MCP, endpoint: "/users", method: "get"
 - "How many users do we have?" -> Lokka MCP, endpoint: "/users/$count", method: "get", params: {"ConsistencyLevel": "eventual"}
 - "Show me guest accounts" -> Lokka MCP, endpoint: "/users", method: "get", filter: userType eq 'Guest'
+- "List all groups" -> Lokka MCP, endpoint: "/groups", method: "get"
+- "List applications" -> Lokka MCP, endpoint: "/applications", method: "get"
 
 IMPORTANT: 
 - DEFAULT to Microsoft Docs MCP for ANY Microsoft-related query
 - Only use Fetch MCP for non-Microsoft web searches
 - Always use lowercase HTTP methods (get, post, put, delete, patch)
 - For count queries, use /$count endpoints with ConsistencyLevel parameter
+- For regular list queries, do NOT use ConsistencyLevel parameter
 - Never use /me endpoint with client credentials authentication
 
 Respond ONLY with a JSON object in this exact format:
@@ -443,6 +450,10 @@ Respond ONLY with a JSON object in this exact format:
       }
     } else if (lowerQuery.includes('groups')) {
       graphEndpoint = '/groups';
+      // Do NOT add ConsistencyLevel for regular group listings
+    } else if (lowerQuery.includes('applications') || lowerQuery.includes('app registration')) {
+      graphEndpoint = '/applications';
+      // Do NOT add ConsistencyLevel for regular application listings
     } else if (lowerQuery.includes('mail')) {
       graphEndpoint = '/me/messages';
     }    return {
@@ -463,7 +474,8 @@ Respond ONLY with a JSON object in this exact format:
   }
   /**
    * Generate the final response using LLM with MCP results
-   */  private async generateFinalResponse(
+   */
+  private async generateFinalResponse(
     originalQuery: string, 
     analysis: QueryAnalysis, 
     mcpResults: { fetchResult?: any; lokkaResult?: any; microsoftDocsResult?: any }
@@ -530,25 +542,10 @@ Respond ONLY with a JSON object in this exact format:
                 text.includes('ErrorAccessDenied') || 
                 (text.includes('statusCode":403') && text.includes('graph.microsoft.com'))) {
               
-              throw new Error(`🔐 **Enhanced Graph Access Permission Error**
-
-The Microsoft Graph PowerShell client ID requires admin consent for mail and calendar permissions.
-
-**To resolve this issue:**
-
-1. **Admin Consent Required**: Contact your Entra Administrator to grant admin consent for these delegated permissions to the "Microsoft Graph Command Line Tools" app (ID: 14d82eec-204b-4c2f-b7e8-296a70dab67e):
-   • Mail.Read
-   • Mail.ReadWrite  
-   • Calendars.Read
-   • Files.Read.All
-   • Directory.Read.All
-
-2. **Admin Consent URL**: Use this URL to grant consent:
-   https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=14d82eec-204b-4c2f-b7e8-296a70dab67e&response_type=code&scope=https://graph.microsoft.com/Mail.Read%20https://graph.microsoft.com/Mail.ReadWrite%20https://graph.microsoft.com/Calendars.Read%20https://graph.microsoft.com/Files.Read.All%20https://graph.microsoft.com/Directory.Read.All&response_mode=query&state=12345&prompt=admin_consent
-
-3. **Alternative**: Disable Enhanced Graph Access in the authentication settings and use your own app registration with pre-consented permissions.
-
-**Note**: Enhanced Graph Access provides access to more Microsoft Graph APIs but requires admin consent for sensitive permissions like mail access.`);
+              // Parse the actual error to determine specific permission needed
+              const specificError = this.parseGraphApiError(text);
+              
+              throw new Error(specificError);
             }
             
             // Check if Lokka is just echoing back the query parameters instead of returning data
@@ -655,109 +652,18 @@ The current authentication session does not have sufficient permissions to acces
               }
             }
           }
-        } else if (lokkaData && typeof lokkaData === 'object') {
-          // Extract result from various possible response structures
-          if (lokkaData.value && Array.isArray(lokkaData.value)) {
-            // Common Graph API response format with 'value' array
-            finalLokkaData = lokkaData.value;
-            console.log('🔍 Extracted data from .value array');
-          } else if (lokkaData.result && typeof lokkaData.result === 'object') {
-            // Nested result format
-            finalLokkaData = lokkaData.result;
-            // Check for further nesting in another 'value' property
-            if (finalLokkaData.value && Array.isArray(finalLokkaData.value)) {
-              finalLokkaData = finalLokkaData.value;
-              console.log('🔍 Extracted data from nested .result.value');
-            }
-          } else {
-            console.log('🔍 Using object data as-is');
-          }
         }
           
-        // Prepare user-friendly context based on data type
-        if (typeof finalLokkaData === 'number') {
-          // Simple count - include in context for LLM but don't expose raw data format
-          contextData += `Your tenant has ${finalLokkaData} total users.\n\n`;
-        } else if (Array.isArray(finalLokkaData)) {
-          // Array of objects - provide structured summary
-          contextData += `Microsoft Graph Data (${finalLokkaData.length} items):\n`;
+        if (lokkaData && typeof lokkaData === 'object') {
+          // Use the generic processing for objects
+          finalLokkaData = lokkaData;
+          console.log('🔍 Using object data as-is');
+        }
           
-          // Add a summary of the data structure for the LLM
-          if (finalLokkaData.length > 0) {
-            const sampleItem = finalLokkaData[0];
-            if (sampleItem && typeof sampleItem === 'object') {
-              const keys = Object.keys(sampleItem);
-              contextData += `Data structure includes: ${keys.join(', ')}\n`;
-                    // For user data, provide a sample formatted entry
-              if (keys.includes('displayName') || keys.includes('userPrincipalName')) {
-                contextData += 'Sample entry format: Name (Title) - Email\n';
-              }
-            }
-          }
-          
-          // Add raw data with intelligent truncation for large datasets
-          const rawDataString = JSON.stringify(finalLokkaData, null, 2);
-          const MAX_CONTEXT_SIZE = 100000; // 100KB limit for context data
-          
-          if (rawDataString.length > MAX_CONTEXT_SIZE) {
-            // For large datasets, provide summary + sample data
-            console.log(`🔍 Large dataset detected (${rawDataString.length} chars), truncating...`);
-            
-            // If it's secure score data, provide a meaningful summary
-            if (finalLokkaData[0] && finalLokkaData[0].currentScore !== undefined) {
-              const latest = finalLokkaData[0];
-              const summary = {
-                latestScore: latest.currentScore,
-                maxScore: latest.maxScore,
-                percentage: Math.round((latest.currentScore / latest.maxScore) * 100),
-                date: latest.createdDateTime,
-                activeUserCount: latest.activeUserCount,
-                tenantId: latest.azureTenantId,
-                totalRecords: finalLokkaData.length
-              };
-              
-              contextData += `Raw data summary: ${JSON.stringify(summary, null, 2)}\n`;
-              contextData += `Note: Full dataset contains ${finalLokkaData.length} records but is too large to include completely.\n\n`;
-            } else {
-              // Generic truncation for other large datasets
-              const truncatedData = finalLokkaData.slice(0, 3); // Show first 3 items
-              contextData += `Raw data (first 3 of ${finalLokkaData.length} items): ${JSON.stringify(truncatedData, null, 2)}\n`;
-              contextData += `Note: Dataset truncated due to size (${rawDataString.length} chars). Showing first 3 items only.\n\n`;
-            }
-          } else {
-            // Small enough to include in full
-            contextData += `Raw data: ${rawDataString}\n\n`;
-          }        } else if (typeof finalLokkaData === 'object') {
-          // Single object - check size before including
-          const rawDataString = JSON.stringify(finalLokkaData, null, 2);
-          const MAX_CONTEXT_SIZE = 100000; // 100KB limit
-          
-          if (rawDataString.length > MAX_CONTEXT_SIZE) {
-            console.log(`🔍 Large single object detected (${rawDataString.length} chars), providing summary...`);
-            
-            // Provide object structure summary instead of full data
-            const keys = Object.keys(finalLokkaData);
-            const summary = {
-              dataType: 'Single object',
-              keys: keys,
-              keyCount: keys.length,
-              sizeInfo: `${rawDataString.length} characters (too large to display fully)`
-            };
-            
-            contextData += `Microsoft Graph Data (Single large object):\n${JSON.stringify(summary, null, 2)}\n\n`;
-          } else {
-            contextData += `Microsoft Graph Data (Single object):\n${rawDataString}\n\n`;
-          }        } else {
-          // Other types - apply same size check
-          const rawDataString = JSON.stringify(finalLokkaData, null, 2);
-          const MAX_CONTEXT_SIZE = 100000; // 100KB limit
-          
-          if (rawDataString.length > MAX_CONTEXT_SIZE) {
-            console.log(`🔍 Large data of type ${typeof finalLokkaData} detected (${rawDataString.length} chars), providing summary...`);
-            contextData += `Microsoft Graph Data (${typeof finalLokkaData}):\nData too large to display (${rawDataString.length} characters)\n\n`;
-          } else {
-            contextData += `Microsoft Graph Data:\n${rawDataString}\n\n`;
-          }
+        // Use the new generic data processing method
+        const processedData = this.processGraphApiData(finalLokkaData);
+        if (processedData) {
+          contextData += `Microsoft Graph Data:\n${processedData}\n\n`;
         }
         
         console.log('🔍 Added context data:', {
@@ -767,7 +673,9 @@ The current authentication session does not have sufficient permissions to acces
       } else {
         console.log('🔍 No lokkaData extracted from result');
       }
-    }    // Get permission context for unified prompt
+    }
+    
+    // Get permission context for unified prompt
     const permissionContext = await this.getPermissionContext();
     
     // Generate unified system prompt
@@ -793,7 +701,9 @@ The current authentication session does not have sufficient permissions to acces
         content: originalQuery,
         timestamp: new Date()
       }
-    ];    try {
+    ];
+    
+    try {
       console.log('🔍 About to call final LLM with context - ready to generate response');
       
       const response = await this.basicChat(responseMessages);
@@ -815,7 +725,8 @@ The current authentication session does not have sufficient permissions to acces
         }
       }
       
-      return enhancedResponse;    } catch (error) {
+      return enhancedResponse;
+    } catch (error) {
       console.error('Failed to generate final response:', error);
       
       // Check if we actually have any useful data to share
@@ -827,20 +738,6 @@ The current authentication session does not have sufficient permissions to acces
         // No data was retrieved, provide a cleaner error message
         return `I encountered an error while processing your request: ${error}\n\nPlease try again or switch to a different LLM provider if the issue persists.`;
       }
-    }
-  }  /**
-   * Search Microsoft Documentation using the real Microsoft Docs search
-   */
-  private async searchMicrosoftDocs(query: string): Promise<string> {
-    try {
-      console.log('🔍 Searching Microsoft Docs for:', query);
-      
-      // For now, provide accurate Microsoft Graph documentation based on the query
-      // This will be replaced with real API call when MCP is properly implemented
-      return this.getMicrosoftGraphDocumentation(query);
-    } catch (error) {
-      console.error('Microsoft Docs search failed:', error);
-      return this.getMicrosoftGraphDocumentation(query);
     }
   }
 
@@ -1207,6 +1104,455 @@ For specific API endpoints and detailed documentation, please visit the official
     }
   }
 
+  /**
+   * Parse Graph API error response and return specific error message
+   */
+  private parseGraphApiError(errorText: string): string {
+    console.log('🔍 Parsing Graph API error:', errorText);
+    
+    // Check for audit log permission errors (sign-in logs)
+    if (errorText.includes('auditLogs/signIns') || 
+        errorText.includes('/auditLogs/signIns') ||
+        errorText.includes('signIns') ||
+        errorText.includes('AuditLog.Read.All')) {
+      
+      return `🔐 **Microsoft Graph Permission Error**
+
+The current authentication session does not have sufficient permissions to access user sign-in activity data.
+
+**Required Permissions:**
+• **AuditLog.Read.All** - To access user sign-in activity
+• **User.Read.All** - To read user profiles (optional)
+• **Directory.Read.All** - Alternative permission for directory data
+
+**Current Session**: Client-credentials mode (service principal authentication)
+
+**To resolve this issue:**
+
+1. **Option 1 - Grant App Permissions**: Have your Entra Administrator grant the following **Application permissions** to your app registration:
+   • AuditLog.Read.All
+   • User.Read.All
+
+2. **Option 2 - Switch to Interactive Mode**: Sign in with a user account that has the required permissions (Reports Reader role or higher)
+
+3. **Option 3 - Use Different Query**: Try queries that don't require sign-in activity data, such as:
+   • "How many users do we have?"
+   • "List the first 5 users"
+   • "Show me user groups"
+
+**Note**: Sign-in activity data requires elevated permissions that may not be available in service principal (client-credentials) mode.`;
+    }
+    
+    // Check for application permission errors
+    if (errorText.includes('/applications') || 
+        errorText.includes('applications') ||
+        errorText.includes('Application.Read.All')) {
+      
+      return `🔐 **Microsoft Graph Permission Error**
+
+The current authentication session does not have sufficient permissions to access application registration data.
+
+**Required Permissions:**
+• **Application.Read.All** - To read all application registrations
+• **Directory.Read.All** - Alternative permission for directory data
+
+**Current Session**: Client-credentials mode (service principal authentication)
+
+**To resolve this issue:**
+
+1. **Option 1 - Grant App Permissions**: Have your Entra Administrator grant the following **Application permissions** to your app registration:
+   • Application.Read.All
+   • Directory.Read.All
+
+2. **Option 2 - Switch to Interactive Mode**: Sign in with a user account that has the required permissions (Application Administrator role or higher)
+
+3. **Option 3 - Use Different Query**: Try queries that don't require application data, such as:
+   • "How many users do we have?"
+   • "List the first 5 users"
+   • "Show me user groups"
+
+**Note**: Application registration data requires elevated permissions that may not be available in service principal (client-credentials) mode.`;
+    }
+    
+    // Check for mail-related permission errors
+    if (errorText.includes('/messages') || 
+        errorText.includes('/mail') ||
+        errorText.includes('Mail.Read')) {
+      
+      return `🔐 **Enhanced Graph Access Permission Error**
+
+The Microsoft Graph PowerShell client ID requires admin consent for mail permissions.
+
+**To resolve this issue:**
+
+1. **Admin Consent Required**: Contact your Entra Administrator to grant admin consent for these delegated permissions to the "Microsoft Graph Command Line Tools" app (ID: 14d82eec-204b-4c2f-b7e8-296a70dab67e):
+   • Mail.Read
+   • Mail.ReadWrite  
+
+2. **Admin Consent URL**: Use this URL to grant consent:
+   https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=14d82eec-204b-4c2f-b7e8-296a70dab67e&response_type=code&scope=https://graph.microsoft.com/Mail.Read%20https://graph.microsoft.com/Mail.ReadWrite&response_mode=query&state=12345&prompt=admin_consent
+
+3. **Alternative**: Disable Enhanced Graph Access in the authentication settings and use your own app registration with pre-consented permissions.
+
+**Note**: Enhanced Graph Access provides access to more Microsoft Graph APIs but requires admin consent for sensitive permissions like mail access.`;
+    }
+    
+    // Check for calendar-related permission errors
+    if (errorText.includes('/calendar') || 
+        errorText.includes('/events') ||
+        errorText.includes('Calendars.Read')) {
+      
+      return `🔐 **Enhanced Graph Access Permission Error**
+
+The Microsoft Graph PowerShell client ID requires admin consent for calendar permissions.
+
+**To resolve this issue:**
+
+1. **Admin Consent Required**: Contact your Entra Administrator to grant admin consent for these delegated permissions to the "Microsoft Graph Command Line Tools" app (ID: 14d82eec-204b-4c2f-b7e8-296a70dab67e):
+   • Calendars.Read
+
+2. **Admin Consent URL**: Use this URL to grant consent:
+   https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=14d82eec-204b-4c2f-b7e8-296a70dab67e&response_type=code&scope=https://graph.microsoft.com/Calendars.Read&response_mode=query&state=12345&prompt=admin_consent
+
+3. **Alternative**: Disable Enhanced Graph Access in the authentication settings and use your own app registration with pre-consented permissions.
+
+**Note**: Enhanced Graph Access provides access to more Microsoft Graph APIs but requires admin consent for sensitive permissions like calendar access.`;
+    }
+    
+    // Check for files/SharePoint permission errors
+    if (errorText.includes('/files') || 
+        errorText.includes('/sites') ||
+        errorText.includes('Files.Read')) {
+      
+      return `🔐 **Enhanced Graph Access Permission Error**
+
+The Microsoft Graph PowerShell client ID requires admin consent for files and SharePoint permissions.
+
+**To resolve this issue:**
+
+1. **Admin Consent Required**: Contact your Entra Administrator to grant admin consent for these delegated permissions to the "Microsoft Graph Command Line Tools" app (ID: 14d82eec-204b-4c2f-b7e8-296a70dab67e):
+   • Files.Read.All
+   • Sites.Read.All
+
+2. **Admin Consent URL**: Use this URL to grant consent:
+   https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=14d82eec-204b-4c2f-b7e8-296a70dab67e&response_type=code&scope=https://graph.microsoft.com/Files.Read.All%20https://graph.microsoft.com/Sites.Read.All&response_mode=query&state=12345&prompt=admin_consent
+
+3. **Alternative**: Disable Enhanced Graph Access in the authentication settings and use your own app registration with pre-consented permissions.
+
+**Note**: Enhanced Graph Access provides access to more Microsoft Graph APIs but requires admin consent for sensitive permissions like files access.`;
+    }
+    
+    // Generic permission error for other cases
+    return `🔐 **Microsoft Graph Permission Error**
+
+The current authentication session does not have sufficient permissions to access the requested data.
+
+**To resolve this issue:**
+
+1. **Check Required Permissions**: Verify that your application has the required permissions for the resource you're trying to access.
+
+2. **Contact Administrator**: If using Enhanced Graph Access, contact your Entra Administrator to grant the necessary permissions.
+
+3. **Try Alternative Query**: Use a query that requires only basic permissions like:
+   • "How many users do we have?"
+   • "List the first 5 users"
+   • "Show me user groups"
+
+**Current Session**: The specific permission required depends on the resource you're trying to access.`;
+  }
+
+  /**
+   * Generic method to process Microsoft Graph API data regardless of type
+   */
+  private processGraphApiData(data: any): string {
+    if (data === null || data === undefined) {
+      return '';
+    }
+
+    // Handle different data types generically
+    if (typeof data === 'number') {
+      return `Count: ${data}`;
+    }
+
+    if (typeof data === 'boolean') {
+      return `Result: ${data}`;
+    }
+
+    if (typeof data === 'string') {
+      // Simple string values (like counts returned as strings)
+      if (/^\d+$/.test(data.trim())) {
+        return `Count: ${data}`;
+      }
+      return data;
+    }
+
+    if (Array.isArray(data)) {
+      return this.formatArrayData(data);
+    }
+
+    if (typeof data === 'object') {
+      return this.formatObjectData(data);
+    }
+
+    // Fallback for other types
+    return String(data);
+  }
+
+  /**
+   * Format array data with size limits and clean presentation
+   */
+  private formatArrayData(data: any[]): string {
+    if (data.length === 0) {
+      return 'No items found.';
+    }
+
+    const MAX_ITEMS = 50;
+    const MAX_SIZE = 100000; // 100KB limit
+
+    // Check total size first
+    const fullJson = JSON.stringify(data, null, 2);
+    if (fullJson.length > MAX_SIZE) {
+      // For large datasets, provide summary + sample
+      const sampleSize = Math.min(3, data.length);
+      const sample = data.slice(0, sampleSize);
+      
+      return `Dataset Summary:
+- Total items: ${data.length}
+- Showing first ${sampleSize} items (dataset too large for full display)
+
+Sample Data:
+${this.formatAsTable(sample)}
+
+Note: Full dataset contains ${data.length} items but is too large to display completely.`;
+    }
+
+    // For manageable sizes, show full data with potential truncation
+    let itemsToShow = data;
+    let truncationNote = '';
+    
+    if (data.length > MAX_ITEMS) {
+      itemsToShow = data.slice(0, MAX_ITEMS);
+      truncationNote = `\n\nNote: ${data.length - MAX_ITEMS} additional items not shown.`;
+    }
+
+    // Try to format as a table first, fallback to JSON if needed
+    const tableFormat = this.formatAsTable(itemsToShow);
+    if (tableFormat) {
+      return `Dataset (${data.length} items${data.length > MAX_ITEMS ? `, showing first ${MAX_ITEMS}` : ''}):
+${tableFormat}${truncationNote}`;
+    }
+
+    // Fallback to JSON formatting
+    return `Dataset (${data.length} items${data.length > MAX_ITEMS ? `, showing first ${MAX_ITEMS}` : ''}):
+${JSON.stringify(itemsToShow, null, 2)}${truncationNote}`;
+  }
+
+  /**
+   * Format array data as a table if possible
+   */
+  private formatAsTable(data: any[]): string | null {
+    if (!Array.isArray(data) || data.length === 0) {
+      return null;
+    }
+
+    // Check if all items are objects with similar structure
+    const firstItem = data[0];
+    if (typeof firstItem !== 'object' || firstItem === null) {
+      return null;
+    }
+
+    // Get common keys from all objects
+    const allKeys = new Set<string>();
+    let hasConsistentStructure = true;
+
+    for (const item of data) {
+      if (typeof item !== 'object' || item === null) {
+        hasConsistentStructure = false;
+        break;
+      }
+      Object.keys(item).forEach(key => allKeys.add(key));
+    }
+
+    if (!hasConsistentStructure || allKeys.size === 0) {
+      return null;
+    }
+
+    // Define key priorities and formatting for better table display
+    const keyPriorities: { [key: string]: number } = {
+      // High priority keys (shown first)
+      'displayName': 100,
+      'name': 95,
+      'appDisplayName': 90,
+      'applicationName': 90,
+      'id': 85,
+      'appId': 80,
+      'clientId': 80,
+      'objectId': 75,
+      'createdDateTime': 70,
+      'created': 70,
+      'publisherDomain': 65,
+      'signInAudience': 60,
+      'description': 55,
+      'groupTypes': 50,
+      'securityEnabled': 45,
+      'mailEnabled': 40,
+      'visibility': 35,
+      'membershipRule': 30,
+      'membershipRuleProcessingState': 25,
+      // Lower priority keys
+      'mail': 20,
+      'mailNickname': 15,
+      'proxyAddresses': 10,
+      // Very low priority (usually hidden unless important)
+      '@odata.type': 1,
+      '@odata.context': 1
+    };
+
+    // Sort keys by priority (high to low), then alphabetically
+    const sortedKeys = Array.from(allKeys).sort((a, b) => {
+      const priorityA = keyPriorities[a] || 5; // Default priority
+      const priorityB = keyPriorities[b] || 5;
+      
+      if (priorityA !== priorityB) {
+        return priorityB - priorityA; // High priority first
+      }
+      return a.localeCompare(b); // Alphabetical for same priority
+    });
+
+    // Limit number of columns for readability
+    const MAX_COLUMNS = 6;
+    const displayKeys = sortedKeys.slice(0, MAX_COLUMNS);
+
+    // Create table header
+    const headers = displayKeys.map(key => this.formatColumnHeader(key));
+    const headerRow = `| ${headers.join(' | ')} |`;
+    const separatorRow = `|${headers.map(() => '---').join('|')}|`;
+
+    // Create table rows
+    const rows = data.map(item => {
+      const cells = displayKeys.map(key => this.formatCellValue(item[key]));
+      return `| ${cells.join(' | ')} |`;
+    });
+
+    return [headerRow, separatorRow, ...rows].join('\n');
+  }
+
+  /**
+   * Format column header for better readability
+   */
+  private formatColumnHeader(key: string): string {
+    // Convert camelCase/PascalCase to readable titles
+    const formatted = key
+      .replace(/([A-Z])/g, ' $1') // Add space before capital letters
+      .replace(/^./, str => str.toUpperCase()) // Capitalize first letter
+      .trim();
+
+    // Handle special cases
+    const specialCases: { [key: string]: string } = {
+      'App Id': 'App ID',
+      'Object Id': 'Object ID',
+      'Client Id': 'Client ID',
+      'Created Date Time': 'Created Date',
+      'Sign In Audience': 'Sign-In Audience',
+      'Publisher Domain': 'Publisher Domain',
+      'Display Name': 'Display Name',
+      'Mail Enabled': 'Mail Enabled',
+      'Security Enabled': 'Security Enabled',
+      'Group Types': 'Group Types',
+      'Membership Rule': 'Membership Rule'
+    };
+
+    return specialCases[formatted] || formatted;
+  }
+
+  /**
+   * Format cell value for table display
+   */
+  private formatCellValue(value: any): string {
+    if (value === null || value === undefined) {
+      return 'N/A';
+    }
+
+    if (typeof value === 'boolean') {
+      return value ? 'Yes' : 'No';
+    }
+
+    if (Array.isArray(value)) {
+      if (value.length === 0) {
+        return 'None';
+      }
+      if (value.length === 1) {
+        return String(value[0]);
+      }
+      return `${value.length} items`;
+    }
+
+    if (typeof value === 'object') {
+      return 'Complex Object';
+    }
+
+    if (typeof value === 'string') {
+      // Truncate very long strings
+      if (value.length > 50) {
+        return value.substring(0, 47) + '...';
+      }
+      
+      // Format date strings
+      if (value.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/)) {
+        try {
+          const date = new Date(value);
+          return date.toLocaleDateString();
+        } catch {
+          return value;
+        }
+      }
+      
+      return value;
+    }
+
+    return String(value);
+  }
+
+  /**
+   * Format object data with size limits and clean presentation
+   */
+  private formatObjectData(data: any): string {
+    const MAX_SIZE = 100000; // 100KB limit
+
+    // Handle Graph API response wrapper formats
+    if (data.value && Array.isArray(data.value)) {
+      return this.formatArrayData(data.value);
+    }
+
+    if (data.result !== undefined) {
+      return this.processGraphApiData(data.result);
+    }
+
+    // Check object size
+    const fullJson = JSON.stringify(data, null, 2);
+    if (fullJson.length > MAX_SIZE) {
+      // For large objects, provide summary
+      const keys = Object.keys(data);
+      const summary = {
+        objectType: 'Large object',
+        keyCount: keys.length,
+        keys: keys.slice(0, 20), // Show first 20 keys
+        sizeInfo: `${fullJson.length} characters (too large to display fully)`
+      };
+
+      if (keys.length > 20) {
+        summary.keys.push(`... and ${keys.length - 20} more keys`);
+      }
+
+      return `Object Summary:
+${JSON.stringify(summary, null, 2)}`;
+    }
+
+    // Show full object for reasonable sizes
+    return `Object Data:
+${fullJson}`;
+  }
+
   async isAvailable(): Promise<boolean> {
     return this.unifiedLLM.isAvailable();
   }
@@ -1276,6 +1622,19 @@ For specific API endpoints and detailed documentation, please visit the official
    */
   isServiceDisposed(): boolean {
     return this.isDisposed;
+  }
+
+  /**
+   * Search Microsoft Documentation using the real Microsoft Docs search
+   */
+  private async searchMicrosoftDocs(query: string): Promise<string> {
+    try {
+      console.log('🔍 Searching Microsoft Docs for:', query);
+      return this.getMicrosoftGraphDocumentation(query);
+    } catch (error) {
+      console.error('Microsoft Docs search failed:', error);
+      return this.getMicrosoftGraphDocumentation(query);
+    }
   }
 
 }
