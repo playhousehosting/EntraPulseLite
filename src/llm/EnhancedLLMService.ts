@@ -8,6 +8,7 @@ import { MCPAuthService } from '../mcp/auth/MCPAuthService';
 import { MCPServerConfig } from '../mcp/types';
 import { AuthService } from '../auth/AuthService';
 import { UnifiedLLMService } from './UnifiedLLMService';
+import { UnifiedPromptService, PermissionContext } from './UnifiedPromptService';
 import { conversationContextManager, ConversationContextManager } from '../shared/ConversationContextManager';
 
 export interface QueryAnalysis {
@@ -89,6 +90,25 @@ export class EnhancedLLMService {
     // Initialize UnifiedLLMService with MCP client for enhanced model discovery
     this.unifiedLLM = new UnifiedLLMService(config, this.mcpClient);
   }  /**
+   * Get current permission context from auth service
+   */
+  private async getPermissionContext(): Promise<PermissionContext | undefined> {
+    try {
+      const authInfo = await this.authService.getAuthenticationInfo();
+      if (authInfo) {
+        return {
+          currentPermissions: authInfo.permissions || ['User.Read'],
+          authMode: authInfo.mode || 'interactive',
+          permissionSource: authInfo.permissions ? 'configured' : 'default'
+        };
+      }
+    } catch (error) {
+      console.warn('Failed to get permission context:', error);
+    }
+    return undefined;
+  }
+
+  /**
    * Enhanced chat method that uses MCP tools intelligently with conversation context
    */
   async enhancedChat(messages: ChatMessage[], sessionId?: string): Promise<EnhancedLLMResponse> {
@@ -456,11 +476,15 @@ Respond ONLY with a JSON object in this exact format:
       try {
         // Handle different possible response formats from Microsoft Docs MCP
         if (mcpResults.microsoftDocsResult.content) {
-          contextData += `Microsoft Learn Documentation:\n${JSON.stringify(mcpResults.microsoftDocsResult.content, null, 2)}\n\n`;
+          // Format Microsoft Docs content properly instead of JSON dump
+          const docsContent = this.formatMicrosoftDocsContent(mcpResults.microsoftDocsResult.content);
+          contextData += `Microsoft Learn Documentation:\n${docsContent}\n\n`;
         } else if (mcpResults.microsoftDocsResult.results) {
-          contextData += `Microsoft Learn Search Results:\n${JSON.stringify(mcpResults.microsoftDocsResult.results, null, 2)}\n\n`;
+          const docsContent = this.formatMicrosoftDocsContent(mcpResults.microsoftDocsResult.results);
+          contextData += `Microsoft Learn Search Results:\n${docsContent}\n\n`;
         } else {
-          contextData += `Microsoft Learn Data:\n${JSON.stringify(mcpResults.microsoftDocsResult, null, 2)}\n\n`;
+          const docsContent = this.formatMicrosoftDocsContent(mcpResults.microsoftDocsResult);
+          contextData += `Microsoft Learn Data:\n${docsContent}\n\n`;
         }
       } catch (error) {
         console.warn('Error processing Microsoft Docs MCP result:', error);
@@ -525,6 +549,38 @@ The Microsoft Graph PowerShell client ID requires admin consent for mail and cal
 3. **Alternative**: Disable Enhanced Graph Access in the authentication settings and use your own app registration with pre-consented permissions.
 
 **Note**: Enhanced Graph Access provides access to more Microsoft Graph APIs but requires admin consent for sensitive permissions like mail access.`);
+            }
+            
+            // Check if Lokka is just echoing back the query parameters instead of returning data
+            if (text.includes('Response from tool microsoft_graph_query with args') || 
+                text.includes('{"apiType":"graph"') ||
+                (text.includes('"method":"get"') && text.includes('"endpoint"'))) {
+              
+              throw new Error(`🔐 **Microsoft Graph Permission Error**
+
+The current authentication session does not have sufficient permissions to access user sign-in activity data.
+
+**Required Permissions:**
+• **AuditLog.Read.All** - To access user sign-in activity
+• **User.Read.All** - To read user profiles
+• **Directory.Read.All** - Alternative permission for directory data
+
+**Current Session**: Client-credentials mode (service principal authentication)
+
+**To resolve this issue:**
+
+1. **Option 1 - Grant App Permissions**: Have your Entra Administrator grant the following **Application permissions** to your app registration:
+   • AuditLog.Read.All
+   • User.Read.All
+
+2. **Option 2 - Switch to Interactive Mode**: Sign in with a user account that has the required permissions (Reports Reader role or higher)
+
+3. **Option 3 - Use Different Query**: Try queries that don't require sign-in activity data, such as:
+   • "How many users do we have?"
+   • "List the first 5 users"
+   • "Show me user groups"
+
+**Note**: Sign-in activity data requires elevated permissions that may not be available in service principal (client-credentials) mode.`);
             }
             
             // Check if it's a Lokka API result format
@@ -620,8 +676,8 @@ The Microsoft Graph PowerShell client ID requires admin consent for mail and cal
           
         // Prepare user-friendly context based on data type
         if (typeof finalLokkaData === 'number') {
-          // Simple count
-          contextData += `Microsoft Graph Data (Count): ${finalLokkaData}\n\n`;
+          // Simple count - include in context for LLM but don't expose raw data format
+          contextData += `Your tenant has ${finalLokkaData} total users.\n\n`;
         } else if (Array.isArray(finalLokkaData)) {
           // Array of objects - provide structured summary
           contextData += `Microsoft Graph Data (${finalLokkaData.length} items):\n`;
@@ -706,71 +762,23 @@ The Microsoft Graph PowerShell client ID requires admin consent for mail and cal
         
         console.log('🔍 Added context data:', {
           finalLokkaData,
-          contextLength: contextData.length,
-          contextPreview: contextData.substring(0, 200)
+          contextLength: contextData.length
         });
       } else {
         console.log('🔍 No lokkaData extracted from result');
       }
-    }    const systemPrompt = `You are an expert Microsoft Entra (Azure AD) and Microsoft Graph API assistant.
-
-${contextData ? `Here is the relevant data retrieved from Microsoft Graph, Microsoft Learn documentation, and other sources:
-${contextData}
-
-🚨 CRITICAL ANTI-HALLUCINATION INSTRUCTIONS - MUST FOLLOW EXACTLY 🚨:
-1. Use ONLY the data provided in the context above
-2. You MUST use ONLY the exact numbers from this data
-3. If the data shows "553.4", you MUST say "553.4" - NEVER any other number
-4. DO NOT perform ANY mathematical operations on the numbers
-5. DO NOT round, estimate, or approximate - use the EXACT number shown
-6. DO NOT say "about" or "approximately" - state the precise number
-7. The number in the data is the FINAL ANSWER - do not change it
-8. If asked for a score and the data shows 553.4, your answer MUST contain "553.4"
-9. NEVER generate different numbers than what is provided in the data
-10. Base your response ONLY on the context data provided above
-
-📋 RESPONSE FORMATTING INSTRUCTIONS (Claude Desktop Style):
-1. NEVER show raw JSON data to the user
-2. Start with a clear, prominent summary using ## heading
-3. Use markdown formatting extensively:
-   - ## for main headings
-   - ### for subsections  
-   - **Bold** for important numbers and key terms
-   - - Bullet points for lists
-   - > Blockquotes for important insights
-   - \`code\` for technical terms or IDs
-   - Tables for structured data comparison
-4. For user lists: create clean tables or bullet points with:
-   - **Name** (Title/Role) - email@domain.com
-5. For counts: make numbers prominent with **bold formatting**
-6. Add insights section with > blockquotes
-7. Structure like this:
-   ## Summary
-   [Direct answer with key numbers in bold]
-   
-   ### Details
-   [Organized data presentation]
-   
-   ### Key Insights
-   > [Analysis and patterns]
-8. Use emojis sparingly for visual appeal (📊 📈 👥 🏢)
-9. End with helpful context about what the data means
-
-VERIFICATION CHECK: What number does the data show? You must use that exact number in your response.` : ''}
-
-You are responding to user queries about Microsoft Graph API and Entra ID.
-${contextData ? 'Base your response ENTIRELY on the data provided above. Parse and present it in a user-friendly format using the Claude Desktop formatting style above.' : ''}
-
-Response guidelines:
-- Start with a ## Summary section and clear, direct answer
-- Present data in organized, visually appealing markdown format
-- For user accounts: use tables or clean bullet lists with names, titles, emails
-- For counts: use **bold** to make numbers prominent
-- Add a ### Key Insights section with > blockquotes
-- Use proper markdown headings, tables, and formatting
-- Be helpful and informative while staying strictly accurate to the provided data
-
-If you received documentation, summarize the key points accurately.`;
+    }    // Get permission context for unified prompt
+    const permissionContext = await this.getPermissionContext();
+    
+    // Generate unified system prompt
+    const systemPrompt = UnifiedPromptService.generateSystemPrompt({
+      includeMicrosoftGraphContext: true,
+      includePermissionGuidance: true,
+      includeDataContext: !!contextData,
+      contextData,
+      originalQuery,
+      permissionContext
+    });
 
     const responseMessages: ChatMessage[] = [
       { 
@@ -786,79 +794,28 @@ If you received documentation, summarize the key points accurately.`;
         timestamp: new Date()
       }
     ];    try {
-      console.log('🔍 About to call final LLM with context:', {
-        contextData,
-        systemPromptLength: systemPrompt.length,
-        originalQuery,
-        messagesLength: responseMessages.length
-      });
+      console.log('🔍 About to call final LLM with context - ready to generate response');
       
       const response = await this.basicChat(responseMessages);
       
-      console.log('🔍 Final LLM response received:', {
-        hasContext: !!contextData,
-        contextLength: contextData.length,
-        responseLength: response.length,
-        type: typeof response,
-        preview: response.substring(0, 100),
-        containsFiftyTwo: response.includes('52'),
-        containsTwentyTwo: response.includes('22'),
-        fullResponse: response
-      });
+      // Response received from LLM
       
-      // Post-process response to catch and fix hallucinations
-      let correctedResponse = response;
-      
-      // If we have Lokka data that's a simple number, validate the response mentions the correct number
-      if (mcpResults.lokkaResult && contextData.includes('Microsoft Graph Data:')) {
-        try {
-          // Extract the actual number from the context
-          const contextMatch = contextData.match(/Microsoft Graph Data:\s*(\d+)/);
-          if (contextMatch && contextMatch[1]) {
-            const actualNumber = contextMatch[1];
-            console.log('🔍 Validating response contains actual number:', actualNumber);
-            
-            // Check if response contains the correct number
-            if (!response.includes(actualNumber)) {
-              console.warn('🚨 HALLUCINATION DETECTED: Response does not contain correct number', actualNumber);
-              
-              // Try to fix the response by replacing incorrect numbers
-              const numberPattern = /\b(\d+)\s+user accounts?\b/gi;
-              const matches = [...response.matchAll(numberPattern)];
-              
-              if (matches.length > 0) {
-                console.log('🔧 Attempting to fix hallucinated numbers in response');
-                correctedResponse = response.replace(numberPattern, (match, number) => {
-                  if (number !== actualNumber) {
-                    console.log(`🔧 Replacing hallucinated number ${number} with correct number ${actualNumber}`);
-                    return match.replace(number, actualNumber);
-                  }
-                  return match;
-                });
-                
-                // Also ensure the response explicitly states the correct number
-                if (!correctedResponse.includes(`**${actualNumber}**`)) {
-                  correctedResponse = correctedResponse.replace(
-                    /Based on the query results,.*?\./,
-                    `Based on the query results, there are **${actualNumber}** user accounts in your Microsoft Entra tenant.`
-                  );
-                }
-              }
-            }
-          }
-        } catch (validationError) {
-          console.warn('Response validation error:', validationError);
+      // Enhance response with unified permission guidance
+      let enhancedResponse = response;
+      if (permissionContext) {
+        enhancedResponse = UnifiedPromptService.enhanceResponseForPermissions(
+          response,
+          this.config.provider,
+          originalQuery,
+          permissionContext
+        );
+        
+        if (enhancedResponse !== response) {
+          console.log('🔐 Response enhanced with permission guidance');
         }
       }
       
-      if (correctedResponse !== response) {
-        console.log('🔧 Response corrected to fix hallucination:', {
-          original: response,
-          corrected: correctedResponse
-        });
-      }
-      
-      return correctedResponse;    } catch (error) {
+      return enhancedResponse;    } catch (error) {
       console.error('Failed to generate final response:', error);
       
       // Check if we actually have any useful data to share
@@ -970,12 +927,104 @@ For specific API endpoints and detailed documentation, please visit the official
   }
 
   /**
+   * Format Microsoft Docs MCP content into readable text instead of JSON dump
+   */
+  private formatMicrosoftDocsContent(content: any): string {
+    try {
+      // Handle array of content items
+      if (Array.isArray(content)) {
+        return content.map(item => {
+          if (item.type === 'text' && item.text) {
+            // Handle JSON string that contains the actual documentation
+            if (typeof item.text === 'string' && item.text.startsWith('[')) {
+              try {
+                const parsedDocs = JSON.parse(item.text);
+                return this.formatDocumentationArray(parsedDocs);
+              } catch {
+                return item.text;
+              }
+            }
+            return item.text;
+          }
+          return '';
+        }).join('\n\n');
+      }
+      
+      // Handle single content item
+      if (content.type === 'text' && content.text) {
+        if (typeof content.text === 'string' && content.text.startsWith('[')) {
+          try {
+            const parsedDocs = JSON.parse(content.text);
+            return this.formatDocumentationArray(parsedDocs);
+          } catch {
+            return content.text;
+          }
+        }
+        return content.text;
+      }
+      
+      // Handle direct array of documentation objects
+      if (Array.isArray(content) && content[0]?.title) {
+        return this.formatDocumentationArray(content);
+      }
+      
+      // Fallback to string representation
+      return JSON.stringify(content, null, 2);
+    } catch (error) {
+      console.error('Error formatting Microsoft Docs content:', error);
+      return 'Unable to format documentation content';
+    }
+  }
+
+  /**
+   * Format an array of documentation objects into readable markdown
+   */
+  private formatDocumentationArray(docs: any[]): string {
+    if (!Array.isArray(docs)) return '';
+    
+    return docs.map((doc, index) => {
+      let formatted = '';
+      
+      if (doc.title) {
+        formatted += `## ${doc.title}\n\n`;
+      }
+      
+      if (doc.content) {
+        // Clean up content - remove excessive escaping and format properly
+        let content = doc.content
+          .replace(/\\n/g, '\n')
+          .replace(/\\'/g, "'")
+          .replace(/\\"/g, '"')
+          .replace(/\\\\/g, '\\')
+          .replace(/\\u0027/g, "'")
+          .replace(/\\u003E/g, '>')
+          .replace(/\\u003C/g, '<')
+          .replace(/\\u0026/g, '&');
+        
+        formatted += `${content}\n\n`;
+      }
+      
+      if (doc.contentUrl) {
+        formatted += `**Source**: [${doc.contentUrl}](${doc.contentUrl})\n\n`;
+      }
+      
+      return formatted;
+    }).join('---\n\n');
+  }
+
+  /**
    * Basic chat method for fallback and internal use
    */
   async basicChat(messages: ChatMessage[]): Promise<string> {
+    let activeProvider: string = this.config.provider; // Default fallback
+    
     try {
       console.log('basicChat called with provider:', this.config.provider);
       console.log('basicChat messages:', messages.length);
+      
+      // Get the actual active provider before making the request
+      activeProvider = await this.unifiedLLM.getCurrentActiveProvider();
+      console.log('basicChat actual active provider:', activeProvider);
       
       // We're using the unified LLM service, which now automatically handles query extraction
       // for both local and cloud LLM services
@@ -990,9 +1039,10 @@ For specific API endpoints and detailed documentation, please visit the official
       return response;
     } catch (error) {
       console.error('Basic chat failed:', error);
+      console.log('Error occurred with active provider:', activeProvider);
       
-      // Enhanced error handling for better user experience
-      const enhancedError = this.createUserFriendlyError(error, this.config.provider);
+      // Enhanced error handling for better user experience with correct provider attribution
+      const enhancedError = this.createUserFriendlyError(error, activeProvider);
       throw enhancedError;
     }
   }
@@ -1004,138 +1054,142 @@ For specific API endpoints and detailed documentation, please visit the official
     if (error.response && error.response.status) {
       const status = error.response.status;
       const providerName = this.getProviderDisplayName(provider);
-        // Special handling for Ollama-specific errors
-      if (provider === 'ollama' && error.response.data) {
-        let ollamaError = '';
-        
-        // Try multiple possible error response structures
-        if (error.response.data.error) {
-          ollamaError = error.response.data.error;
-        } else if (typeof error.response.data === 'string') {
-          ollamaError = error.response.data;
-        } else if (error.response.data.message) {
-          ollamaError = error.response.data.message;
+      
+      // Handle rate limiting (429 errors) for cloud providers
+      if (status === 429) {
+        if (provider === 'gemini') {
+          return new Error(`🚦 **Rate Limit Exceeded**: Google Gemini API rate limit reached.
+
+**Solutions:**
+• Wait a few minutes before trying again
+• Switch to a different LLM provider (Azure OpenAI, OpenAI, Anthropic)
+• Use a local LLM (Ollama) instead
+• Check your Google API quota and billing settings
+
+**Current Provider**: ${providerName}`);
+        } else if (provider === 'openai') {
+          return new Error(`🚦 **Rate Limit Exceeded**: OpenAI API rate limit reached.
+
+**Solutions:**
+• Wait a few minutes before trying again
+• Upgrade your OpenAI API plan for higher limits
+• Switch to a different LLM provider (Azure OpenAI, Anthropic, Gemini)
+• Use a local LLM (Ollama) instead
+
+**Current Provider**: ${providerName}`);
+        } else if (provider === 'anthropic') {
+          return new Error(`🚦 **Rate Limit Exceeded**: Anthropic API rate limit reached.
+
+**Solutions:**
+• Wait a few minutes before trying again
+• Check your Anthropic account usage and limits
+• Switch to a different LLM provider (Azure OpenAI, OpenAI, Gemini)
+• Use a local LLM (Ollama) instead
+
+**Current Provider**: ${providerName}`);
         } else {
-          // Fallback: convert data to string and look for error patterns
-          const dataStr = JSON.stringify(error.response.data);
-          ollamaError = dataStr;
+          return new Error(`🚦 **Rate Limit Exceeded**: ${providerName} API rate limit reached.
+
+**Solutions:**
+• Wait a few minutes before trying again
+• Switch to a different LLM provider
+• Use a local LLM (Ollama) instead
+
+**Current Provider**: ${providerName}`);
         }
-        
-        console.log(`[EnhancedLLMService] Processing Ollama error: "${ollamaError}"`);
-        
-        // Check for memory-related errors
-        if (ollamaError.includes('requires more system memory') || ollamaError.includes('out of memory')) {
-          const memoryMatch = ollamaError.match(/requires more system memory \(([^)]+)\) than is available \(([^)]+)\)/);
-          if (memoryMatch) {
-            const required = memoryMatch[1];
-            const available = memoryMatch[2];
-            return new Error(`🧠 **Local LLM Memory Error**: The ${this.config.model} model requires **${required}** of system memory, but only **${available}** is available. 
-            
+      }
+      
+      // Handle authentication errors (401/403)
+      if (status === 401 || status === 403) {
+        return new Error(`🔐 **Authentication Error**: Invalid API key or insufficient permissions for ${providerName}.
+
+**Solutions:**
+• Check your API key configuration
+• Verify your account has sufficient credits/permissions
+• Switch to a different LLM provider
+• Use a local LLM (Ollama) instead
+
+**Current Provider**: ${providerName}
+**Status**: ${status} ${error.response.statusText || ''}`);
+      }
+    }
+    
+    // Special handling for provider-specific errors
+    if (provider === 'ollama' && error.response) {
+      let ollamaError = '';
+      
+      // Try multiple possible error response structures
+      if (error.response.data.error) {
+        ollamaError = String(error.response.data.error);
+      } else if (typeof error.response.data === 'string') {
+        ollamaError = error.response.data;
+      } else if (error.response.data.message) {
+        ollamaError = String(error.response.data.message);
+      } else {
+        // Fallback: convert data to string and look for error patterns
+        const dataStr = JSON.stringify(error.response.data);
+        ollamaError = dataStr;
+      }
+      
+      // Ensure ollamaError is always a string
+      if (typeof ollamaError !== 'string') {
+        ollamaError = JSON.stringify(ollamaError);
+      }
+      
+      console.log(`[EnhancedLLMService] Processing error: "${ollamaError}"`);
+      
+      // Check for memory-related errors
+      if (ollamaError.includes('requires more system memory') || ollamaError.includes('out of memory')) {
+        const memoryMatch = ollamaError.match(/requires more system memory \(([^)]+)\) than is available \(([^)]+)\)/);
+        if (memoryMatch) {
+          const required = memoryMatch[1];
+          const available = memoryMatch[2];
+          return new Error(`🧠 **Local LLM Memory Error**: The ${this.config.model} model requires **${required}** of system memory, but only **${available}** is available. 
+          
 **Solutions:**
 • Switch to a smaller model (e.g., codellama:3b or llama3.2:1b)
 • Close other applications to free memory
 • Use a cloud LLM provider instead
 • Increase your system's available memory`);
-          } else {
-            return new Error(`🧠 **Local LLM Memory Error**: ${ollamaError}
+        } else {
+          return new Error(`🧠 **Local LLM Memory Error**: ${ollamaError}
 
 **Solutions:**
 • Try a smaller model
 • Close other applications to free memory  
 • Switch to a cloud LLM provider`);
-          }
         }
-        
-        // Check for model loading errors
-        if (ollamaError.includes('model not found') || ollamaError.includes('pull model')) {
-          return new Error(`📥 **Local LLM Model Error**: The model "${this.config.model}" is not available locally.
+      }
+      
+      // Check for model loading errors
+      if (ollamaError.includes('model not found') || ollamaError.includes('pull model')) {
+        return new Error(`📥 **Local LLM Model Error**: The model "${this.config.model}" is not available locally.
 
 **Solutions:**
 • Run: \`ollama pull ${this.config.model}\` to download the model
 • Choose a different model that's already downloaded
 • Switch to a cloud LLM provider`);
-        }
-        
-        // Check for context length errors
-        if (ollamaError.includes('context length') || ollamaError.includes('too long')) {
-          return new Error(`📝 **Local LLM Context Error**: The message is too long for the ${this.config.model} model.
+      }
+      
+      // Check for context length errors
+      if (ollamaError.includes('context length') || ollamaError.includes('too long')) {
+        return new Error(`📝 **Local LLM Context Error**: The message is too long for the ${this.config.model} model.
 
 **Solutions:**
 • Try a shorter question
 • Use a model with larger context (e.g., llama3.1 or qwen2.5)
 • Switch to a cloud LLM provider with larger context`);
-        }
-        
-        // Other Ollama-specific errors
-        if (ollamaError.trim()) {
-          return new Error(`🤖 **Local LLM Error**: ${ollamaError}
+      }
+      
+      // Other Ollama-specific errors
+      if (ollamaError.trim()) {
+        return new Error(`🤖 **Local LLM Error**: ${ollamaError}
 
 **Suggestion:** Try switching to a cloud LLM provider for more reliable performance.`);
-        }
-      }
-      
-      switch (status) {
-        case 429:
-          return new Error(`${providerName} rate limit exceeded. Please wait a moment before trying again, or switch to a different LLM provider.`);
-        
-        case 401:
-          return new Error(`${providerName} authentication failed. Please check your API key in the settings.`);
-        
-        case 403:
-          return new Error(`${providerName} access forbidden. Please verify your API key has the necessary permissions.`);
-        
-        case 404:
-          return new Error(`${providerName} endpoint not found. The requested model may not be available.`);
-        
-        case 500:
-        case 502:
-        case 503:
-        case 504:
-          return new Error(`${providerName} is experiencing server issues. Please try again later or switch to a different provider.`);
-        
-        default:
-          return new Error(`${providerName} request failed with status ${status}. Please check your configuration and try again.`);
       }
     }
     
-    // Handle network/connection errors
-    if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
-      const providerName = this.getProviderDisplayName(provider);
-      
-      // Special handling for Ollama connection errors
-      if (provider === 'ollama') {
-        return new Error(`🔌 **Local LLM Connection Error**: Cannot connect to Ollama at http://localhost:11434
-
-**Solutions:**
-• Start Ollama: \`ollama serve\`
-• Check if Ollama is running in the background
-• Verify Ollama is installed correctly
-• Switch to a cloud LLM provider`);
-      }
-      
-      return new Error(`Cannot connect to ${providerName}. Please check your internet connection and provider configuration.`);
-    }
-    
-    // Handle timeout errors
-    if (error.code === 'ETIMEDOUT' || error.message?.includes('timeout')) {
-      const providerName = this.getProviderDisplayName(provider);
-      
-      if (provider === 'ollama') {
-        return new Error(`⏱️ **Local LLM Timeout**: ${providerName} request timed out. The model may be too large or your system too slow.
-
-**Solutions:**
-• Try a smaller/faster model
-• Reduce the context length
-• Close other applications
-• Switch to a cloud LLM provider`);
-      }
-      
-      return new Error(`${providerName} request timed out. The service may be slow or overloaded. Please try again.`);
-    }
-    
-    // Fallback for other errors
-    const providerName = this.getProviderDisplayName(provider);
-    return new Error(`${providerName} communication failed: ${error.message || 'Unknown error'}`);
+    return new Error(`${provider} request failed: ${error.message || 'Unknown error'}`);
   }
 
   /**

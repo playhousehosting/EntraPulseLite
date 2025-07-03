@@ -506,6 +506,32 @@ export class UnifiedLLMService {
   }
 
   /**
+   * Get the actual provider name that will be used based on current availability
+   * This accounts for dynamic provider selection and fallbacks
+   */
+  async getCurrentActiveProvider(): Promise<string> {
+    try {
+      const activeService = await this.getActiveService();
+      
+      // If we got a cloud service, get its actual provider
+      if (this.cloudService && activeService === this.cloudService) {
+        return this.cloudService.getProvider();
+      }
+      
+      // If we got a local service, it's always Ollama
+      if (this.localService && activeService === this.localService) {
+        return 'ollama';
+      }
+      
+      // Fallback to configured provider
+      return this.config.provider;
+    } catch (error) {
+      console.warn('[UnifiedLLMService] Error determining active provider:', error);
+      return this.config.provider; // Fallback to configured provider
+    }
+  }
+
+  /**
    * Update the API key for cloud providers and reinitialize the service
    */
   updateApiKey(apiKey: string): void {

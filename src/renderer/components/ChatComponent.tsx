@@ -37,6 +37,9 @@ import {
   ContentCopy as ContentCopyIcon,
   Clear as ClearIcon,
   Chat as ChatIcon,
+  Warning as WarningIcon,
+  Error as ErrorIcon,
+  CheckCircle as CheckCircleIcon,
 } from '@mui/icons-material';
 import { getAssetPath } from '../utils/assetUtils';
 import { ChatMessage, User, AuthToken, EnhancedLLMResponse, QueryAnalysis } from '../../types';
@@ -70,9 +73,25 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
   const [currentModel, setCurrentModel] = useState<string | null>(null);
   const [copyStatus, setCopyStatus] = useState<{ [key: string]: boolean }>({});
   const [sessionId, setSessionId] = useState<string>(() => `session-${Date.now()}`);
+  
+  // Cloud LLM status tracking
+  const [cloudLLMStatus, setCloudLLMStatus] = useState<{
+    isAvailable: boolean;
+    lastError: string | null;
+    isRateLimited: boolean;
+    lastChecked: Date | null;
+  }>({
+    isAvailable: true,
+    lastError: null,
+    isRateLimited: false,
+    lastChecked: null
+  });
+
   useEffect(() => {
     initializeApp();
-  }, []);  // Listen for default cloud provider changes
+  }, []);
+
+  // Listen for default cloud provider changes
   useEffect(() => {
     const handleDefaultProviderChange = (event: any, data: { provider: string; model: string }) => {
       console.log('🔄 Default cloud provider changed via IPC:', data.provider, 'Model:', data.model);
@@ -315,6 +334,9 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
       console.log(`🔄 ChatComponent: Sending message with sessionId: ${sessionId}`);
       const enhancedResponse = await window.electronAPI.llm.chat([...messages, userMessage], sessionId);
       
+      // Update cloud LLM status on success
+      updateCloudLLMStatus();
+      
       // Handle both enhanced response format and backward compatibility
       let content: string;
       let metadata: any = {
@@ -351,7 +373,24 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
       setMessages(prev => [...prev, assistantMessage]);
     } catch (error) {
       console.error('Failed to send message:', error);
-      setError('Failed to send message. Please try again.');
+      
+      // Update cloud LLM status based on error
+      updateCloudLLMStatus(error);
+      
+      // Enhanced error message with fallback suggestions
+      let errorMessage = 'Failed to send message. Please try again.';
+      if (error instanceof Error) {
+        // Check if this is a rate limit or authentication error
+        if (error.message.includes('Rate Limit') || error.message.includes('429')) {
+          errorMessage = `${error.message}\n\n💡 **Suggestion**: Try again in a few minutes, or switch to a different LLM provider in settings.`;
+        } else if (error.message.includes('Authentication Error') || error.message.includes('Invalid API key')) {
+          errorMessage = `${error.message}\n\n💡 **Suggestion**: Check your API key configuration in settings.`;
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -472,7 +511,9 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
       const welcomeMessage: ChatMessage = {
         id: 'welcome-new',
         role: 'assistant',
-        content: `Welcome to EntraPulse Lite! I'm your Microsoft Entra assistant. I can help you query your Microsoft Graph data, understand identity concepts, and analyze your directory structure. What would you like to explore?`,
+        content: `Welcome to EntraPulse Lite! I'm your Microsoft Entra assistant. I can help you query your Microsoft Graph data, understand identity concepts, and analyze your directory structure.
+
+What would you like to explore?`,
         timestamp: new Date(),
       };
       setMessages([welcomeMessage]);
@@ -557,6 +598,61 @@ What would you like to explore?`,
       console.log('✅ Welcome message added via useEffect');
     }
   }, [authToken, chatAvailable, messages.length]);
+
+  const updateCloudLLMStatus = (error: any = null) => {
+    const now = new Date();
+    
+    if (!error) {
+      // Success case
+      setCloudLLMStatus({
+        isAvailable: true,
+        lastError: null,
+        isRateLimited: false,
+        lastChecked: now
+      });
+      return;
+    }
+    
+    // Analyze error to determine status and extract actual provider information
+    const errorMessage = error.message || String(error);
+    const isRateLimit = errorMessage.includes('429') || 
+                       errorMessage.includes('Rate Limit') || 
+                       errorMessage.includes('Too Many Requests');
+    
+    const isAuthError = errorMessage.includes('401') || 
+                       errorMessage.includes('403') || 
+                       errorMessage.includes('Authentication Error') ||
+                       errorMessage.includes('Invalid API key');
+    
+    // Try to detect the actual provider from the error message or URL
+    let detectedProvider = defaultCloudProvider;
+    
+    // Check if this is an axios error with request information
+    if (error.request && error.request._header) {
+      const requestHeader = error.request._header;
+      if (requestHeader.includes('generativelanguage.googleapis.com')) {
+        detectedProvider = 'gemini';
+      } else if (requestHeader.includes('api.openai.com')) {
+        detectedProvider = 'openai';
+      } else if (requestHeader.includes('api.anthropic.com')) {
+        detectedProvider = 'anthropic';
+      } else if (requestHeader.includes('openai.azure.com')) {
+        detectedProvider = 'azure-openai';
+      }
+    }
+    
+    // If we detected a different provider than the default, use it
+    if (detectedProvider) {
+      console.log(`🔍 CloudLLMStatus: Detected actual provider from error: ${detectedProvider}`);
+    }
+    
+    setCloudLLMStatus({
+      isAvailable: !isRateLimit && !isAuthError,
+      lastError: `${detectedProvider ? getProviderDisplayName(detectedProvider) : (defaultCloudProvider ? getProviderDisplayName(defaultCloudProvider) : 'Unknown Provider')}: ${errorMessage}`,
+      isRateLimited: isRateLimit,
+      lastChecked: now
+    });
+  };
 
   if (!authToken) {
     return (
@@ -698,16 +794,33 @@ What would you like to explore?`,
             </Box>
           </Tooltip>
           
-          {/* Cloud LLM Provider and Model */}
+          {/* Cloud LLM Provider and Model with Status */}
           {defaultCloudProvider && (
-            <Chip 
-              label={currentModel 
-                ? `${getProviderDisplayName(defaultCloudProvider)}: ${currentModel}` 
-                : `Default: ${getProviderDisplayName(defaultCloudProvider)}`}
-              color="primary" 
-              size="small"
-              variant="outlined"
-            />
+            <Tooltip title={
+              cloudLLMStatus.isRateLimited ? 
+                `Rate limited - last checked: ${cloudLLMStatus.lastChecked?.toLocaleTimeString()}` :
+              !cloudLLMStatus.isAvailable ?
+                `Error: ${cloudLLMStatus.lastError}` :
+                `Available - last checked: ${cloudLLMStatus.lastChecked?.toLocaleTimeString()}`
+            }>
+              <Chip 
+                label={currentModel 
+                  ? `${getProviderDisplayName(defaultCloudProvider)}: ${currentModel}` 
+                  : `Default: ${getProviderDisplayName(defaultCloudProvider)}`}
+                color={
+                  cloudLLMStatus.isRateLimited ? "warning" :
+                  !cloudLLMStatus.isAvailable ? "error" : 
+                  "primary"
+                }
+                size="small"
+                variant="outlined"
+                icon={
+                  cloudLLMStatus.isRateLimited ? <WarningIcon fontSize="small" /> :
+                  !cloudLLMStatus.isAvailable ? <ErrorIcon fontSize="small" /> :
+                  <CheckCircleIcon fontSize="small" />
+                }
+              />
+            </Tooltip>
           )}
         </Box>        <Box display="flex" alignItems="center" gap={1}>
           <Tooltip title="Start New Chat">

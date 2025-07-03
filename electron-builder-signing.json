@@ -1,0 +1,48 @@
+{
+  "win": {
+    "target": [
+      {
+        "target": "nsis",
+        "arch": [
+          "x64"
+        ]
+      },
+      {
+        "target": "portable",
+        "arch": [
+          "x64"
+        ]
+      }
+    ],
+    "signtoolOptions": {
+      "certificateSubjectName": "Darren J Robinson",
+      "signingHashAlgorithms": [
+        "sha256"
+      ],
+      "rfc3161TimeStampServer": "http://timestamp.digicert.com",
+      "certificateSha1": "03ea1833246380e76e393d76a53f42bbaf1eba87"
+    },
+    "icon": "assets/icon.ico",
+    "verifyUpdateCodeSignature": false
+  },
+  "appId": "com.darrenjrobinson.entrapulselite",
+  "nsis": {
+    "oneClick": false,
+    "installerIcon": "assets/icon.ico",
+    "allowElevation": true,
+    "installerHeaderIcon": "assets/icon.ico",
+    "allowToChangeInstallationDirectory": true,
+    "uninstallerIcon": "assets/icon.ico",
+    "createStartMenuShortcut": true,
+    "createDesktopShortcut": true
+  },
+  "directories": {
+    "output": "dist-release"
+  },
+  "productName": "EntraPulse Lite",
+  "files": [
+    "dist/**/*",
+    "package.json",
+    "assets/**/*"
+  ]
+}

@@ -955,4 +955,11 @@ export class CloudLLMService {
     
     return fallbackModel;
   }
+
+  /**
+   * Get the current provider name
+   */
+  getProvider(): string {
+    return this.config.provider;
+  }
 }
