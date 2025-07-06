@@ -31,6 +31,7 @@ EntraPulse Lite is built with modern TypeScript, Electron, and React technologie
 - **AuthService**: MSAL-based Microsoft authentication with dual modes
 - **User Token Mode**: Delegated permissions with progressive requests
 - **Application Credentials Mode**: Client credentials flow for enhanced access
+- **Enhanced Graph Access**: Hybrid mode combining user tokens with application credentials
 - **Runtime Mode Switching**: Toggle between authentication modes without restart
 - **Token Management**: Secure token storage and refresh
 - **Configuration Integration**: Authentication preferences stored in ConfigService
@@ -707,3 +708,98 @@ The authentication mode toggle is available in:
 - **Toggle Switch**: "Use Application Credentials"
 - **Form Fields**: Client ID, Client Secret, Tenant ID (shown when enabled)
 - **Automatic Save**: Changes saved immediately with validation
+
+### Enhanced Graph Access Implementation
+
+Enhanced Graph Access provides a hybrid authentication approach that combines the best of both User Token and Application Credentials modes:
+
+#### Development Pattern
+```typescript
+// How to work with Enhanced Graph Access in development
+import { ConfigService } from '../shared/ConfigService';
+
+const configService = new ConfigService();
+const authContext = configService.getAuthenticationContext();
+const entraConfig = configService.getEntraConfig();
+
+if (entraConfig?.enhancedGraphAccess && authContext.mode === 'interactive') {
+  // Enhanced Graph Access is enabled
+  // Use application credentials for Graph queries while maintaining user token context
+  console.log('Using Enhanced Graph Access mode');
+} else {
+  // Standard authentication mode
+  console.log(`Using standard ${authContext.mode} mode`);
+}
+```
+
+#### MCP Server Integration
+```typescript
+// src/mcp/servers/LokkaMCPServer.ts
+private getAuthenticationMode(): string {
+  const config = this.configService.getEntraConfig();
+  const authContext = this.configService.getAuthenticationContext();
+  
+  // Enhanced Graph Access: Use app credentials for queries but maintain user context
+  if (config?.enhancedGraphAccess && authContext.mode === 'interactive') {
+    return 'enhanced-graph-access';
+  }
+  
+  return authContext.mode === 'client-credentials' ? 'application' : 'user-token';
+}
+```
+
+#### UI Integration
+```typescript
+// src/renderer/components/EnhancedSettingsDialog.tsx
+const enhancedGraphAccessAvailable = entraConfig?.clientId && 
+                                   entraConfig?.clientSecret && 
+                                   entraConfig?.tenantId &&
+                                   authContext.mode === 'interactive';
+
+return (
+  <FormControlLabel
+    control={
+      <Switch
+        checked={entraConfig?.enhancedGraphAccess || false}
+        disabled={!enhancedGraphAccessAvailable}
+        onChange={(e) => handleEnhancedGraphAccessChange(e.target.checked)}
+      />
+    }
+    label="Enhanced Graph Access"
+  />
+);
+```
+
+### Auto-Updater Development
+
+The auto-updater system is fully implemented with code signing support:
+
+#### Build Script Usage
+```powershell
+# Build and sign for local testing
+.\scripts\build-and-sign.ps1
+
+# Build with custom version
+.\scripts\build-and-sign.ps1 -Version "1.2.3"
+
+# Build and publish to GitHub Releases
+.\scripts\build-and-sign.ps1 -Publish
+
+# Use different certificate (if needed)
+.\scripts\build-and-sign.ps1 -CertThumbprint "your-cert-thumbprint"
+```
+
+#### Development Testing
+```typescript
+// In development, test auto-updater functionality
+if (isDev) {
+  // Mock update scenarios
+  autoUpdater.checkForUpdates();
+}
+```
+
+#### Code Signing Requirements
+- **Certificate**: "Darren J Robinson" code signing certificate installed
+- **Windows SDK**: Required for signtool.exe
+- **PowerShell**: Execution policy allowing script execution
+- **Electron Builder**: Configured with signing options

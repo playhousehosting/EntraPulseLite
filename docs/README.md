@@ -27,6 +27,12 @@ This directory contains comprehensive documentation for EntraPulse Lite. Use thi
 #### Security
 - **[SECURITY-FIX-UPDATE.md](./SECURITY-FIX-UPDATE.md)** - Additional security hardening
 
+### Enhanced Features
+- **[AUTO-UPDATER.md](./AUTO-UPDATER.md)** - Auto-updater system implementation and configuration
+- **[ENHANCED-GRAPH-ACCESS-IMPLEMENTATION.md](./ENHANCED-GRAPH-ACCESS-IMPLEMENTATION.md)** - Enhanced Graph Access toggle implementation
+- **[ENHANCED-GRAPH-ACCESS-IMPLEMENTATION-COMPLETE.md](./ENHANCED-GRAPH-ACCESS-IMPLEMENTATION-COMPLETE.md)** - Implementation completion status
+- **[DUAL-AUTHENTICATION-IMPLEMENTATION.md](./DUAL-AUTHENTICATION-IMPLEMENTATION.md)** - Dual authentication system implementation
+
 ### Feature Documentation
 - **[LLM-PROVIDERS.md](./LLM-PROVIDERS.md)** - LLM provider configuration and setup
 - **[CLOUD-LLM-IMPLEMENTATION.md](./CLOUD-LLM-IMPLEMENTATION.md)** - Cloud LLM service implementation

@@ -1,9 +1,162 @@
 # Installation & Setup Guide
 
-## 🛠️ Prerequisites
+## 🚀 Quick Start for End Users
 
-### Required
+### Prerequisites
+- **Windows 10/11** (primary platform)- `"What applications are registered in my tenant?"` - App information (Enhanced Graph Access)
+
+## 🛠️ Developer Installation
+
+### Developer Prerequisites
 - **Node.js** 18.0 or higher
+- **npm** 8.0 or higher (or **yarn** 1.22+)
+- **Git** for version control
+
+### Optional but RecommendedMicrosoft Work/School Account** (required for Microsoft Graph access)
+- **Internet Connection** for cloud LLM providers & Setup Guide
+
+## � Quick Start for End Users
+## 🛠️ Developer Installation
+
+### Developer Prerequisites
+- **Node.js** 18.0 or higher
+- **npm** 8.0 or higher (or **yarn** 1.22+)
+- **Git** for version control
+
+### Optional but Recommendedquisites
+- **Windows 10/11** (primary platform)
+- **Microsoft Work/School Account** (required for Microsoft Graph access)
+- **Internet Connection** for cloud LLM providers
+
+### 1. Download and Run
+1. Download the **EntraPulse Lite Portable** executable from [GitHub Releases](https://github.com/darrenjrobinson/EntraPulseLite/releases)
+2. Run `EntraPulse Lite.exe` - no installation required!
+3. The application will start and prompt you to sign in with your Microsoft account
+
+### 2. Sign In to Microsoft
+1. Click **"Sign In"** when prompted
+2. Use your **Work or School Microsoft account** (personal accounts have limited functionality)
+3. Grant the requested permissions when prompted
+4. You'll see your profile information once authenticated
+
+### 3. Configure Your Preferred LLM Provider
+
+#### Option A: Anthropic Claude 4 Sonnet (Recommended)
+1. Go to **Settings** → **Cloud Providers** → **Anthropic**
+2. Get your API key from [console.anthropic.com](https://console.anthropic.com)
+3. Enter your API key
+4. Select **Claude 4 Sonnet** as your model (optimal for Microsoft Graph queries and documentation)
+5. Click **Save**
+
+#### Option B: OpenAI GPT-4o (Alternative)
+1. Go to **Settings** → **Cloud Providers** → **OpenAI** 
+2. Get your API key from [platform.openai.com](https://platform.openai.com)
+3. Enter your API key
+4. Select **GPT-4o** as your model (excellent for Microsoft Graph integration)
+5. Click **Save**
+
+#### Option C: Azure OpenAI (Enterprise)
+For enterprise users with Azure OpenAI deployments:
+1. Go to **Settings** → **Cloud Providers** → **Azure OpenAI**
+2. Enter your Azure OpenAI endpoint URL (full URL including deployment)
+3. Enter your API key 
+4. Your deployed model will be automatically detected
+5. Click **Save**
+
+> **💡 Why these models work best:**
+> - **Claude 4 Sonnet**: Excellent at understanding Microsoft Graph schema and permissions
+> - **GPT-4o**: Strong performance with structured data and API responses  
+> - **Azure OpenAI**: Enterprise-grade with data residency and compliance features
+
+### 4. Enable Enhanced Graph Access (Recommended)
+For the best Microsoft Graph experience, enable Enhanced Graph Access using the well-known Microsoft Graph PowerShell application:
+
+1. Go to **Settings** → **Entra Configuration**
+2. Toggle **"Use Application Credentials"** to **ON**
+3. Enter the Microsoft Graph PowerShell app details:
+   ```
+   Client ID: 14d82eec-204b-4c2f-b7e0-296602dcde65
+   Tenant ID: [your-tenant-id]
+   Client Secret: [leave blank - not needed for this app]
+   ```
+4. Toggle **"Enhanced Graph Access"** to **ON**
+5. Click **Save Configuration**
+
+> **💡 How to find your Tenant ID:**
+> 1. Go to [portal.azure.com](https://portal.azure.com)
+> 2. Navigate to **Microsoft Entra ID** → **Overview**
+> 3. Copy the **Tenant ID** (GUID format)
+> 
+> **Alternative:** Your tenant ID is also visible in EntraPulse Lite under **User Profile** → **Session Info** after signing in
+
+### 5. Test Your Setup
+1. In the chat interface, ask: **"Who am I?"**
+2. You should see your Microsoft profile information
+3. Try: **"What groups am I a member of?"**
+4. Try: **"Show me recent emails"** (will request additional permissions if needed)
+
+### 🎉 You're Ready to Go!
+
+Your EntraPulse Lite is now configured with:
+- ✅ Microsoft authentication
+- ✅ Cloud LLM provider (Claude 4 Sonnet or GPT-4o)
+- ✅ Enhanced Graph Access for optimal permissions
+- ✅ Built-in MCP servers for Microsoft Graph and documentation
+
+### Quick Start Troubleshooting
+
+**❌ "Sign-in failed" or authentication errors:**
+- Ensure you're using a **Work or School** Microsoft account (not personal)
+- Check your internet connection
+- Try signing out and signing in again
+- Contact your IT administrator if you see permission errors
+
+**❌ "LLM Provider Error" or no responses:**
+- Verify your API key is correct (check for extra spaces)
+- Ensure you have credits/quota remaining with your LLM provider
+- Try switching to a different model in Settings → Cloud Providers
+
+**❌ "Enhanced Graph Access not working":**
+- Double-check your Tenant ID (should be a GUID format like `12345678-1234-1234-1234-123456789abc`)
+- Ensure the Microsoft Graph PowerShell app is not blocked in your tenant
+- Contact your IT administrator - they may need to consent to the application
+
+**❌ "Permission denied" for Graph queries:**
+- Try queries that require basic permissions first: "Who am I?"
+- Enhanced Graph Access may need admin consent for some permissions
+- Some queries may require additional permissions - the app will prompt you
+
+**✅ Working correctly? Try these sample queries:**
+
+### Microsoft Graph API Queries
+- `"Who am I?"` - Basic profile information
+- `"What groups am I a member of?"` - Group membership
+- `"Show me my recent emails"` - Email access (requires consent)
+- `"List users in my organization"` - Directory queries (Enhanced Graph Access)
+- `"What applications are registered in my tenant?"` - App information (Enhanced Graph Access)
+- `"Show me the latest files in my OneDrive"` - File access
+- `"Get my calendar events for this week"` - Calendar access
+
+### Microsoft Docs MCP Knowledge Queries
+- `"What is the Microsoft Graph API to get transitive group memberships?"`
+- `"How do I authenticate with Microsoft Graph using client credentials?"`
+- `"What are the required permissions for reading user mailboxes?"`
+- `"Explain the difference between application and delegated permissions in Microsoft Graph"`
+- `"What is Conditional Access in Microsoft Entra ID?"`
+- `"How do I implement device-based conditional access policies?"`
+
+### Advanced Combined Queries
+- `"Show me all security groups I'm a member of and explain how to get nested group memberships via API"`
+- `"List my calendar events and tell me how to create recurring meetings using Microsoft Graph"`
+- `"Display my OneDrive files and explain Microsoft Graph file sharing permission models"`
+
+## �🛠️ Developer Installation
+
+### Prerequisites
+
+## 🛠️ Developer Installation
+
+### Developer Prerequisites
 - **npm** 8.0 or higher (or **yarn** 1.22+)
 - **Git** for version control
 
@@ -12,7 +165,7 @@
 - **Cloud LLM API Keys** (OpenAI, Anthropic, or Google Gemini) for advanced features
 - **Microsoft Entra App Registration** for enhanced permissions
 
-## 📦 Installation
+### Developer Installation Steps
 
 ### 1. Clone the Repository
 ```bash
@@ -116,7 +269,7 @@ docker exec -it ollama ollama pull llama3.1:8b
 #### Anthropic (Claude)
 1. Get API key from [console.anthropic.com](https://console.anthropic.com)
 2. Add to Settings → Cloud Providers → Anthropic
-3. Available models: Claude 3.5 Sonnet, Claude 3 Opus, Claude 3 Haiku
+3. Available models: Claude 4 Sonnet, Claude 3.5 Sonnet, Claude 3 Opus, Claude 3 Haiku
 
 #### Google Gemini
 1. Get API key from [ai.google.dev](https://ai.google.dev)

@@ -27,6 +27,13 @@ Users can switch between authentication modes in Settings → Entra Configuratio
 - Configuration context automatically switches
 - No application restart required
 
+### 3. **Enhanced Graph Access Mode**
+- **Authentication**: Hybrid approach combining user tokens with application credentials
+- **Use Case**: Users who want delegated authentication but need enhanced Graph API permissions
+- **Configuration**: Requires both user sign-in AND application credentials configured
+- **Behavior**: Uses user token for authentication context, application credentials for Graph queries
+- **Toggle Control**: Available in Settings → Entra Configuration when application credentials are configured
+
 ## Features
 
 ### 🔐 **Secure Storage**
@@ -67,7 +74,8 @@ Users can switch between authentication modes in Settings → Entra Configuratio
       clientId: "...",
       clientSecret: "...",
       tenantId: "...",
-      useApplicationCredentials: true
+      useApplicationCredentials: true,
+      enhancedGraphAccess: false  // NEW: Enhanced Graph Access toggle
     }
   },
   users: {
@@ -75,7 +83,8 @@ Users can switch between authentication modes in Settings → Entra Configuratio
       llm: { ... },
       modelCache: { ... },
       entra: {             // User-specific preferences
-        useApplicationCredentials: false
+        useApplicationCredentials: false,
+        enhancedGraphAccess: false  // NEW: Per-user Enhanced Graph Access preference
       }
     }
   },
@@ -107,6 +116,7 @@ Users can switch between authentication modes in Settings → Entra Configuratio
 
 - ✅ **User Token Mode**: Fully implemented with progressive permissions
 - ✅ **Application Credentials Mode**: Full client credentials support
+- ✅ **Enhanced Graph Access**: Hybrid authentication mode combining user tokens with application credentials
 - ✅ **Runtime Mode Switching**: Toggle between modes in UI
 - ✅ **Secure Storage**: Encrypted configuration with electron-store
 - ✅ **Model Caching**: 24-hour cache with deduplication
@@ -125,6 +135,7 @@ Users can switch between authentication modes in Settings → Entra Configuratio
 2. Toggle "Use Application Credentials" on/off
 3. If enabling: Enter Client ID, Client Secret, and Tenant ID
 4. If disabling: Keep credentials for future use or clear them
-5. MCP servers automatically restart with new authentication mode
+5. **Enhanced Graph Access**: When application credentials are configured, toggle "Enhanced Graph Access" to use hybrid authentication
+6. MCP servers automatically restart with new authentication mode
 
 The SettingsDialog now includes cache management controls, and duplicate models are properly handled through both API-level deduplication and intelligent caching.

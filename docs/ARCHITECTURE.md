@@ -13,8 +13,8 @@ EntraPulse Lite is built as a modern Electron desktop application that bridges n
 │  │   Chat Interface │  │ Settings Dialog │  │ User Profile    │                 │
 │  │   - Message UI   │  │ - LLM Config   │  │ - Auth Status   │                 │
 │  │   - Trace View   │  │ - Provider Mgmt │  │ - Permissions   │                 │
-│  │   - Copy Code    │  │ - Context Mgmt  │  │ - Session Info  │                 │
-│  │   - New Chat     │  │                │  │                 │                 │
+│  │   - Copy Code    │  │ - Enhanced Graph│  │ - Session Info  │                 │
+│  │   - New Chat     │  │ - Context Mgmt  │  │ - Graph Access  │                 │
 │  └─────────────────┘  └─────────────────┘  └─────────────────┘                 │
 └─────────────────────────────────────────────────────────────────────────────────┘
                                     │ IPC Communication
@@ -52,6 +52,7 @@ EntraPulse Lite is built as a modern Electron desktop application that bridges n
 - Secure token storage and refresh
 - Multi-tenant support
 - Dual authentication modes: User Token and Application Credentials
+- Enhanced Graph Access: Hybrid mode combining user tokens with application credentials
 - Runtime authentication mode switching
 
 ```typescript
