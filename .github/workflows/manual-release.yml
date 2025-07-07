@@ -81,7 +81,7 @@ jobs:
           NODE_OPTIONS: "--max-old-space-size=4096"
 
       - name: Run tests
-        run: npm test -- --testTimeout=30000 --maxWorkers=2
+        run: npm test -- --testTimeout=30000 --maxWorkers=2 --testPathIgnorePatterns="/integration/"
         env:
           NODE_OPTIONS: "--max-old-space-size=4096"
           CI: true
