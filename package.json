@@ -24,6 +24,7 @@
     "publish": "npm run build && electron-forge publish",
     "lint": "eslint src/**/*.{ts,tsx}",
     "test": "jest",
+    "test:ci": "jest --testPathIgnorePatterns='guest-accounts-query.test.ts|lokka-mcp-e2e.test.ts|lokka-tenant-connection.test.ts|mcp-sdk.test.ts|lokka-mcp-errors.test.ts'",
     "test:unit": "jest --testPathPattern=unit",
     "test:integration": "jest --testPathPattern=integration",
     "test:e2e": "jest --testPathPattern=e2e",

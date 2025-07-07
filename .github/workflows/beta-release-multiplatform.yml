@@ -66,7 +66,7 @@ jobs:
           NODE_OPTIONS: --max-old-space-size=8192
 
       - name: Run tests (skip problematic ones)
-        run: npm test -- --testPathIgnorePatterns="lokka-mcp-errors.test.ts"
+        run: npm run test:ci
         env:
           CI: true
           NODE_OPTIONS: --max-old-space-size=4096
@@ -105,7 +105,7 @@ jobs:
           NODE_OPTIONS: --max-old-space-size=8192
 
       - name: Run tests (skip problematic ones)
-        run: npm test -- --testPathIgnorePatterns="lokka-mcp-errors.test.ts"
+        run: npm run test:ci
         env:
           CI: true
           NODE_OPTIONS: --max-old-space-size=4096
@@ -151,7 +151,7 @@ jobs:
           NODE_OPTIONS: --max-old-space-size=8192
 
       - name: Run tests (skip problematic ones)
-        run: npm test -- --testPathIgnorePatterns="lokka-mcp-errors.test.ts"
+        run: npm run test:ci
         env:
           CI: true
           NODE_OPTIONS: --max-old-space-size=4096

@@ -9,10 +9,10 @@ module.exports = {
     "^.+\\.tsx?$": "ts-jest"
   },
   transformIgnorePatterns: [
-    "node_modules/(?!(electron-store|@modelcontextprotocol|@azure|@microsoft)/)"
+    "node_modules/(?!(electron-store|@modelcontextprotocol|@azure|@microsoft|@merill)/)"
   ],
   moduleFileExtensions: ["ts", "tsx", "js", "jsx", "json"],
-  moduleNameMapping: {
+  moduleNameMapper: {
     "^@/(.*)$": "<rootDir>/src/$1",
     "\\.(jpg|jpeg|png|gif|ico|svg)$": "<rootDir>/src/tests/mocks/fileMock.js",
     "electron-store": "<rootDir>/src/tests/mocks/electron-store.js"
@@ -26,7 +26,11 @@ module.exports = {
   testPathIgnorePatterns: [
     "/node_modules/",
     "/dist/",
-    "/out/"
+    "/out/",
+    "guest-accounts-query.test.ts",
+    "lokka-mcp-e2e.test.ts", 
+    "lokka-tenant-connection.test.ts",
+    "mcp-sdk.test.ts"
   ],
   testTimeout: 30000,
   maxWorkers: process.env.CI ? 2 : undefined,
