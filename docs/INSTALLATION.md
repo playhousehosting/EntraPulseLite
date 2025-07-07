@@ -60,7 +60,7 @@ For enterprise users with Azure OpenAI deployments:
 1. Go to **Settings** → **Cloud Providers** → **Azure OpenAI**
 2. Enter your Azure OpenAI endpoint URL (full URL including deployment)
 3. Enter your API key 
-4. Your deployed model will be automatically detected
+4. Your deployed model(s) will be automatically detected
 5. Click **Save**
 
 > **💡 Why these models work best:**
