@@ -31,10 +31,23 @@ jobs:
             exit 1
           fi
 
+      - name: Delete existing release if it exists
+        run: |
+          # Delete existing GitHub release if it exists
+          gh release delete ${{ github.event.inputs.version }} --yes || echo "Release doesn't exist"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Create and push tag
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
+          
+          # Delete existing tag if it exists (locally and remotely)
+          git tag -d ${{ github.event.inputs.version }} || echo "Local tag doesn't exist"
+          git push origin :refs/tags/${{ github.event.inputs.version }} || echo "Remote tag doesn't exist"
+          
+          # Create new tag
           git tag ${{ github.event.inputs.version }}
           git push origin ${{ github.event.inputs.version }}
         env:
