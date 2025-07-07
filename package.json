@@ -96,11 +96,10 @@
       ],
       "icon": "assets/icon.ico",
       "verifyUpdateCodeSignature": false,
-      "certificateSubjectName": "Darren J Robinson",
-      "signingHashAlgorithms": [
-        "sha256"
-      ],
-      "signDlls": true
+      "signtoolOptions": {
+        "signingHashAlgorithms": ["sha256"],
+        "signAndEditExecutable": true
+      }
     },
     "mac": {
       "target": [

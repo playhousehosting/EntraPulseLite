@@ -1,4 +1,4 @@
-name: Beta Release (Minimal)
+name: Beta Release (No Signing)
 
 on:
   workflow_dispatch:
@@ -111,15 +111,18 @@ jobs:
             require('fs').writeFileSync('./package.json', JSON.stringify(pkg, null, 2) + '\n');
           "
 
-      - name: Build and release
-        run: npm run release
+      - name: Build and release (unsigned)
+        run: npm run release:local:unsigned
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CSC_NAME: "Darren J Robinson"
-          WIN_CSC_IDENTITY_AUTO_DISCOVERY: true
           NODE_OPTIONS: "--max-old-space-size=8192"
-          # Code signing environment variables for electron-builder 26.x
-          SIGNTOOL_PATH: "C:\\Program Files (x86)\\Windows Kits\\10\\bin\\10.0.22621.0\\x64\\signtool.exe"
+          
+      - name: Upload release artifacts
+        run: |
+          # Upload all artifacts from dist-release directory
+          gh release upload ${{ github.event.inputs.version }} dist-release/*.exe --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           
       - name: Upload build artifacts (on failure)
         if: failure()
