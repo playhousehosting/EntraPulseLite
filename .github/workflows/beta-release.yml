@@ -83,15 +83,21 @@ jobs:
 
       - name: Update version in source files
         run: |
-          # Update package.json
-          npm version --no-git-tag-version ${{ github.event.inputs.version }}
-          
-          # Update version.ts (remove 'v' prefix for source file)  
+          # Get version without 'v' prefix
           $version = "${{ github.event.inputs.version }}" -replace '^v', ''
+          
+          # Update package.json only if version is different
+          $currentVersion = (Get-Content "package.json" | ConvertFrom-Json).version
+          if ($currentVersion -ne $version) {
+            npm version --no-git-tag-version $version
+          } else {
+            Write-Host "Package.json already has version $version"
+          }
           
           # Update src/shared/version.ts
           if (Test-Path "src/shared/version.ts") {
             (Get-Content "src/shared/version.ts") -replace "export const VERSION = .*", "export const VERSION = '$version';" | Set-Content "src/shared/version.ts"
+            Write-Host "Updated version.ts to version $version"
           }
 
       - name: Set prerelease flag
