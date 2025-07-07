@@ -30,9 +30,10 @@ module.exports = {
     "guest-accounts-query.test.ts",
     "lokka-mcp-e2e.test.ts", 
     "lokka-tenant-connection.test.ts",
-    "mcp-sdk.test.ts"
+    "mcp-sdk.test.ts",
+    "lokka-mcp-errors.test.ts"
   ],
   testTimeout: 30000,
-  maxWorkers: process.env.CI ? 2 : undefined,
+  maxWorkers: process.env.CI ? 2 : 1,
   verbose: true
 };
