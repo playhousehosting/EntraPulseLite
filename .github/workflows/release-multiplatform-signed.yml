@@ -164,6 +164,12 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ github.event.inputs.prerelease == 'true' }}
     steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.version }}
+          fetch-depth: 0
+
       - name: Set release as prerelease
         run: |
           gh release edit ${{ github.event.inputs.version }} --prerelease
