@@ -76,7 +76,7 @@ jobs:
           NODE_OPTIONS: "--max-old-space-size=4096"
 
       - name: Run tests
-        run: npm test -- --testTimeout=30000 --maxWorkers=2 --testPathIgnorePatterns="/integration/"
+        run: npm run test:ci
         env:
           NODE_OPTIONS: "--max-old-space-size=4096"
           CI: true
@@ -90,13 +90,14 @@ jobs:
           npm version --no-git-tag-version ${{ github.event.inputs.version }}
           
           # Update version.ts (remove 'v' prefix for source file)
-          VERSION_NO_V="${{ github.event.inputs.version }}"
-          VERSION_NO_V="${VERSION_NO_V#v}"
+          $VERSION_NO_V = "${{ github.event.inputs.version }}" -replace "^v", ""
           
           # Update src/shared/version.ts
-          if [ -f "src/shared/version.ts" ]; then
-            sed -i "s/export const VERSION = .*/export const VERSION = '${VERSION_NO_V}';/" src/shared/version.ts
-          fi
+          if (Test-Path "src/shared/version.ts") {
+            $content = Get-Content "src/shared/version.ts"
+            $content = $content -replace "export const VERSION = .*", "export const VERSION = '$VERSION_NO_V';"
+            $content | Set-Content "src/shared/version.ts"
+          }
 
       - name: Set prerelease flag
         if: ${{ github.event.inputs.prerelease == 'true' }}
@@ -127,10 +128,10 @@ jobs:
           echo "Prerelease input: ${{ github.event.inputs.prerelease }}"
           
           # Verify version.ts was updated
-          if [ -f "src/shared/version.ts" ]; then
-            echo "Version.ts content:"
-            cat src/shared/version.ts
-          fi
+          if (Test-Path "src/shared/version.ts") {
+            Write-Host "Version.ts content:"
+            Get-Content "src/shared/version.ts"
+          }
 
       - name: Build and release
         run: npm run release
