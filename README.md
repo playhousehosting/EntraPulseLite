@@ -48,6 +48,26 @@ src/
 
 **No prerequisites required!** EntraPulse Lite is a self-contained desktop application.
 
+### 🔒 Windows Security Notice
+
+When downloading and running EntraPulse Lite on Windows, you may encounter a Windows Defender SmartScreen warning that says "Windows protected your PC" or "Microsoft Defender SmartScreen prevented an unrecognized app from starting."
+
+**This is expected behavior** for unsigned beta releases. To proceed:
+
+1. Click **"More info"** on the SmartScreen dialog
+2. Click **"Run anyway"** to continue with the installation
+
+This warning appears because our beta releases are not yet code-signed with a digital certificate. Future stable releases will be properly signed to eliminate this warning.
+
+**Why this happens:**
+- Beta builds are unsigned to speed up development and testing
+- Windows SmartScreen protects users by warning about unsigned executables
+- The application is safe - this is just a security precaution for unsigned software
+
+**Alternative installation methods:**
+- Build from source (see Developer Setup below)
+- Wait for future signed stable releases
+
 **Required:**
 - **Entra ID Work/School Account** - The application uses your delegated permissions to access Microsoft Graph
 - **LLM Provider** (flexible configuration):

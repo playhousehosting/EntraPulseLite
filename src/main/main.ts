@@ -671,8 +671,8 @@ class EntraPulseLiteApp {
       minWidth: 900,
       minHeight: 700,
       icon: process.platform === 'win32'
-        ? path.resolve(app.getAppPath(), 'assets', 'icon.ico')
-        : path.resolve(app.getAppPath(), 'assets', 'EntraPulseLiteLogo.png'),
+        ? path.resolve(process.resourcesPath || app.getAppPath(), 'assets', 'icon.ico')
+        : path.resolve(process.resourcesPath || app.getAppPath(), 'assets', 'EntraPulseLiteLogo.png'),
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
@@ -802,7 +802,7 @@ class EntraPulseLiteApp {
   private setupIpcHandlers(): void {
     // Asset path handler
     ipcMain.handle('app:getAssetPath', (event, assetName: string) => {
-      const assetPath = path.join(app.getAppPath(), 'assets', assetName);
+      const assetPath = path.join(process.resourcesPath || app.getAppPath(), 'assets', assetName);
       return assetPath;
     });
 

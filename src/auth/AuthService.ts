@@ -124,8 +124,8 @@ export class AuthService {
         height: 700,
         show: true,
         icon: process.platform === 'win32'
-          ? path.resolve(app.getAppPath(), 'assets', 'icon.ico')
-          : path.resolve(app.getAppPath(), 'assets', 'EntraPulseLiteLogo.png'),
+          ? path.resolve(process.resourcesPath || app.getAppPath(), 'assets', 'icon.ico')
+          : path.resolve(process.resourcesPath || app.getAppPath(), 'assets', 'EntraPulseLiteLogo.png'),
         webPreferences: {
           nodeIntegration: false,
           contextIsolation: true,

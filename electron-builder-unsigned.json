@@ -6,8 +6,13 @@
   },
   "files": [
     "dist/**/*",
-    "package.json",
-    "assets/**/*"
+    "package.json"
+  ],
+  "extraResources": [
+    {
+      "from": "assets",
+      "to": "assets"
+    }
   ],
   "win": {
     "target": [

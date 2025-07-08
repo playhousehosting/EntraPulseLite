@@ -46,15 +46,15 @@
     "build:portable": "npm run build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win portable --publish=never",
     "build:unsigned": "npm run build && electron-builder --config electron-builder-unsigned.json --publish=never",
     "build:win": "npm run build && electron-builder --win",
-    "build:electron:win": "npm run build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win --publish=never",
-    "build:electron:mac": "npm run build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --publish=never",
-    "build:electron:linux": "npm run build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --linux --publish=never",
+    "build:electron:win": "npm run build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --config electron-builder-unsigned.json --win --publish=never",
+    "build:electron:mac": "npm run build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --config electron-builder-unsigned.json --mac --publish=never",
+    "build:electron:linux": "npm run build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --config electron-builder-unsigned.json --linux --publish=never",
     "sign:verify-cert": "powershell -ExecutionPolicy Bypass -File scripts/verify-certificate.ps1",
     "build:signed": "powershell -ExecutionPolicy Bypass -File scripts/build-and-sign.ps1",
     "build:signed:publish": "powershell -ExecutionPolicy Bypass -File scripts/build-and-sign.ps1 -Publish",
     "create-release": "pwsh scripts/create-release.ps1",
     "release:unsigned": "npm run build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --publish=never",
-    "release:unsigned:publish": "npm run build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --publish=always"
+    "release:unsigned:publish": "npm run build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --config electron-builder-unsigned.json --publish=always"
   },
   "keywords": [
     "microsoft",

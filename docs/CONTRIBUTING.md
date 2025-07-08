@@ -167,6 +167,39 @@ npm run build:signed
 npm run release:local
 ```
 
+### Build and Distribution Notes
+
+#### Windows Code Signing
+
+- **Development/Beta builds**: Unsigned executables (will trigger Windows Defender SmartScreen warnings)
+- **Production builds**: Code-signed with certificate (no SmartScreen warnings)
+- **CI/CD**: Beta releases use unsigned builds for faster iteration
+
+#### Handling Windows SmartScreen Warnings
+
+When testing unsigned builds locally or from CI:
+
+1. Windows will show "Windows protected your PC"
+2. Click **"More info"** 
+3. Click **"Run anyway"**
+4. This is expected behavior for unsigned executables
+
+#### Platform-Specific Build Commands
+
+```bash
+# Windows (unsigned for development)
+npm run build:electron:win
+
+# macOS
+npm run build:electron:mac
+
+# Linux
+npm run build:electron:linux
+
+# All platforms
+npm run build:electron:all
+```
+
 ## 📋 Pull Request Process
 
 ### Before Submitting
