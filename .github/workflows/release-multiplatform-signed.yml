@@ -51,6 +51,29 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Generate Release README
+        run: |
+          BUILD_TYPE="Multi-Platform Release"
+          if [ "${{ github.event.inputs.prerelease }}" = "true" ]; then
+            BUILD_TYPE="Multi-Platform Beta Release"
+          fi
+          RELEASE_NOTES="Multi-platform release with Windows code signing. See commit history for detailed changes."
+          node scripts/generate-release-readme.js "${{ github.event.inputs.version }}" "$BUILD_TYPE" "$RELEASE_NOTES"
+
+      - name: Upload Release README
+        run: |
+          if [ -f "RELEASE-README.md" ]; then
+            gh release create "${{ github.event.inputs.version }}" "RELEASE-README.md" \
+              --title "${{ github.event.inputs.version }}" \
+              --notes "Release README and download guide attached. Build artifacts will be uploaded by platform-specific jobs." \
+              --draft
+            echo "✅ Release created with README"
+          else
+            echo "⚠️ RELEASE-README.md not found"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   # Windows - Code signed with DigiCert certificate
   windows-signed:
     needs: create-release
@@ -158,11 +181,10 @@ jobs:
           NODE_OPTIONS: --max-old-space-size=8192
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # Mark release as prerelease if specified
+  # Mark release as prerelease if specified and undraft
   finalize-release:
     needs: [windows-signed, macos-unsigned, linux-unsigned]
     runs-on: ubuntu-latest
-    if: ${{ github.event.inputs.prerelease == 'true' }}
     steps:
       - name: Check out Git repository
         uses: actions/checkout@v4
@@ -170,8 +192,14 @@ jobs:
           ref: ${{ github.event.inputs.version }}
           fetch-depth: 0
 
-      - name: Set release as prerelease
+      - name: Finalize release
         run: |
-          gh release edit ${{ github.event.inputs.version }} --prerelease
+          if [ "${{ github.event.inputs.prerelease }}" = "true" ]; then
+            gh release edit "${{ github.event.inputs.version }}" --prerelease --draft=false
+            echo "✅ Release marked as prerelease and published"
+          else
+            gh release edit "${{ github.event.inputs.version }}" --draft=false
+            echo "✅ Release published as stable"
+          fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

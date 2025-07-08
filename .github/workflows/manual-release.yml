@@ -145,6 +145,12 @@ jobs:
             Get-Content "src/shared/version.ts"
           }
 
+      - name: Generate Release README
+        run: |
+          $buildType = if ("${{ github.event.inputs.prerelease }}" -eq "true") { "Beta Release (Signed)" } else { "Production Release (Signed)" }
+          $releaseNotes = "See commit history and changelog for detailed changes in this release."
+          node scripts/generate-release-readme.js "${{ github.event.inputs.version }}" "$buildType" "$releaseNotes"
+
       - name: Build and release
         run: npm run release
         env:
@@ -152,6 +158,17 @@ jobs:
           WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
           WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
           NODE_OPTIONS: "--max-old-space-size=8192"
+
+      - name: Upload Release README
+        run: |
+          if (Test-Path "RELEASE-README.md") {
+            gh release upload "${{ github.event.inputs.version }}" "RELEASE-README.md" --clobber
+            Write-Host "✅ Release README uploaded successfully"
+          } else {
+            Write-Host "⚠️ RELEASE-README.md not found"
+          }
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           
       - name: Upload build artifacts (on failure)
         if: failure()
