@@ -35,6 +35,18 @@ jobs:
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
+          
+          # Check if tag already exists
+          if git rev-parse "${{ github.event.inputs.version }}" >/dev/null 2>&1; then
+            echo "Tag ${{ github.event.inputs.version }} already exists. Deleting and recreating..."
+            git tag -d "${{ github.event.inputs.version }}" || true
+            git push origin :refs/tags/${{ github.event.inputs.version }} || true
+          fi
+          
+          # Delete existing GitHub release if it exists
+          gh release delete "${{ github.event.inputs.version }}" --yes --cleanup-tag || true
+          
+          # Create new tag
           git tag ${{ github.event.inputs.version }}
           git push origin ${{ github.event.inputs.version }}
         env:
