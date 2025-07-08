@@ -1786,6 +1786,14 @@ const EntraConfigForm: React.FC<EntraConfigFormProps> = ({ config, onSave, onCle
     }
   }, [config, isUserEditing]);
 
+  // Load permissions when Application Credentials mode is selected
+  useEffect(() => {
+    if (localConfig.useApplicationCredentials) {
+      console.log('🔄 Loading permissions for Application Credentials mode (component mount/config change)...');
+      loadGraphPermissions();
+    }
+  }, [localConfig.useApplicationCredentials, loadGraphPermissions]);
+
   const handleSave = async () => {
     try {
       setIsSaving(true);
@@ -1940,6 +1948,13 @@ const EntraConfigForm: React.FC<EntraConfigFormProps> = ({ config, onSave, onCle
                     alert('Failed to save authentication mode setting. Please try again.');
                   }
                 }
+                
+                // Load permissions for the selected mode after the state update
+                if (newMode) {
+                  // For Application Credentials mode, load permissions to show current app permissions
+                  console.log('🔄 Loading permissions for Application Credentials mode...');
+                  setTimeout(() => loadGraphPermissions(), 100);
+                }
               }}
             >              <FormControlLabel
                 value="user-token"
@@ -1975,9 +1990,98 @@ const EntraConfigForm: React.FC<EntraConfigFormProps> = ({ config, onSave, onCle
               />
             </RadioGroup>
           </FormControl>          {localConfig.useApplicationCredentials && (
-            <Alert severity="warning" sx={{ mt: 2 }}>
-              <strong>Application Permissions Required:</strong> Ensure your Entra application has the necessary application permissions configured for the data you want to access (e.g., AuditLog.Read.All, Directory.Read.All).
-            </Alert>
+            <>
+              <Alert severity="warning" sx={{ mt: 2 }}>
+                <Typography variant="body2">
+                  <strong>Application Permissions Status:</strong> <br/>
+                  {graphPermissions.loading ? (
+                    <>
+                      • <strong>Checking permissions...</strong> <CircularProgress size={12} sx={{ ml: 1 }} />
+                    </>
+                  ) : graphPermissions.error ? (
+                    <>
+                      • <strong>Unable to check current permissions</strong><br/>
+                      • <strong>Expected permissions:</strong> Application permissions like AuditLog.Read.All, Directory.Read.All<br/>
+                      • <strong>Configuration:</strong> Ensure your Entra application has the necessary application permissions configured for the data you want to access
+                    </>
+                  ) : (
+                    <>
+                      • <strong>Current application permissions:</strong> {graphPermissions.granted.length > 0 ? 
+                        graphPermissions.granted.slice(0, 3).join(', ') + 
+                        (graphPermissions.granted.length > 3 ? ` and ${graphPermissions.granted.length - 3} more` : '') 
+                        : 'None detected - ensure app permissions are configured'}<br/>
+                      • <strong>Configuration:</strong> Verify your Entra application has the required application permissions (e.g., AuditLog.Read.All, Directory.Read.All)
+                    </>
+                  )}
+                </Typography>
+              </Alert>
+              
+              {!graphPermissions.loading && !graphPermissions.error && (
+                <Box sx={{ mt: 2, p: 2, bgcolor: 'background.default', borderRadius: 1 }}>
+                  <Typography variant="caption" display="block" gutterBottom>
+                    <strong>Client ID:</strong> {localConfig.clientId || 'Not configured'}
+                  </Typography>
+                  <Typography variant="caption" display="block" gutterBottom>
+                    <strong>Tenant ID:</strong> {
+                      tenantInfo.loading ? (
+                        <span>
+                          Loading... <CircularProgress size={10} sx={{ ml: 1 }} />
+                        </span>
+                      ) : tenantInfo.error ? (
+                        <span style={{ color: 'red' }}>
+                          {localConfig.tenantId || 'Error loading tenant info'}
+                        </span>
+                      ) : tenantInfo.tenantDisplayName && tenantInfo.tenantDisplayName !== tenantInfo.tenantId ? (
+                        <span>
+                          <strong>{tenantInfo.tenantDisplayName}</strong>
+                          <span style={{ marginLeft: 8, color: '#666', fontSize: '0.9em' }}>
+                            ({tenantInfo.tenantId})
+                          </span>
+                        </span>
+                      ) : (
+                        localConfig.tenantId || 'Not configured'
+                      )
+                    }
+                  </Typography>
+                  <Typography variant="caption" display="block" color="text.secondary" sx={{ mt: 1 }}>
+                    Application Credentials mode uses your registered app's permissions
+                  </Typography>
+                  <Typography variant="caption" display="block" color="text.secondary">
+                    <strong>Application Permissions:</strong> {graphPermissions.loading ? (
+                      <CircularProgress size={12} sx={{ ml: 1 }} />
+                    ) : graphPermissions.error ? (
+                      <Chip label="Unable to check" size="small" color="warning" sx={{ ml: 1 }} />
+                    ) : (
+                      <Box component="span" sx={{ ml: 1 }}>
+                        <Chip 
+                          label={`${graphPermissions.granted.length} configured`} 
+                          size="small" 
+                          color={graphPermissions.granted.length > 0 ? "success" : "warning"} 
+                          sx={{ mr: 0.5 }} 
+                        />
+                      </Box>
+                    )}
+                  </Typography>
+                  
+                  {!graphPermissions.loading && !graphPermissions.error && (
+                    <Box sx={{ mt: 1 }}>
+                      <Typography variant="caption" display="block" color="text.secondary">
+                        <strong>Active permissions:</strong> {graphPermissions.granted.length > 0 ? 
+                          graphPermissions.granted.join(', ') : 'No application permissions detected'
+                        }
+                      </Typography>
+                    </Box>
+                  )}
+                  
+                  {graphPermissions.error && (
+                    <Typography variant="caption" display="block" color="text.secondary" sx={{ mt: 1 }}>
+                      <strong>Common Application Permissions:</strong> AuditLog.Read.All, Directory.Read.All, 
+                      User.Read.All, Group.Read.All, Application.Read.All
+                    </Typography>
+                  )}
+                </Box>
+              )}
+            </>
           )}
 
           {/* Graph PowerShell Client Toggle - only show for User Token mode */}

@@ -62,13 +62,50 @@ Added new IPC method exposures:
    - "Requires admin consent" section shows the delta between available and granted permissions
    - More accurate than previous static lists
 
+5. **Application Credentials Permissions Display** (New):
+   - Added dynamic permission display for Application Credentials mode
+   - Shows current application permissions from the access token
+   - Displays application-specific configuration details
+   - Includes loading states and error handling similar to User Token mode
+   - Provides guidance on configuring application permissions
+
+## Application Credentials Permission Display Fix
+
+### Issue
+The Settings UI was not displaying permissions when Application Credentials mode was selected. Only a static warning message was shown, while the dynamic permission display was only available for User Token mode with Enhanced Graph Access enabled.
+
+### Root Cause
+The dynamic permission display logic in `EntraConfigForm` was only triggered when `localConfig.useGraphPowerShell` was true, which is only available in User Token mode. Application Credentials mode only showed a static warning without any actual permission information.
+
+### Solution
+1. **Added Application Credentials Permission Display**: Modified the UI to show dynamic permission information for Application Credentials mode similar to User Token mode
+2. **Permission Loading Triggers**: Added permission loading when:
+   - Application Credentials mode is selected in the radio button
+   - Component is loaded with Application Credentials mode already selected
+3. **Consistent UI Pattern**: Both authentication modes now use the same permission display pattern with mode-specific messaging
+
+### Code Changes
+
+#### EntraConfigForm Component Updates:
+- **New Permission Display Block**: Added comprehensive permission status display for Application Credentials mode
+- **Loading Triggers**: Added `useEffect` to load permissions when Application Credentials mode is selected
+- **Mode Switch Handler**: Enhanced authentication mode change handler to load permissions when switching to Application Credentials
+
+#### Features Added:
+- **Dynamic Permission Status**: Shows actual application permissions from the access token
+- **Configuration Details**: Displays Client ID, Tenant ID, and tenant display name
+- **Loading States**: Proper loading indicators during permission retrieval
+- **Error Handling**: Graceful fallback when permissions cannot be retrieved
+- **Guidance**: Helpful messages about configuring application permissions
+
 ## Benefits
 
 ### For Users:
-- **Transparency**: Users can see exactly what permissions are currently granted
+- **Transparency**: Users can see exactly what permissions are currently granted in both User Token and Application Credentials modes
 - **Context**: Tenant display name provides human-readable context for the tenant ID
 - **Accuracy**: Real-time permission data instead of static assumptions
 - **Debugging**: Easier to troubleshoot permission issues with actual vs. expected permissions
+- **Consistency**: Both authentication modes now show dynamic permission information
 
 ### For Administrators:
 - **Visibility**: Clear view of what permissions the Microsoft Graph PowerShell client actually has
