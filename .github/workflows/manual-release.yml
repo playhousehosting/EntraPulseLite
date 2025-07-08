@@ -42,13 +42,8 @@ jobs:
 
   build-and-release:
     needs: create-release
-    runs-on: ${{ matrix.os }}
+    runs-on: windows-latest
     
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [windows-latest, macos-latest, ubuntu-latest]
-
     steps:
       - name: Check out Git repository
         uses: actions/checkout@v4
@@ -85,17 +80,9 @@ jobs:
         env:
           NODE_OPTIONS: "--max-old-space-size=4096"
           CI: true
-        continue-on-error: ${{ matrix.os == 'ubuntu-latest' }}
-
-      - name: Skip tests and continue build (Ubuntu fallback)
-        if: ${{ failure() && matrix.os == 'ubuntu-latest' }}
-        run: |
-          echo "Tests failed on Ubuntu, but continuing with build for release..."
-          echo "This is acceptable for a beta release where the primary target is Windows"
 
       - name: Run security checks
         run: npm run security:check
-        continue-on-error: ${{ matrix.os == 'ubuntu-latest' }}
 
       - name: Update version in source files
         run: |
@@ -149,18 +136,15 @@ jobs:
         run: npm run release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CSC_NAME: "Darren J Robinson"
-          WIN_CSC_IDENTITY_AUTO_DISCOVERY: true
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
           NODE_OPTIONS: "--max-old-space-size=8192"
-          # Windows-specific environment variables
-          ELECTRON_CACHE: ${{ runner.os == 'Windows' && env.ELECTRON_CACHE || '' }}
-          ELECTRON_BUILDER_CACHE: ${{ runner.os == 'Windows' && env.ELECTRON_BUILDER_CACHE || '' }}
           
       - name: Upload build artifacts (on failure)
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: build-logs-${{ matrix.os }}-${{ github.run_number }}
+          name: build-logs-windows-${{ github.run_number }}
           path: |
             dist/
             dist-release/

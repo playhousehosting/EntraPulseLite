@@ -1,4 +1,4 @@
-name: Beta Release (Signed)
+name: Beta Release (Windows Signed)
 
 on:
   workflow_dispatch:
@@ -7,9 +7,14 @@ on:
         description: 'Release version (e.g., v1.0.0-beta.1)'
         required: true
         type: string
+      prerelease:
+        description: 'Mark as pre-release'
+        required: false
+        default: true
+        type: boolean
 
 jobs:
-  windows-release:
+  windows-signed-release:
     runs-on: windows-latest
     
     steps:
@@ -18,25 +23,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Clean up existing tag and release
-        run: |
-          # Delete existing tag locally and remotely
-          git tag -d ${{ github.event.inputs.version }} 2>/dev/null || true
-          git push origin --delete ${{ github.event.inputs.version }} 2>/dev/null || true
-          
-          # Delete existing GitHub release
-          gh release delete ${{ github.event.inputs.version }} --yes 2>/dev/null || true
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        continue-on-error: true
-
-      - name: Create and push tag
-        run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          git tag ${{ github.event.inputs.version }}
-          git push origin ${{ github.event.inputs.version }}
-
       - name: Install Node.js
         uses: actions/setup-node@v4
         with:
@@ -44,27 +30,30 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        run: |
-          npm ci --legacy-peer-deps --no-audit --no-fund
+        run: npm ci --legacy-peer-deps --no-audit --no-fund
         env:
           NODE_OPTIONS: --max-old-space-size=8192
 
-      - name: Run tests (skip problematic ones)
+      - name: Run tests
         run: npm run test:ci
         env:
           CI: true
           NODE_OPTIONS: --max-old-space-size=4096
 
-      - name: Build application (signed)
-        run: npm run build && electron-builder --publish=always
+      - name: Build and sign Windows application
+        run: npm run build && electron-builder --win --publish=never
         env:
           NODE_OPTIONS: --max-old-space-size=8192
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
           WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
 
-      - name: Set release as prerelease
-        run: |
-          gh release edit ${{ github.event.inputs.version }} --prerelease
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.version }}
+          name: ${{ github.event.inputs.version }}
+          draft: false
+          prerelease: ${{ github.event.inputs.prerelease == 'true' }}
+          files: dist-release/*
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
