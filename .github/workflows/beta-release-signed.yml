@@ -41,7 +41,7 @@ jobs:
           NODE_OPTIONS: --max-old-space-size=4096
 
       - name: Build and sign Windows application
-        run: npm run build && electron-builder --win --publish=never
+        run: npm run build && npx electron-builder --win --publish=never
         env:
           NODE_OPTIONS: --max-old-space-size=8192
           WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}

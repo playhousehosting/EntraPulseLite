@@ -42,7 +42,7 @@ jobs:
           NODE_OPTIONS: --max-old-space-size=4096
 
       - name: Build application (Windows signed)
-        run: npm run build && electron-builder --win --publish=always
+        run: npm run build && npx electron-builder --win --publish=always
         env:
           NODE_OPTIONS: --max-old-space-size=8192
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
