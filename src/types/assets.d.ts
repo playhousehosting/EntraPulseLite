@@ -97,6 +97,9 @@ interface Window {
       checkMCPServerHealth: () => Promise<any>;
       debugMCP: () => Promise<any>;
     };
+    app: {
+      getVersion: () => Promise<string>;
+    };
     updater: {
       checkForUpdates: () => Promise<{ success: boolean; error?: string }>;
       downloadUpdate: () => Promise<{ success: boolean; error?: string }>;

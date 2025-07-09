@@ -1,6 +1,7 @@
 // Main Electron process for EntraPulse Lite
 import { app, BrowserWindow, ipcMain, Menu, globalShortcut, shell } from 'electron';
 import * as path from 'path';
+import * as fs from 'fs';
 import { AuthService } from '../auth/AuthService';
 import { GraphService } from '../shared/GraphService';
 import { ConfigService } from '../shared/ConfigService';
@@ -14,6 +15,19 @@ import { MCPErrorHandler, ErrorCode } from '../mcp/utils';
 import { debugMCP, checkMCPServerHealth } from '../mcp/mcp-debug';
 import { AutoUpdaterService } from './AutoUpdaterService';
 import { AppConfig, MCPServerConfig } from '../types';
+import { exposeVersionToRenderer } from '../shared/VersionUtils';
+
+// Get version from package.json
+function getAppVersion(): string {
+  try {
+    const packageJsonPath = path.join(__dirname, '../../package.json');
+    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+    return packageJson.version;
+  } catch (error) {
+    console.error('Failed to read version from package.json:', error);
+    return '1.0.0-beta.2'; // Fallback version
+  }
+}
 
 // Set app ID for Windows taskbar integration
 if (process.platform === 'win32') {
@@ -1678,7 +1692,7 @@ class EntraPulseLiteApp {
         return this.autoUpdaterService.getCurrentVersion();
       } catch (error) {
         console.error('Get current version failed:', error);
-        return '1.0.0-beta.1';
+        return '1.0.0-beta.2';
       }
     });
 
@@ -2098,9 +2112,9 @@ class EntraPulseLiteApp {
           // Check if we have stored Entra credentials and update MCP server config
           console.log('🔧 Checking for stored Entra credentials during initialization...');
           if (storedEntraConfig && storedEntraConfig.clientId && storedEntraConfig.tenantId) {
-            console.log('🔐 Found stored Entra credentials, updating Lokka MCP server configuration...');          // Enable Lokka MCP server since user is authenticated
+            console.log('🔐 Found stored Entra credentials, updating Lokka MCP server configuration...');          // Enable Lokka MCP server for authenticated user
             const lokkaServerIndex = this.config.mcpServers.findIndex(server => server.name === 'external-lokka');
-            if (lokkaServerIndex !== -1) {            // Determine client ID and authentication mode based on configuration priority:
+            if (lokkaServerIndex !== -1) {              // Determine client ID and authentication mode based on configuration priority:
               // 1. Application Credentials mode (if explicitly enabled with credentials)
               // 2. Enhanced Graph Access (if enabled and not in application credentials)
               // 3. Standard user token mode

@@ -140,8 +140,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-jobs:
-  create-release:
+  create-tag-and-setup:
     runs-on: ubuntu-latest
     
     steps:
@@ -181,7 +180,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   windows-release:
-    needs: create-release
+    needs: create-tag-and-setup
     runs-on: windows-latest
     
     steps:

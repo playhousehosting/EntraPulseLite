@@ -80,6 +80,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     clearEntraConfig: () => ipcRenderer.invoke('config:clearEntraConfig'),
   },
 
+  // App methods
+  app: {
+    getVersion: () => ipcRenderer.invoke('app:getVersion'),
+  },
+
   // Auto-updater methods
   updater: {
     checkForUpdates: () => ipcRenderer.invoke('updater:checkForUpdates'),

@@ -170,6 +170,9 @@ export interface ElectronAPI {
     saveEntraConfig: (config: EntraConfig) => Promise<void>;
     clearEntraConfig: () => Promise<void>;
   };
+  app: {
+    getVersion: () => Promise<string>;
+  };
   updater: {
     checkForUpdates: () => Promise<{ success: boolean; error?: string }>;
     downloadUpdate: () => Promise<{ success: boolean; error?: string }>;
