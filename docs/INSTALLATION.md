@@ -69,18 +69,15 @@ For enterprise users with Azure OpenAI deployments:
 > - **Azure OpenAI**: Enterprise-grade with data residency and compliance features
 
 ### 4. Enable Enhanced Graph Access (Recommended)
-For the best Microsoft Graph experience, enable Enhanced Graph Access using the well-known Microsoft Graph PowerShell application:
+For the best Microsoft Graph experience, enable Enhanced Graph Access using the Microsoft Graph PowerShell application:
 
 1. Go to **Settings** → **Entra Configuration**
-2. Toggle **"Use Application Credentials"** to **ON**
-3. Enter the Microsoft Graph PowerShell app details:
-   ```
-   Client ID: 14d82eec-204b-4c2f-b7e0-296602dcde65
-   Tenant ID: [your-tenant-id]
-   Client Secret: [leave blank - not needed for this app]
-   ```
-4. Toggle **"Enhanced Graph Access"** to **ON**
+2. **Keep "Use Application Credentials" set to OFF** (User Token mode)
+3. Toggle **"Enhanced Graph Access (Microsoft Graph PowerShell)"** to **ON**
+4. Enter your **Tenant ID** only (the Microsoft Graph PowerShell Client ID is pre-configured)
 5. Click **Save Configuration**
+
+The application will automatically use the Microsoft Graph PowerShell application registration (`14d82eec-204b-4c2f-b7e8-296a70dab67e`) which provides broader permissions for Graph API access.
 
 > **💡 How to find your Tenant ID:**
 > 1. Go to [portal.azure.com](https://portal.azure.com)
@@ -88,6 +85,8 @@ For the best Microsoft Graph experience, enable Enhanced Graph Access using the 
 > 3. Copy the **Tenant ID** (GUID format)
 > 
 > **Alternative:** Your tenant ID is also visible in EntraPulse Lite under **User Profile** → **Session Info** after signing in
+
+> **⚠️ Important:** Enhanced Graph Access should be used in **User Token mode**, NOT Application Credentials mode. It's a separate feature that uses the Microsoft Graph PowerShell application with delegated permissions.
 
 ### 5. Test Your Setup
 1. In the chat interface, ask: **"Who am I?"**
@@ -178,26 +177,25 @@ cd EntrapulseLite
 npm install
 ```
 
-### 3. Environment Configuration (Optional)
-```bash
-# Copy the example environment file
-cp .env.example .env.local
+### 3. Configuration
+All configuration is done through the application UI:
+- **LLM Providers**: Configure in Settings → Cloud Providers
+- **Microsoft Authentication**: Configure in Settings → Entra Configuration
+- **Enhanced Graph Access**: Enable in Settings → Entra Configuration
 
-# Edit .env.local with your configuration
-```
+**Authentication Modes (Delegated Permissions Only):**
+1. **Basic User Token**: Uses default Microsoft authentication (no custom Client ID needed)
+2. **Custom User Token**: Uses your custom app registration with delegated permissions (requires Client ID + Tenant ID)
+3. **Enhanced Graph Access**: Uses Microsoft Graph PowerShell client ID with broader permissions (requires Tenant ID only)
 
-Example `.env.local`:
-```env
-# Microsoft Entra App Registration (Optional)
-CLIENT_ID=your-client-id
-CLIENT_SECRET=your-client-secret
-TENANT_ID=your-tenant-id
+**Important:** Enhanced Graph Access overrides any custom Client ID configuration and uses the well-known Microsoft Graph PowerShell client ID (14d82eec-204b-4c2f-b7e8-296a70dab67e).
 
-# Cloud LLM API Keys (Optional)
-OPENAI_API_KEY=your-openai-key
-ANTHROPIC_API_KEY=your-anthropic-key
-GOOGLE_GEMINI_API_KEY=your-gemini-key
-```
+**Authentication Field Requirements:**
+- **Client ID**: Optional - only used when Enhanced Graph Access is disabled
+- **Tenant ID**: Required for both custom app authentication and Enhanced Graph Access
+- **Client Secret**: Not used - all authentication uses delegated permissions
+
+No environment files are needed - all settings are stored securely using `electron-store` with encryption.
 
 ## 🚀 Quick Start
 
@@ -278,40 +276,130 @@ docker exec -it ollama ollama pull llama3.1:8b
 
 ## 🔐 Microsoft Authentication Setup
 
-### Basic Setup (No App Registration Required)
-EntraPulse Lite works out of the box with Microsoft's public client configuration:
-- Uses Microsoft's public client ID
-- Limited to basic permissions
-- Perfect for individual users
+### Authentication Modes Overview
 
-### Advanced Setup (Custom App Registration)
-For enhanced permissions and enterprise features:
+EntraPulse Lite supports multiple delegated authentication modes, each providing different levels of access:
 
-1. **Register Application in Microsoft Entra**:
+| Mode | Token Type | Permissions Source | User Context | Use Case |
+|------|------------|-------------------|--------------|----------|
+| **Default User Token** | Delegated | Microsoft defaults | ✅ Yes | Basic personal use |
+| **Custom User Token** | Delegated | Your app registration | ✅ Yes | Enhanced personal use |
+| **Enhanced Graph Access** | Delegated | Microsoft Graph PowerShell | ✅ Yes | Broad API access |
+
+> **📝 Note**: All authentication modes use delegated permissions with user context. True application-only authentication (client credentials flow) is not currently implemented.
+
+### Basic Setup (Default)
+EntraPulse Lite works out of the box with Microsoft's authentication:
+- Uses Microsoft's public client configuration for user authentication
+- Supports delegated permissions with progressive consent
+- Perfect for individual users and basic Graph API access
+- **Permissions**: `User.Read`, `profile`, `openid`, `email`
+
+### Enhanced Graph Access (Recommended)
+Uses the Microsoft Graph PowerShell application for broader API access:
+- **Client ID**: `14d82eec-204b-4c2f-b7e0-296602dcde65` (pre-configured)
+- **Token Type**: Delegated permissions with user context
+- **Permissions**: Broader delegated permissions for comprehensive Graph access
+- **Setup**: Only requires your Tenant ID in Settings → Entra Configuration
+- **Use Case**: Best balance of permissions and ease of setup
+
+### Custom User Token Mode (Advanced)
+Uses your custom app registration for tailored delegated permissions:
+- **Client ID**: Your custom app registration ID
+- **Token Type**: Delegated permissions with user context  
+- **Permissions**: Your app's configured delegated permissions
+- **Setup**: Requires Client ID and Tenant ID (no client secret)
+- **Use Case**: Custom permission sets while maintaining user context
+
+### Custom Application Registration (Advanced)
+For enterprise scenarios requiring custom permissions:
+
+1. **Create App Registration**:
    - Go to [Azure Portal](https://portal.azure.com)
-   - Navigate to Microsoft Entra ID → App registrations
-   - Click "New registration"
+   - Navigate to **Microsoft Entra ID** → **App registrations**
+   - Click **"New registration"**
 
 2. **Configure Application**:
-   - Name: "EntraPulse Lite"
-   - Supported account types: "Accounts in this organizational directory only"
-   - Redirect URI: `msal://redirect` (Public client/native)
+   - **Name**: "EntraPulse Lite Custom"
+   - **Supported account types**: "Accounts in this organizational directory only"
+   - **Redirect URI**: 
+     - Click **"Add a platform"**
+     - Select **"Mobile and desktop applications"** (NOT "Single-page application")
+     - **URI**: `http://localhost`
 
-3. **Configure Permissions**:
+3. **Configure Application Type**:
+   - Go to **Authentication** in your app registration
+   - Under **Advanced settings**, set **"Allow public client flows"** to **Yes**
+   - This is **required** for desktop applications using MSAL
+
+4. **Configure API Permissions**:
+
+   **For Application Credentials Mode** (client credentials flow):
+   ```
+   Microsoft Graph - Application Permissions:
+   - Application.Read.All
+   - Directory.Read.All
+   - Group.Read.All
+   - User.Read.All
+   - Mail.Read (if needed)
+   - Calendars.Read (if needed)
+   ```
+
+   **For User Token Mode** (delegated permissions):
    ```
    Microsoft Graph - Delegated Permissions:
-   - User.Read (Basic)
-   - User.ReadBasic.All (User queries)
-   - Directory.Read.All (Directory queries)
-   - Group.Read.All (Group queries)
-   - Application.Read.All (App queries)
+   - User.Read
+   - User.ReadBasic.All
+   - Directory.Read.All
+   - Group.Read.All
+   - Mail.Read (if needed)
+   - Calendars.Read (if needed)
    ```
 
-4. **Add Configuration**:
-   ```env
-   CLIENT_ID=your-application-id
-   TENANT_ID=your-tenant-id
-   ```
+5. **Grant Admin Consent**:
+   - In the app registration, go to **API permissions**
+   - Click **"Grant admin consent for [Your Organization]"**
+   - Confirm the consent
+
+6. **Create Client Secret** (Required only for Application Credentials mode):
+   - Go to **Certificates & secrets**
+   - Click **"New client secret"**
+   - Add description and expiration
+   - Copy the secret value (you won't see it again)
+   - **Note**: This is NOT needed for User Token modes (delegated permissions)
+
+### Configuration Options
+
+**Option A: Custom User Token Mode (Enhanced Delegated Permissions)**
+   - Go to **Settings** → **Entra Configuration**
+   - Enter your **Client ID** and **Tenant ID**
+   - **Leave Client Secret field empty** (not used)
+   - Click **Save Configuration**
+   - **Result**: Your custom app's delegated permissions with user context
+
+**Option B: Enhanced Graph Access (Microsoft Graph PowerShell)**
+   - Go to **Settings** → **Entra Configuration**
+   - Toggle **"Enhanced Graph Access"** to **ON**
+   - Enter your **Tenant ID** only
+   - **Leave Client ID and Client Secret fields empty** (automatically uses Microsoft Graph PowerShell client)
+   - Click **Save Configuration**
+   - **Result**: Microsoft Graph PowerShell delegated permissions
+
+> **🔄 Authentication Flow Priority:**
+> 1. **Enhanced Graph Access** (if enabled)
+> 2. **Custom User Token Mode** (if custom client ID configured)
+> 3. **Default User Token Mode** (Microsoft default permissions)
+
+> **💡 Permission Display in UI:**
+> - **Custom User Token**: Shows delegated permissions from your app registration  
+> - **Enhanced Graph Access**: Shows Microsoft Graph PowerShell delegated permissions
+> - **Default User Token**: Shows basic Microsoft permissions (User.Read, etc.)
+
+> **⚠️ Important Notes:**
+> - **Platform Type**: Use "Mobile and desktop applications" NOT "Single-page application"
+> - **Redirect URI**: Must be exactly `http://localhost` to match the authentication flow
+> - **Public Client Flows**: Must be enabled for desktop applications
+> - **Client Secret**: Optional for delegated permissions, required for application permissions
 
 ## 🧪 Verification
 

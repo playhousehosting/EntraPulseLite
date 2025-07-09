@@ -807,8 +807,6 @@ export class ConfigService {
     console.log('[ConfigService] saveEntraConfig - Input config:', {
       clientId: entraConfig.clientId ? '[REDACTED]' : 'none',
       tenantId: entraConfig.tenantId ? '[REDACTED]' : 'none',
-      hasClientSecret: !!entraConfig.clientSecret,
-      useApplicationCredentials: entraConfig.useApplicationCredentials,
       useGraphPowerShell: entraConfig.useGraphPowerShell
     });
 
@@ -851,34 +849,23 @@ export class ConfigService {
   }
 
   /**
-   * Get the user's authentication preference (token vs application credentials)
+   * Get the user's authentication preference (always user-token since Application Credentials mode was removed)
    */
   getAuthenticationPreference(): 'user-token' | 'application-credentials' {
-    const entraConfig = this.getEntraConfig();
-    const hasClientCredentials = entraConfig?.clientSecret && entraConfig?.clientId && entraConfig?.tenantId;
-    
-    if (entraConfig?.useApplicationCredentials && hasClientCredentials) {
-      return 'application-credentials';
-    }
+    // Application Credentials mode has been removed for security reasons
+    // Always return 'user-token' as only delegated permissions are supported
     return 'user-token';
   }
 
   /**
-   * Update authentication context based on Entra configuration
+   * Update authentication context (always use interactive mode since Application Credentials mode was removed)
    */
   updateAuthenticationContext(): void {
-    const entraConfig = this.getEntraConfig();
-    const hasClientCredentials = entraConfig?.clientSecret && entraConfig?.clientId && entraConfig?.tenantId;
-    const useAppCredentials = entraConfig?.useApplicationCredentials && hasClientCredentials;
+    // Application Credentials mode has been removed for security reasons
+    // Always use interactive mode (delegated permissions)
+    this.setAuthenticationContext('interactive');
     
-    const authMode = useAppCredentials ? 'client-credentials' : 'interactive';
-    this.setAuthenticationContext(authMode);
-    
-    console.log('[ConfigService] Updated authentication context:', {
-      mode: authMode,
-      useApplicationCredentials: useAppCredentials,
-      hasClientCredentials
-    });
+    console.log('[ConfigService] Updated authentication context to interactive mode (delegated permissions only)');
   }
 
   /**

@@ -28,13 +28,13 @@ EntraPulse Lite is built with modern TypeScript, Electron, and React technologie
 ### Core Components
 
 #### 1. Authentication Layer
-- **AuthService**: MSAL-based Microsoft authentication with dual modes
-- **User Token Mode**: Delegated permissions with progressive requests
-- **Application Credentials Mode**: Client credentials flow for enhanced access
-- **Enhanced Graph Access**: Hybrid mode combining user tokens with application credentials
-- **Runtime Mode Switching**: Toggle between authentication modes without restart
-- **Token Management**: Secure token storage and refresh
+- **AuthService**: MSAL-based Microsoft authentication with secure delegated permissions
+- **User Token Mode**: Delegated permissions with progressive consent (default and only mode)
+- **Enhanced Graph Access**: Extended delegated permissions via Microsoft Graph PowerShell client
+- **Custom App Mode**: Delegated permissions via custom app registration
+- **Token Management**: Secure token storage and refresh (no client secrets stored)
 - **Configuration Integration**: Authentication preferences stored in ConfigService
+- **Security-First Design**: All authentication uses delegated permissions for enhanced security
 
 #### 2. LLM Integration Layer
 - **UnifiedLLMService**: Provider-agnostic interface

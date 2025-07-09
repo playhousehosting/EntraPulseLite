@@ -42,9 +42,7 @@ describe('MCP SDK Implementation', () => {
         tenantId: 'test-tenant'
       }),
       getEntraConfig: jest.fn().mockReturnValue({
-        useApplicationCredentials: false,
         clientId: 'test-client-id',
-        clientSecret: '',
         tenantId: 'test-tenant'
       })
     }));

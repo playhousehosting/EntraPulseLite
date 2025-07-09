@@ -28,11 +28,11 @@ Users can switch between authentication modes in Settings → Entra Configuratio
 - No application restart required
 
 ### 3. **Enhanced Graph Access Mode**
-- **Authentication**: Hybrid approach combining user tokens with application credentials
-- **Use Case**: Users who want delegated authentication but need enhanced Graph API permissions
-- **Configuration**: Requires both user sign-in AND application credentials configured
-- **Behavior**: Uses user token for authentication context, application credentials for Graph queries
-- **Toggle Control**: Available in Settings → Entra Configuration when application credentials are configured
+- **Authentication**: Uses the Microsoft Graph PowerShell application (`14d82eec-204b-4c2f-b7e0-296602dcde65`) with delegated user permissions
+- **Use Case**: Users who want broader Graph API permissions without needing their own app registration
+- **Configuration**: Requires user sign-in AND tenant ID only (no client secret needed)
+- **Behavior**: Uses Microsoft Graph PowerShell client ID for authentication, providing enhanced permissions
+- **Toggle Control**: Available in Settings → Entra Configuration as a separate option
 
 ## Features
 

@@ -68,8 +68,6 @@ export interface CloudLLMProviderConfig {
 export interface EntraConfig {
   clientId: string;
   tenantId: string;
-  clientSecret?: string;
-  useApplicationCredentials?: boolean; // Toggle for authentication mode
   useGraphPowerShell?: boolean; // Toggle for Microsoft Graph PowerShell client ID
 }
 
@@ -210,8 +208,7 @@ export interface EnhancedLLMResponse {
 }
 
 export interface AuthenticationContext {
-  mode: 'interactive' | 'client-credentials';
-  useApplicationCredentials?: boolean; // Track user preference
+  mode: 'interactive';
 }
 
 // Window interface is defined in assets.d.ts to avoid conflicts

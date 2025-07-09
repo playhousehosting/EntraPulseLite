@@ -265,6 +265,7 @@ export const EnhancedSettingsDialog: React.FC<EnhancedSettingsDialogProps> = ({
       return;
     }
     
+    // Only load permissions if Enhanced Graph Access is enabled
     if (!entraConfig?.useGraphPowerShell) {
       setGraphPermissions({ granted: [], available: [], loading: false });
       return;
@@ -284,6 +285,7 @@ export const EnhancedSettingsDialog: React.FC<EnhancedSettingsDialogProps> = ({
         throw new Error(currentPermissions.error);
       }
       
+      // Delegated permissions for Enhanced Graph Access
       const requiredPermissions = [
         'User.Read',
         'User.ReadBasic.All', 
@@ -632,8 +634,7 @@ export const EnhancedSettingsDialog: React.FC<EnhancedSettingsDialogProps> = ({
       
       console.log('🔄 Saving Entra config:', {
         clientId: newEntraConfig.clientId ? '[REDACTED]' : 'none',
-        tenantId: newEntraConfig.tenantId ? '[REDACTED]' : 'none',
-        hasClientSecret: !!newEntraConfig.clientSecret
+        tenantId: newEntraConfig.tenantId ? '[REDACTED]' : 'none'
       });
 
       await electronAPI.config.saveEntraConfig(newEntraConfig);
@@ -1769,9 +1770,7 @@ interface EntraConfigFormProps {
 
 const EntraConfigForm: React.FC<EntraConfigFormProps> = ({ config, onSave, onClear, graphPermissions, loadGraphPermissions, tenantInfo }) => {  const [localConfig, setLocalConfig] = useState<EntraConfig>({
     clientId: '',
-    tenantId: '',
-    clientSecret: '',
-    useApplicationCredentials: false
+    tenantId: ''
   });
   const [isSaving, setIsSaving] = useState(false);
   const [isUserEditing, setIsUserEditing] = useState(false);
@@ -1786,13 +1785,13 @@ const EntraConfigForm: React.FC<EntraConfigFormProps> = ({ config, onSave, onCle
     }
   }, [config, isUserEditing]);
 
-  // Load permissions when Application Credentials mode is selected
+  // Load permissions when Enhanced Graph Access is enabled
   useEffect(() => {
-    if (localConfig.useApplicationCredentials) {
-      console.log('🔄 Loading permissions for Application Credentials mode (component mount/config change)...');
+    if (localConfig.useGraphPowerShell) {
+      console.log('🔄 Loading permissions for Enhanced Graph Access mode (component mount/config change)...');
       loadGraphPermissions();
     }
-  }, [localConfig.useApplicationCredentials, loadGraphPermissions]);
+  }, [localConfig.useGraphPowerShell, loadGraphPermissions]);
 
   const handleSave = async () => {
     try {
@@ -1812,9 +1811,7 @@ const EntraConfigForm: React.FC<EntraConfigFormProps> = ({ config, onSave, onCle
       setIsSaving(true);
       await onClear();      setLocalConfig({
         clientId: '',
-        tenantId: '',
-        clientSecret: '',
-        useApplicationCredentials: false
+        tenantId: ''
       });
       // Successfully cleared - no longer editing
       setIsUserEditing(false);
@@ -1879,84 +1876,13 @@ const EntraConfigForm: React.FC<EntraConfigFormProps> = ({ config, onSave, onCle
           
           <FormControl component="fieldset">
             <RadioGroup
-              value={localConfig.useApplicationCredentials ? 'application-credentials' : 'user-token'}
-              onChange={async (e) => {
-                const newMode = e.target.value === 'application-credentials';
-                const previousMode = localConfig.useApplicationCredentials;
-                
-                console.log('🎯 AUTHENTICATION MODE CHANGE HANDLER CALLED - START');
-                console.log('🔧 Authentication mode changing from:', previousMode ? 'application-credentials' : 'user-token', 'to:', newMode ? 'application-credentials' : 'user-token');
-                
-                if (newMode && (!localConfig.clientSecret?.trim() || !localConfig.clientId?.trim() || !localConfig.tenantId?.trim())) {
-                  // For now, just show a warning - don't block the change
-                  console.warn('Client credentials mode requires Client ID, Tenant ID, and Client Secret');
-                }
-
-                // Update local state first
-                const updatedConfig = {
-                  ...localConfig,
-                  useApplicationCredentials: newMode
-                };
-                setLocalConfig(updatedConfig);
-                setIsUserEditing(true);
-                setTestResult(null); // Clear test results when mode changes
-                
-                // Check if this is a significant mode change that requires re-authentication
-                if (previousMode !== newMode) {
-                  console.log('🔄 Authentication mode changed significantly, auto-saving and signing out...');
-                  
-                  try {
-                    // Immediately save the authentication mode change
-                    console.log('💾 Auto-saving authentication mode change...');
-                    await onSave(updatedConfig);
-                    console.log('✅ Authentication mode setting saved successfully');
-                    
-                    // Trigger UI update event to notify other components
-                    const electronAPI = window.electronAPI as any;
-                    if (electronAPI?.events?.emit) {
-                      electronAPI.events.emit('auth:configurationAvailable');
-                      console.log('📡 Emitted auth:configurationAvailable after authentication mode save');
-                    }
-                    
-                    // Auto sign-out for authentication mode change
-                    console.log('🔔 Auto-signing out for authentication mode change...');
-                    try {
-                      await electronAPI.auth.logout();
-                      console.log('✅ Automatic sign out completed for mode change');
-                      
-                      // Emit logout event to notify other components
-                      console.log('🔔 Sending auth:logoutBroadcast to main process for mode change');
-                      electronAPI.send('auth:logoutBroadcast', { reason: 'authentication-mode-change' });
-                      
-                      // Show success message
-                      setTimeout(() => {
-                        alert(`Authentication mode changed to ${newMode ? 'Application Credentials' : 'User Token'}. You have been signed out and the application will reset to the sign-in screen.`);
-                      }, 100);
-                    } catch (logoutError) {
-                      console.error('❌ Failed to sign out automatically for mode change:', logoutError);
-                      setTimeout(() => {
-                        alert(`Authentication mode changed to ${newMode ? 'Application Credentials' : 'User Token'}, but automatic sign out failed. Please manually sign out and sign in again from the main screen.`);
-                      }, 100);
-                    }
-                  } catch (error) {
-                    console.error('❌ Failed to auto-save authentication mode setting:', error);
-                    // Revert the local state on save failure
-                    setLocalConfig({
-                      ...localConfig,
-                      useApplicationCredentials: previousMode
-                    });
-                    alert('Failed to save authentication mode setting. Please try again.');
-                  }
-                }
-                
-                // Load permissions for the selected mode after the state update
-                if (newMode) {
-                  // For Application Credentials mode, load permissions to show current app permissions
-                  console.log('🔄 Loading permissions for Application Credentials mode...');
-                  setTimeout(() => loadGraphPermissions(), 100);
-                }
+              value="user-token"
+              onChange={() => {
+                // Only User Token mode is supported for security
+                console.log('📍 Authentication mode: User Token (Delegated Permissions) - secure by design');
               }}
-            >              <FormControlLabel
+            >
+              <FormControlLabel
                 value="user-token"
                 control={<Radio />}
                 label={
@@ -1965,130 +1891,22 @@ const EntraConfigForm: React.FC<EntraConfigFormProps> = ({ config, onSave, onCle
                       User Token (Delegated Permissions)
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
-                      {localConfig.useGraphPowerShell 
-                        ? "Query Microsoft Graph with enhanced user permissions. Access your mailbox, calendar, files, Teams data, and comprehensive user-scoped resources through the Microsoft Graph PowerShell client."
-                        : "Query Microsoft Graph with your user permissions. Access your profile, basic directory data, and other user-scoped data based on your application's configured permissions."
+                      {localConfig.useGraphPowerShell
+                        ? "Currently using Microsoft Graph PowerShell client (14d82eec-204b-4c2f-b7e8-296a70dab67e) for enhanced permissions. This overrides any custom Client ID configured below."
+                        : localConfig.clientId && localConfig.clientId.trim()
+                        ? "Using your custom app registration for delegated permissions. Access depends on permissions configured in your Azure app registration."
+                        : "Using default Microsoft authentication with basic user permissions (User.Read, profile, openid, email)."
                       }
                     </Typography>
                   </Box>
                 }
               />
-              <FormControlLabel
-                value="application-credentials"
-                control={<Radio />}
-                label={
-                  <Box>
-                    <Typography variant="body1" fontWeight="bold">
-                      Application Credentials (App Permissions)
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Query Microsoft Graph with application permissions. Access organization-wide data like audit logs, sign-in logs, and directory information.
-                    </Typography>
-                  </Box>
-                }
-                disabled={!localConfig.clientSecret?.trim() || !localConfig.clientId?.trim() || !localConfig.tenantId?.trim()}
-              />
             </RadioGroup>
-          </FormControl>          {localConfig.useApplicationCredentials && (
-            <>
-              <Alert severity="warning" sx={{ mt: 2 }}>
-                <Typography variant="body2">
-                  <strong>Application Permissions Status:</strong> <br/>
-                  {graphPermissions.loading ? (
-                    <>
-                      • <strong>Checking permissions...</strong> <CircularProgress size={12} sx={{ ml: 1 }} />
-                    </>
-                  ) : graphPermissions.error ? (
-                    <>
-                      • <strong>Unable to check current permissions</strong><br/>
-                      • <strong>Expected permissions:</strong> Application permissions like AuditLog.Read.All, Directory.Read.All<br/>
-                      • <strong>Configuration:</strong> Ensure your Entra application has the necessary application permissions configured for the data you want to access
-                    </>
-                  ) : (
-                    <>
-                      • <strong>Current application permissions:</strong> {graphPermissions.granted.length > 0 ? 
-                        graphPermissions.granted.slice(0, 3).join(', ') + 
-                        (graphPermissions.granted.length > 3 ? ` and ${graphPermissions.granted.length - 3} more` : '') 
-                        : 'None detected - ensure app permissions are configured'}<br/>
-                      • <strong>Configuration:</strong> Verify your Entra application has the required application permissions (e.g., AuditLog.Read.All, Directory.Read.All)
-                    </>
-                  )}
-                </Typography>
-              </Alert>
-              
-              {!graphPermissions.loading && !graphPermissions.error && (
-                <Box sx={{ mt: 2, p: 2, bgcolor: 'background.default', borderRadius: 1 }}>
-                  <Typography variant="caption" display="block" gutterBottom>
-                    <strong>Client ID:</strong> {localConfig.clientId || 'Not configured'}
-                  </Typography>
-                  <Typography variant="caption" display="block" gutterBottom>
-                    <strong>Tenant ID:</strong> {
-                      tenantInfo.loading ? (
-                        <span>
-                          Loading... <CircularProgress size={10} sx={{ ml: 1 }} />
-                        </span>
-                      ) : tenantInfo.error ? (
-                        <span style={{ color: 'red' }}>
-                          {localConfig.tenantId || 'Error loading tenant info'}
-                        </span>
-                      ) : tenantInfo.tenantDisplayName && tenantInfo.tenantDisplayName !== tenantInfo.tenantId ? (
-                        <span>
-                          <strong>{tenantInfo.tenantDisplayName}</strong>
-                          <span style={{ marginLeft: 8, color: '#666', fontSize: '0.9em' }}>
-                            ({tenantInfo.tenantId})
-                          </span>
-                        </span>
-                      ) : (
-                        localConfig.tenantId || 'Not configured'
-                      )
-                    }
-                  </Typography>
-                  <Typography variant="caption" display="block" color="text.secondary" sx={{ mt: 1 }}>
-                    Application Credentials mode uses your registered app's permissions
-                  </Typography>
-                  <Typography variant="caption" display="block" color="text.secondary">
-                    <strong>Application Permissions:</strong> {graphPermissions.loading ? (
-                      <CircularProgress size={12} sx={{ ml: 1 }} />
-                    ) : graphPermissions.error ? (
-                      <Chip label="Unable to check" size="small" color="warning" sx={{ ml: 1 }} />
-                    ) : (
-                      <Box component="span" sx={{ ml: 1 }}>
-                        <Chip 
-                          label={`${graphPermissions.granted.length} configured`} 
-                          size="small" 
-                          color={graphPermissions.granted.length > 0 ? "success" : "warning"} 
-                          sx={{ mr: 0.5 }} 
-                        />
-                      </Box>
-                    )}
-                  </Typography>
-                  
-                  {!graphPermissions.loading && !graphPermissions.error && (
-                    <Box sx={{ mt: 1 }}>
-                      <Typography variant="caption" display="block" color="text.secondary">
-                        <strong>Active permissions:</strong> {graphPermissions.granted.length > 0 ? 
-                          graphPermissions.granted.join(', ') : 'No application permissions detected'
-                        }
-                      </Typography>
-                    </Box>
-                  )}
-                  
-                  {graphPermissions.error && (
-                    <Typography variant="caption" display="block" color="text.secondary" sx={{ mt: 1 }}>
-                      <strong>Common Application Permissions:</strong> AuditLog.Read.All, Directory.Read.All, 
-                      User.Read.All, Group.Read.All, Application.Read.All
-                    </Typography>
-                  )}
-                </Box>
-              )}
-            </>
-          )}
+          </FormControl>
 
-          {/* Graph PowerShell Client Toggle - only show for User Token mode */}
-          {!localConfig.useApplicationCredentials && (
-            <>
-              <Box sx={{ mt: 2, p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1, backgroundColor: 'background.paper' }}>
-                <FormControlLabel
+          {/* Enhanced Graph Access Toggle */}
+          <Box sx={{ mt: 2, p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1, backgroundColor: 'background.paper' }}>
+            <FormControlLabel
                   control={
                     <Switch
                       checked={localConfig.useGraphPowerShell || false}                      onChange={async (e) => {
@@ -2166,8 +1984,9 @@ const EntraConfigForm: React.FC<EntraConfigFormProps> = ({ config, onSave, onCle
                 />
                 
                 <Typography variant="body2" color="text.secondary" sx={{ mt: 1, mb: 2 }}>
-                  Enable broader Microsoft Graph API access using the well-known Microsoft Graph PowerShell client ID.
+                  Override any custom Client ID configuration to use the well-known Microsoft Graph PowerShell client ID.
                   This provides access to mailbox data, calendar events, OneDrive files, Teams content, and other advanced user resources.
+                  <br/><strong>Note:</strong> When enabled, this ignores any Client ID configured below and uses Microsoft's pre-registered app.
                 </Typography>
                 
                 <Alert severity="info" sx={{ mb: 2 }}>
@@ -2175,14 +1994,14 @@ const EntraConfigForm: React.FC<EntraConfigFormProps> = ({ config, onSave, onCle
                     <strong>Note:</strong> Changing this setting requires signing out and signing back in to switch authentication contexts. 
                     You will be automatically signed out when you toggle this setting.
                   </Typography>
-                </Alert>                {localConfig.useGraphPowerShell && (                  <>                    <Alert severity="info" sx={{ mb: 2 }}>
+                </Alert>                {localConfig.useGraphPowerShell && (                  <>                    <Alert severity="warning" sx={{ mb: 2 }}>
                       <Typography variant="body2">
-                        <strong>Enhanced Graph Access Mode:</strong> Using Microsoft Graph PowerShell client for broader API access. 
-                        Available resources depend on admin-granted permissions.
+                        <strong>Enhanced Graph Access Active:</strong> Using Microsoft Graph PowerShell client ID (14d82eec-204b-4c2f-b7e8-296a70dab67e). 
+                        Any custom Client ID configured below is being ignored while this mode is enabled.
                       </Typography>
                     </Alert>
                     
-                    <Alert severity="warning" sx={{ mb: 2 }}>
+                    <Alert severity="info" sx={{ mb: 2 }}>
                       <Typography variant="body2">
                         <strong>Permissions Status:</strong> <br/>
                         {graphPermissions.loading ? (
@@ -2311,26 +2130,34 @@ const EntraConfigForm: React.FC<EntraConfigFormProps> = ({ config, onSave, onCle
                 )}                {!localConfig.useGraphPowerShell && (
                   <Alert severity="info" sx={{ mt: 2 }}>
                     <Typography variant="body2">
-                      <strong>Standard Access:</strong> Currently using your application's registered permissions. 
-                      Enable "Enhanced Graph Access" above to access mailbox, calendar, and other advanced user data 
-                      through the Microsoft Graph PowerShell client ID. Changes take effect immediately after saving.
+                      <strong>Standard Access:</strong> {
+                        localConfig.clientId && localConfig.clientId.trim()
+                          ? "Using your custom app registration for delegated permissions. Access depends on permissions configured in your Azure app registration."
+                          : "Using default Microsoft authentication with basic permissions (User.Read, profile, openid, email)."
+                      }
+                      <br/>Enable "Enhanced Graph Access" above to access mailbox, calendar, and other advanced user data 
+                      through the Microsoft Graph PowerShell client ID.
                     </Typography>
                   </Alert>
                 )}
               </Box>
-            </>
-          )}
         </Box>
       </Grid>
 
-      <Grid item xs={12}><TextField
+      <Grid item xs={12}>        <TextField
           fullWidth
           label="Client ID"
           value={localConfig.clientId}
           onChange={(e) => handleInputChange('clientId', e.target.value)}
           placeholder="Enter your Azure app registration Client ID"
-          helperText="The Application (client) ID from your Azure app registration"
+          helperText={localConfig.useGraphPowerShell 
+            ? "Client ID is ignored when Enhanced Graph Access is enabled (using Microsoft Graph PowerShell client ID)"
+            : localConfig.clientId && localConfig.clientId.trim()
+            ? "Using your custom app registration for delegated permissions"
+            : "Optional - leave empty to use default Microsoft authentication"
+          }
           disabled={isSaving}
+          sx={localConfig.useGraphPowerShell ? { opacity: 0.6 } : {}}
         />
       </Grid>
       <Grid item xs={12}>
@@ -2341,26 +2168,16 @@ const EntraConfigForm: React.FC<EntraConfigFormProps> = ({ config, onSave, onCle
           onChange={(e) => handleInputChange('tenantId', e.target.value)}
           placeholder="Enter your Azure Directory (tenant) ID"
           helperText={
-            tenantInfo.tenantDisplayName && tenantInfo.tenantDisplayName !== tenantInfo.tenantId
-              ? `${tenantInfo.tenantDisplayName} - The Directory (tenant) ID from your Azure app registration`
+            localConfig.useGraphPowerShell
+              ? "Required for Enhanced Graph Access mode"
+              : tenantInfo.tenantDisplayName && tenantInfo.tenantDisplayName !== tenantInfo.tenantId
+              ? `${tenantInfo.tenantDisplayName} - Required for custom app authentication`
               : tenantInfo.error === 'User not authenticated' || tenantInfo.error === 'Could not verify authentication'
-              ? "The Directory (tenant) ID from your Azure app registration (Sign in to see authenticated tenant info)"
+              ? "Required for custom app authentication (Sign in to see authenticated tenant info)"
               : tenantInfo.tenantId && tenantInfo.tenantId !== localConfig.tenantId
-              ? `The Directory (tenant) ID from your Azure app registration (Note: You're authenticated to tenant ${tenantInfo.tenantId})`
-              : "The Directory (tenant) ID from your Azure app registration"
+              ? `Required for custom app authentication (Note: You're authenticated to tenant ${tenantInfo.tenantId})`
+              : "Required for custom app authentication"
           }
-          disabled={isSaving}
-        />
-      </Grid>
-      <Grid item xs={12}>
-        <TextField
-          fullWidth
-          label="Client Secret (Optional)"
-          type="password"
-          value={localConfig.clientSecret || ''}
-          onChange={(e) => handleInputChange('clientSecret', e.target.value)}
-          placeholder="Enter your Azure app client secret (optional)"
-          helperText="Required only for client credentials flow (advanced scenarios)"
           disabled={isSaving}
         />
       </Grid>      <Grid item xs={12}>
@@ -2381,8 +2198,7 @@ const EntraConfigForm: React.FC<EntraConfigFormProps> = ({ config, onSave, onCle
             {isTestingConnection ? (
               <CircularProgress size={20} />
             ) : (
-              `Test ${localConfig.useApplicationCredentials ? 'Application Credentials' : 
-                      localConfig.useGraphPowerShell ? 'Enhanced Graph Access' : 'User Token'} Connection`
+              `Test ${localConfig.useGraphPowerShell ? 'Enhanced Graph Access' : 'User Token'} Connection`
             )}
           </Button>
           <Button 
@@ -2427,19 +2243,17 @@ const EntraConfigForm: React.FC<EntraConfigFormProps> = ({ config, onSave, onCle
       {isConfigured && (
         <Grid item xs={12}>
           <Alert severity="success">
-            Entra configuration is set and ready to use.
+            Entra configuration is set and ready to use with secure delegated permissions.
           </Alert>
         </Grid>
       )}
-      {!localConfig.clientSecret && (
-        <Grid item xs={12}>
-          <Alert severity="info">
-            <strong>Note:</strong> Microsoft Graph queries through the AI assistant support both interactive authentication and app-only authentication. 
-            Without a Client Secret, you can still perform Graph queries using interactive authentication with your user permissions.
-            To enable app-only authentication for broader organizational data access, provide a Client Secret from your Azure app registration.
-          </Alert>
-        </Grid>
-      )}
+      <Grid item xs={12}>
+        <Alert severity="info">
+          <strong>Security Note:</strong> EntraPulse Lite uses delegated permissions for enhanced security. 
+          All Microsoft Graph queries require user consent and are performed in the context of your signed-in user account.
+          This approach eliminates the need for client secrets and follows zero-trust security principles.
+        </Alert>
+      </Grid>
     </Grid>
     </>
   );

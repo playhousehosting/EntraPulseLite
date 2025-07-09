@@ -50,7 +50,13 @@ class EntraPulseLiteApp {
   }
   private async initializeServices(): Promise<void> {    // Initialize configuration service first
     this.configService = new ConfigService();    // Get authentication configuration (stored config takes precedence)
+    console.log('[Main] ===== DEBUGGING AUTH INITIALIZATION =====');
     const authConfig = await this.getAuthConfiguration();
+    console.log('[Main] authConfig result:', {
+      clientId: authConfig.clientId.substring(0, 8) + '...',
+      tenantId: authConfig.tenantId.substring(0, 8) + '...',
+      hasClientSecret: Boolean(authConfig.clientSecret)
+    });
       // Check if we have Lokka credentials OR if user can authenticate interactively
     const hasLokkaCreds = authConfig.clientSecret && authConfig.clientId && authConfig.tenantId;
     const canUseTokenAuth = authConfig.clientId && authConfig.tenantId; // Token auth only needs these
@@ -66,18 +72,22 @@ class EntraPulseLiteApp {
     // Set service-level access for the main process (trusted environment)
     this.configService.setServiceLevelAccess(true);
     
-      // Set authentication as verified since we are in the main process
+    // Set authentication as verified since we are in the main process
     this.configService.setAuthenticationVerified(true);
     
-    // Check user's authentication preference from the Entra config
+    // Check user's authentication preference from the Entra config (always delegated now)
     const authPreference = this.configService.getAuthenticationPreference();
-    const useAppCredentials = authPreference === 'application-credentials' && hasLokkaCreds;
     
-    // Set authentication context based on user preference, not just credential availability
-    const authMode = useAppCredentials ? 'client-credentials' : 'interactive';
-    console.log(`[Main] Setting initial authentication mode: ${authMode} (preference: ${authPreference})`);
+    console.log('[Main] Authentication preference analysis:', {
+      authPreference,
+      authConfigClientId: authConfig.clientId.substring(0, 8) + '...'
+    });
+    
+    // Set authentication context to delegated mode (User Token mode only)
+    const authMode = 'interactive';
+    console.log(`[Main] Setting authentication mode: ${authMode} (preference: ${authPreference})`);
     this.configService.setAuthenticationContext(authMode);
-      // Initialize configuration using stored config
+    // Initialize configuration using stored config
     const storedLLMConfig = this.configService.getLLMConfig();
     const storedEntraConfig = this.configService.getEntraConfig();
     
@@ -85,8 +95,14 @@ class EntraPulseLiteApp {
     let lokkaClientId = authConfig.clientId;
     let lokkaEnv: Record<string, string>;
     
-    // Check if Enhanced Graph Access is enabled and not in application credentials mode
-    if (storedEntraConfig?.useGraphPowerShell && authPreference !== 'application-credentials') {
+    console.log('[Main] Enhanced Graph Access check:', {
+      storedEntraConfigExists: Boolean(storedEntraConfig),
+      useGraphPowerShell: storedEntraConfig?.useGraphPowerShell,
+      authPreference
+    });
+    
+    // Check if Enhanced Graph Access is enabled (delegated mode only)
+    if (storedEntraConfig?.useGraphPowerShell) {
       console.log('🔧 Enhanced Graph Access mode detected during initialization');
       lokkaClientId = '14d82eec-204b-4c2f-b7e8-296a70dab67e'; // Microsoft Graph PowerShell client ID
       lokkaEnv = {
@@ -140,21 +156,33 @@ class EntraPulseLiteApp {
       };
     }
     
-      this.config = {
+    // Main AuthService configuration - use explicit client ID based on authentication mode
+    // This ensures the UI shows the correct authentication information
+    let mainAuthClientId: string;
+    
+    console.log('[Main] Main AuthService configuration - checking authentication mode:', {
+      storedConfigExists: Boolean(storedEntraConfig),
+      storedClientId: storedEntraConfig?.clientId?.substring(0, 8) + '...',
+      authConfigClientId: authConfig.clientId.substring(0, 8) + '...'
+    });
+    
+    // Always use delegated permissions (User Token mode only)
+    mainAuthClientId = authConfig.clientId;
+    console.log('[Main] Main AuthService configured for User Token mode with client:', mainAuthClientId.substring(0, 8) + '...');
+    
+    this.config = {
       auth: {
-        clientId: authConfig.clientId,        tenantId: authConfig.tenantId,
-        scopes: useAppCredentials 
-          ? ['https://graph.microsoft.com/.default'] // Client credentials flow requires .default scope
-          : ['https://graph.microsoft.com/.default'], // Interactive flow using .default to inherit all app registration permissions
-        clientSecret: authConfig.clientSecret, // Only needed for confidential client applications
-        useClientCredentials: Boolean(useAppCredentials), // Use client credentials flow based on user preference
+        clientId: mainAuthClientId,
+        tenantId: authConfig.tenantId,
+        scopes: ['https://graph.microsoft.com/.default'], // Interactive flow using .default to inherit all app registration permissions
+        useClientCredentials: false, // Always use delegated permissions (User Token mode)
       },
       llm: storedLLMConfig, // Use stored LLM configuration
       mcpServers: [        {
           name: 'external-lokka',
           type: 'external-lokka',
           port: 0, // Not used for stdin/stdout MCP servers
-          enabled: Boolean(canUseTokenAuth), // Enable if we can do token auth OR client credentials
+          enabled: Boolean(canUseTokenAuth), // Enable if we can do token auth
           command: 'npx',
           args: ['-y', '@merill/lokka'],
           env: lokkaEnv
@@ -196,6 +224,7 @@ class EntraPulseLiteApp {
 
     // Initialize services
     this.authService = new AuthService(this.config);
+    
     this.graphService = new GraphService(this.authService);    // Initialize MCP services first
     const mcpAuthService = new MCPAuthService(this.authService);
     
@@ -819,13 +848,12 @@ class EntraPulseLiteApp {
           // Get current user information for proper context setting
           const currentUser = await this.authService.getCurrentUser();
           
-          // Get Entra config and set authentication context based on available credentials
+          // Get Entra config and set authentication context (always interactive/delegated mode)
           const storedEntraConfig = this.configService.getEntraConfig();
-          const hasClientSecret = storedEntraConfig?.clientSecret;
-          const authContext = hasClientSecret ? 'client-credentials' : 'interactive';
+          const authContext = 'interactive'; // Always use delegated permissions
           
           // Set authentication context with user information for interactive mode
-          if (authContext === 'interactive' && currentUser) {
+          if (currentUser) {
             console.log('🔐 Setting interactive authentication context with user info');
             this.configService.setAuthenticationContext(authContext, {
               id: currentUser.localAccountId || currentUser.username || 'default-user',
@@ -864,14 +892,12 @@ class EntraPulseLiteApp {
               } else {
                 env = {
                   TENANT_ID: storedEntraConfig.tenantId || process.env.MSAL_TENANT_ID || '',
-                  CLIENT_ID: storedEntraConfig.clientId || process.env.MSAL_CLIENT_ID || '',
-                  ...(storedEntraConfig.clientSecret && { CLIENT_SECRET: storedEntraConfig.clientSecret })
+                  CLIENT_ID: storedEntraConfig.clientId || process.env.MSAL_CLIENT_ID || ''
                 };
               }
               
               // For Enhanced Graph Access, we need to get a token using the Graph PowerShell client ID
-              if (storedEntraConfig?.useGraphPowerShell && 
-                  this.configService.getAuthenticationPreference() !== 'application-credentials') {
+              if (storedEntraConfig?.useGraphPowerShell) {
                 try {                  console.log('🔐 Getting access token for Enhanced Graph Access mode...');
                   
                   // Create a temporary auth service with Microsoft Graph PowerShell client ID
@@ -912,10 +938,6 @@ class EntraPulseLiteApp {
                   env.CLIENT_ID = clientId;
                   env.USE_CLIENT_TOKEN = 'true';
                 }
-              } else if (storedEntraConfig.clientSecret) {
-                console.log('🔧 Using application credentials mode with client secret');
-                env.CLIENT_ID = clientId;
-                env.CLIENT_SECRET = storedEntraConfig.clientSecret;
               } else {
                 console.log('🔧 Using delegated mode with standard client ID');
                 env.CLIENT_ID = clientId;
@@ -1345,8 +1367,7 @@ class EntraPulseLiteApp {
               ...this.config.mcpServers[lokkaServerIndex],
               env: {
                 TENANT_ID: entraConfig?.tenantId || process.env.MSAL_TENANT_ID,
-                CLIENT_ID: entraConfig?.clientId || process.env.MSAL_CLIENT_ID,
-                ...(entraConfig?.clientSecret && { CLIENT_SECRET: entraConfig.clientSecret })
+                CLIENT_ID: entraConfig?.clientId || process.env.MSAL_CLIENT_ID
               }
             };
           }
@@ -2066,10 +2087,9 @@ class EntraPulseLiteApp {
           // Set authentication verification flag
         this.configService.setAuthenticationVerified(true);
         
-        // Set authentication context based on available credentials
+        // Set authentication context (always delegated mode)
         const storedEntraConfig = this.configService.getEntraConfig();
-        const hasClientSecret = storedEntraConfig?.clientSecret;
-        const authContext = hasClientSecret ? 'client-credentials' : 'interactive';
+        const authContext = 'interactive'; // Always use delegated permissions
         this.configService.setAuthenticationContext(authContext);
           // Reload LLM service with full configuration
         const fullLLMConfig = this.configService.getLLMConfig();
@@ -2080,12 +2100,17 @@ class EntraPulseLiteApp {
           if (storedEntraConfig && storedEntraConfig.clientId && storedEntraConfig.tenantId) {
             console.log('🔐 Found stored Entra credentials, updating Lokka MCP server configuration...');          // Enable Lokka MCP server since user is authenticated
             const lokkaServerIndex = this.config.mcpServers.findIndex(server => server.name === 'external-lokka');
-            if (lokkaServerIndex !== -1) {              // Determine client ID and authentication mode based on Enhanced Graph Access setting
+            if (lokkaServerIndex !== -1) {            // Determine client ID and authentication mode based on configuration priority:
+              // 1. Application Credentials mode (if explicitly enabled with credentials)
+              // 2. Enhanced Graph Access (if enabled and not in application credentials)
+              // 3. Standard user token mode
               let clientId = storedEntraConfig.clientId || process.env.MSAL_CLIENT_ID || '';
               let authMode = 'application-credentials';
-              let env: Record<string, string>;            // Check if Enhanced Graph Access is enabled and not in application credentials mode
-              if (storedEntraConfig.useGraphPowerShell && 
-                  this.configService.getAuthenticationPreference() !== 'application-credentials') {
+              let env: Record<string, string>;
+
+              // Check authentication mode priority (delegated permissions only)
+              if (storedEntraConfig.useGraphPowerShell) {
+                // Priority 1: Enhanced Graph Access mode
                 console.log('🔧 Using Enhanced Graph Access mode with Microsoft Graph PowerShell client ID during startup');
                 clientId = '14d82eec-204b-4c2f-b7e8-296a70dab67e'; // Microsoft Graph PowerShell client ID
                 authMode = 'delegated';
@@ -2094,16 +2119,19 @@ class EntraPulseLiteApp {
                   CLIENT_ID: clientId
                 };
               } else {
+                // Priority 3: Standard user token mode
+                console.log('🔧 Using standard user token mode during startup');
+                authMode = 'delegated';
                 env = {
                   TENANT_ID: storedEntraConfig.tenantId || process.env.MSAL_TENANT_ID || '',
-                  CLIENT_ID: clientId,
-                  ...(storedEntraConfig.clientSecret && { CLIENT_SECRET: storedEntraConfig.clientSecret })
+                  CLIENT_ID: clientId
                 };
               }
               
-              // For Enhanced Graph Access, we need to get a token using the Graph PowerShell client ID
+              // Handle Enhanced Graph Access token acquisition
               if (storedEntraConfig.useGraphPowerShell && 
-                  this.configService.getAuthenticationPreference() !== 'application-credentials') {
+                  authMode === 'delegated' && 
+                  clientId === '14d82eec-204b-4c2f-b7e8-296a70dab67e') {
                 try {
                   console.log('🔐 Getting access token for Enhanced Graph Access mode during startup...');
                   // Create a temporary auth service with Microsoft Graph PowerShell client ID
@@ -2141,11 +2169,12 @@ class EntraPulseLiteApp {
                   console.log('🔧 Falling back to standard client token mode');
                   env.USE_CLIENT_TOKEN = 'true';
                 }
-              } else if (storedEntraConfig.clientSecret) {
-                console.log('🔧 Using application credentials mode with client secret during startup');
-                // Already set in env above
+              } else if (authMode === 'application-credentials') {
+                // Application credentials mode - no additional token acquisition needed
+                console.log('🔧 Application credentials mode configured - using client secret authentication');
               } else {
-                console.log('🔧 Using delegated mode with standard client ID during startup');
+                // Standard delegated mode
+                console.log('🔧 Standard delegated mode configured - using client token authentication');
                 env.USE_CLIENT_TOKEN = 'true';
               }
 
@@ -2158,7 +2187,6 @@ class EntraPulseLiteApp {
             console.log(`✅ Updated Lokka MCP server for authenticated user (mode: ${authMode}):`, {
               enabled: this.config.mcpServers[lokkaServerIndex].enabled,
               authMode: authContext,
-              hasClientSecret: Boolean(storedEntraConfig.clientSecret),
               clientId: clientId.substring(0, 8) + '...',
               enhancedAccess: Boolean(storedEntraConfig.useGraphPowerShell)
             });
@@ -2223,11 +2251,18 @@ class EntraPulseLiteApp {
     // First try to get stored configuration
     const storedEntraConfig = this.configService.getEntraConfig();
     
-    if (storedEntraConfig && storedEntraConfig.clientId && storedEntraConfig.tenantId) {
+    console.log('[Main] getAuthConfiguration - Stored config:', {
+      hasConfig: Boolean(storedEntraConfig),
+      clientId: storedEntraConfig?.clientId?.substring(0, 8) + '...',
+      tenantId: storedEntraConfig?.tenantId?.substring(0, 8) + '...',
+      useGraphPowerShell: storedEntraConfig?.useGraphPowerShell
+    });
+    
+    if (storedEntraConfig && storedEntraConfig.tenantId) {
       console.log('[Main] Using stored Entra configuration');
       
-      // Check if Enhanced Graph Access (Microsoft Graph PowerShell) is enabled
-      if (storedEntraConfig.useGraphPowerShell && !storedEntraConfig.useApplicationCredentials) {
+      // Priority 1: Enhanced Graph Access (when explicitly enabled)
+      if (storedEntraConfig.useGraphPowerShell) {
         console.log('[Main] Enhanced Graph Access enabled, using Microsoft Graph PowerShell client ID');
         return {
           clientId: '14d82eec-204b-4c2f-b7e8-296a70dab67e', // Microsoft Graph PowerShell client ID
@@ -2236,16 +2271,28 @@ class EntraPulseLiteApp {
         };
       }
       
+      // Priority 2: Custom User Token mode (when custom client ID is provided)
+      if (storedEntraConfig.clientId) {
+        console.log('[Main] Custom User Token mode with user-provided app registration');
+        return {
+          clientId: storedEntraConfig.clientId,
+          tenantId: storedEntraConfig.tenantId,
+          clientSecret: undefined // Always use delegated permissions (User Token mode)
+        };
+      }
+      
+      // Priority 3: Basic User Token mode (default Microsoft authentication)
+      console.log('[Main] Basic User Token mode, using default Microsoft Graph application');
       return {
-        clientId: storedEntraConfig.clientId,
+        clientId: '04b07795-8ddb-461a-bbee-02f9e1bf7b46', // Microsoft Graph CLI client ID (public client)
         tenantId: storedEntraConfig.tenantId,
-        clientSecret: storedEntraConfig.clientSecret
+        clientSecret: undefined
       };
     }
-      // Fall back to default Microsoft Graph PowerShell configuration for interactive auth
-    console.log('[Main] Using default Microsoft Graph PowerShell configuration for interactive authentication');
+      // Fall back to default configuration for first-time users
+    console.log('[Main] No stored configuration, using default Basic User Token mode');
     return {
-      clientId: '14d82eec-204b-4c2f-b7e8-296a70dab67e', // Microsoft Graph PowerShell public client
+      clientId: '04b07795-8ddb-461a-bbee-02f9e1bf7b46', // Microsoft Graph CLI client ID (public client)
       tenantId: 'common',
       clientSecret: undefined
     };
