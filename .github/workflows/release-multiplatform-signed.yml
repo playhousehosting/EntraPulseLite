@@ -104,12 +104,27 @@ jobs:
           NODE_OPTIONS: --max-old-space-size=4096
 
       - name: Build application (Windows signed)
-        run: npm run build && npx electron-builder --win --publish=always
+        run: npm run build && npx electron-builder --win --publish=never
         env:
           NODE_OPTIONS: --max-old-space-size=8192
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
           WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+
+      - name: Upload Windows artifacts
+        run: |
+          if (Test-Path "dist-release\*.exe") {
+            Write-Host "Found Windows executables:"
+            Get-ChildItem "dist-release\*.exe" | ForEach-Object { Write-Host "  $_" }
+            Get-ChildItem "dist-release\*.exe" | ForEach-Object {
+              gh release upload "${{ github.event.inputs.version }}" "$_" --clobber
+            }
+          } else {
+            Write-Host "No Windows executables found in dist-release"
+            Get-ChildItem "dist-release" -Recurse | Where-Object { $_.Name -like "*.exe" } | ForEach-Object { Write-Host "Found: $($_.FullName)" }
+          }
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: powershell
 
   # macOS - Unsigned (or add Apple certificates later)
   macos-unsigned:
@@ -141,9 +156,34 @@ jobs:
           NODE_OPTIONS: --max-old-space-size=4096
 
       - name: Build application (macOS unsigned)
-        run: npm run build && npx cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --publish=always
+        run: npm run build && npx cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --publish=never
         env:
           NODE_OPTIONS: --max-old-space-size=8192
+
+      - name: Upload macOS artifacts
+        run: |
+          if ls dist-release/*.dmg 2>/dev/null; then
+            echo "Found macOS DMG files:"
+            ls -la dist-release/*.dmg
+            for file in dist-release/*.dmg; do
+              gh release upload "${{ github.event.inputs.version }}" "$file" --clobber
+            done
+          else
+            echo "No macOS DMG files found in dist-release"
+            find dist-release -name "*.dmg" -type f
+          fi
+          
+          if ls dist-release/*.zip 2>/dev/null; then
+            echo "Found macOS ZIP files:"
+            ls -la dist-release/*.zip
+            for file in dist-release/*.zip; do
+              gh release upload "${{ github.event.inputs.version }}" "$file" --clobber
+            done
+          else
+            echo "No macOS ZIP files found in dist-release"
+            find dist-release -name "*.zip" -type f
+          fi
+        env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # Linux - Unsigned (Linux typically doesn't use code signing)
@@ -176,9 +216,56 @@ jobs:
           NODE_OPTIONS: --max-old-space-size=4096
 
       - name: Build application (Linux unsigned)
-        run: npm run build && npx cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --linux --publish=always
+        run: npm run build && npx cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --linux --publish=never
         env:
           NODE_OPTIONS: --max-old-space-size=8192
+
+      - name: Upload Linux artifacts
+        run: |
+          if ls dist-release/*.AppImage 2>/dev/null; then
+            echo "Found Linux AppImage files:"
+            ls -la dist-release/*.AppImage
+            for file in dist-release/*.AppImage; do
+              gh release upload "${{ github.event.inputs.version }}" "$file" --clobber
+            done
+          else
+            echo "No Linux AppImage files found in dist-release"
+            find dist-release -name "*.AppImage" -type f
+          fi
+          
+          if ls dist-release/*.deb 2>/dev/null; then
+            echo "Found Linux DEB files:"
+            ls -la dist-release/*.deb
+            for file in dist-release/*.deb; do
+              gh release upload "${{ github.event.inputs.version }}" "$file" --clobber
+            done
+          else
+            echo "No Linux DEB files found in dist-release"
+            find dist-release -name "*.deb" -type f
+          fi
+          
+          if ls dist-release/*.rpm 2>/dev/null; then
+            echo "Found Linux RPM files:"
+            ls -la dist-release/*.rpm
+            for file in dist-release/*.rpm; do
+              gh release upload "${{ github.event.inputs.version }}" "$file" --clobber
+            done
+          else
+            echo "No Linux RPM files found in dist-release"
+            find dist-release -name "*.rpm" -type f
+          fi
+          
+          if ls dist-release/*.tar.gz 2>/dev/null; then
+            echo "Found Linux TAR.GZ files:"
+            ls -la dist-release/*.tar.gz
+            for file in dist-release/*.tar.gz; do
+              gh release upload "${{ github.event.inputs.version }}" "$file" --clobber
+            done
+          else
+            echo "No Linux TAR.GZ files found in dist-release"
+            find dist-release -name "*.tar.gz" -type f
+          fi
+        env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # Mark release as prerelease if specified and undraft
