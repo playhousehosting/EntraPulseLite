@@ -68,16 +68,24 @@ For enterprise users with Azure OpenAI deployments:
 > - **GPT-4o**: Strong performance with structured data and API responses  
 > - **Azure OpenAI**: Enterprise-grade with data residency and compliance features
 
-### 4. Enable Enhanced Graph Access (Recommended)
-For the best Microsoft Graph experience, enable Enhanced Graph Access using the Microsoft Graph PowerShell application:
+### 4. Choose Authentication Mode
 
-1. Go to **Settings** → **Entra Configuration**
-2. **Keep "Use Application Credentials" set to OFF** (User Token mode)
-3. Toggle **"Enhanced Graph Access (Microsoft Graph PowerShell)"** to **ON**
-4. Enter your **Tenant ID** only (the Microsoft Graph PowerShell Client ID is pre-configured)
+EntraPulse Lite supports two delegated permission modes:
+
+#### Option A: Enhanced Graph Access (Recommended)
+1. Go to **Settings** → **Entra Application Settings**
+2. Toggle **"Enhanced Graph Access (Microsoft Graph PowerShell)"** to **ON**
+3. Enter your **Tenant ID** only (the Microsoft Graph PowerShell Client ID is pre-configured)
+4. Click **Save Configuration**
+
+The application will automatically use the Microsoft Graph PowerShell application registration (`14d82eec-204b-4c2f-b7e8-296a70dab67e`) which provides comprehensive delegated permissions for Graph API access.
+
+#### Option B: Custom Application Mode
+1. First, create your own Entra App Registration (see [Custom App Registration Setup](#custom-app-registration-setup))
+2. Go to **Settings** → **Entra Application Settings**
+3. **Keep "Enhanced Graph Access" OFF**
+4. Enter your **Client ID** and **Tenant ID**
 5. Click **Save Configuration**
-
-The application will automatically use the Microsoft Graph PowerShell application registration (`14d82eec-204b-4c2f-b7e8-296a70dab67e`) which provides broader permissions for Graph API access.
 
 > **💡 How to find your Tenant ID:**
 > 1. Go to [portal.azure.com](https://portal.azure.com)
@@ -85,8 +93,6 @@ The application will automatically use the Microsoft Graph PowerShell applicatio
 > 3. Copy the **Tenant ID** (GUID format)
 > 
 > **Alternative:** Your tenant ID is also visible in EntraPulse Lite under **User Profile** → **Session Info** after signing in
-
-> **⚠️ Important:** Enhanced Graph Access should be used in **User Token mode**, NOT Application Credentials mode. It's a separate feature that uses the Microsoft Graph PowerShell application with delegated permissions.
 
 ### 5. Test Your Setup
 1. In the chat interface, ask: **"Who am I?"**
@@ -332,28 +338,18 @@ For enterprise scenarios requiring custom permissions:
    - Under **Advanced settings**, set **"Allow public client flows"** to **Yes**
    - This is **required** for desktop applications using MSAL
 
-4. **Configure API Permissions**:
+4. **Configure API Permissions** (Delegated Permissions Only):
 
-   **For Application Credentials Mode** (client credentials flow):
-   ```
-   Microsoft Graph - Application Permissions:
-   - Application.Read.All
-   - Directory.Read.All
-   - Group.Read.All
-   - User.Read.All
-   - Mail.Read (if needed)
-   - Calendars.Read (if needed)
-   ```
-
-   **For User Token Mode** (delegated permissions):
+   EntraPulse Lite uses delegated permissions exclusively for user-context access:
    ```
    Microsoft Graph - Delegated Permissions:
    - User.Read
    - User.ReadBasic.All
    - Directory.Read.All
    - Group.Read.All
-   - Mail.Read (if needed)
-   - Calendars.Read (if needed)
+   - Mail.Read (if needed for email functionality)
+   - Calendars.Read (if needed for calendar functionality)
+   - Files.Read.All (if needed for OneDrive/SharePoint functionality)
    ```
 
 5. **Grant Admin Consent**:
@@ -361,23 +357,18 @@ For enterprise scenarios requiring custom permissions:
    - Click **"Grant admin consent for [Your Organization]"**
    - Confirm the consent
 
-6. **Create Client Secret** (Required only for Application Credentials mode):
-   - Go to **Certificates & secrets**
-   - Click **"New client secret"**
-   - Add description and expiration
-   - Copy the secret value (you won't see it again)
-   - **Note**: This is NOT needed for User Token modes (delegated permissions)
+> **Note**: Client secrets are not required as EntraPulse Lite uses delegated permissions only
 
 ### Configuration Options
 
-**Option A: Custom User Token Mode (Enhanced Delegated Permissions)**
-   - Go to **Settings** → **Entra Configuration**
+**Custom Application Mode** (Using Your Own App Registration)
+   - Go to **Settings** → **Entra Application Settings**
+   - **Keep "Enhanced Graph Access" OFF**
    - Enter your **Client ID** and **Tenant ID**
-   - **Leave Client Secret field empty** (not used)
    - Click **Save Configuration**
    - **Result**: Your custom app's delegated permissions with user context
 
-**Option B: Enhanced Graph Access (Microsoft Graph PowerShell)**
+**Enhanced Graph Access Mode** (Using Microsoft Graph PowerShell)
    - Go to **Settings** → **Entra Configuration**
    - Toggle **"Enhanced Graph Access"** to **ON**
    - Enter your **Tenant ID** only

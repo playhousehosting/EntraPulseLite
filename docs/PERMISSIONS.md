@@ -1,51 +1,76 @@
-# Progressive Permissions in EntraPulse Lite
+# Delegated Permissions in EntraPulse Lite
 
-EntraPulse Lite implements a progressive permissions model that starts with minimal permissions and requests additional access as needed. This approach improves the user experience and reduces permission-related failures.
+EntraPulse Lite uses delegated permissions exclusively for secure, user-context access to Microsoft Graph APIs. The application supports two authentication modes, both using delegated permissions.
 
-## How It Works
+## Authentication Modes
 
-### 1. Initial Authentication
-When users first sign in, EntraPulse Lite only requests the most basic permission:
-- `User.Read` - Allows reading the current user's profile
+### Enhanced Graph Access (Recommended)
+Uses the Microsoft Graph PowerShell client ID (`14d82eec-204b-4c2f-b7e8-296a70dab67e`) with comprehensive delegated permissions:
 
-This permission is available to virtually all users and rarely requires admin consent.
+- **User.Read** - Read current user's profile
+- **User.ReadBasic.All** - Read basic user information 
+- **Mail.Read** - Read user's mailbox
+- **Mail.ReadWrite** - Read and write user's mailbox
+- **Calendars.Read** - Read user's calendar
+- **Files.Read.All** - Read user's files (OneDrive/SharePoint)
+- **Directory.Read.All** - Read directory information
+- **Group.ReadWrite.All** - Read and write group information
+- **Application.ReadWrite.All** - Read and write application registrations
+- **AppRoleAssignment.ReadWrite.All** - Manage app role assignments
+- **AuditLog.Read.All** - Read audit logs
+- **DelegatedPermissionGrant.ReadWrite.All** - Manage delegated permission grants
 
-### 2. Permission Tiers
-The application defines several permission tiers for different scenarios:
+### Custom Application Mode  
+Uses your own Entra App Registration with delegated permissions you configure:
+
+- Allows tailored permission scopes for specific organizational needs
+- Requires manual configuration of delegated permissions in Azure Portal
+- Provides full control over which Microsoft Graph APIs are accessible
+
+## How Delegated Permissions Work
+
+### 1. User Context Authentication
+All Microsoft Graph API calls are made in the context of the signed-in user:
+- User signs in with their Microsoft Work/School account
+- Application requests delegated permissions on behalf of the user
+- APIs return data the user has access to based on their organizational role
+
+### 2. Permission Validation
+The application validates permissions before making API calls:
 
 ```typescript
-export const PERMISSION_TIERS = {
-  BASIC: ['User.Read'],
-  USER_MANAGEMENT: ['User.Read', 'User.ReadBasic.All'],
-  DIRECTORY_READ: ['User.Read', 'User.ReadBasic.All', 'Directory.Read.All'],
-  GROUP_MANAGEMENT: ['User.Read', 'User.ReadBasic.All', 'Directory.Read.All', 'Group.Read.All'],
-  APPLICATION_READ: ['User.Read', 'User.ReadBasic.All', 'Directory.Read.All', 'Group.Read.All', 'Application.Read.All'],
-};
+// Check current token permissions
+const permissions = await getCurrentGraphPermissions();
+if (permissions.includes('Mail.Read')) {
+  // User has mail reading permissions
+  const emails = await graphClient.api('/me/messages').get();
+}
 ```
 
-### 3. Progressive Permission Requests
-When a user tries to perform an action that requires additional permissions:
-
-1. **Silent Check**: The app first tries to get a token with the required permissions silently
-2. **Interactive Request**: If silent fails, it shows a consent prompt for the specific permissions needed
-3. **Graceful Degradation**: If permissions are denied, the feature is disabled with a clear explanation
+### 3. Clear Permission Display
+Users can see their current permissions in the Settings → Entra Application Settings:
+- **Granted**: Permissions currently available to the application
+- **Pending**: Permissions requiring admin consent
+- **Status**: Clear indication of permission state
 
 ## Benefits
 
 ### For Users
-- **Faster Initial Login**: No need to consent to extensive permissions upfront
-- **Clear Context**: Permission requests happen when the feature is actually used
-- **Progressive Trust**: Build confidence by starting with minimal access
-- **Better UX**: Avoid permission-related login failures
+- **User Context**: All data access respects organizational permissions and user roles
+- **Clear Visibility**: See exactly what permissions are granted vs pending
+- **Security**: No application secrets or backdoor access to data
+- **Familiar Experience**: Same consent flow as other Microsoft applications
 
-### For Organizations
-- **Reduced Admin Burden**: Basic functionality doesn't require admin consent
-- **Security**: Only request permissions that are actually needed
-- **Compliance**: Easier to audit what permissions are being used and why
+### For Organizations  
+- **Controlled Access**: Data access limited to what users can normally see
+- **Admin Consent**: Admins control which permissions are available organization-wide
+- **Audit Trail**: All API calls are logged with user context
+- **Compliance**: Follows Microsoft's recommended security patterns
 
-## Examples
+## Permission Examples
 
-### Example 1: Basic Profile Access
+### Enhanced Graph Access Permissions
+When using Enhanced Graph Access mode, users get access to comprehensive permissions:
 ```typescript
 // Initial login - only requires User.Read
 const token = await authService.login();

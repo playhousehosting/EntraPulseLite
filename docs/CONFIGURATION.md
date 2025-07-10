@@ -11,23 +11,21 @@ The EntraPulse Lite application features a secure, context-aware configuration s
 - **Storage Location**: User-specific configuration (`users.user_{userId}` key in store)
 - **API Keys**: Isolated per user account
 - **Use Case**: Individual users with personal LLM configurations
-- **Permissions**: Progressive permission model starting with `User.Read`
+- **Permissions**: Basic delegated permissions for standard Microsoft Graph access
 
-### 2. **Application Credentials Mode**
-- **Authentication**: Client credentials flow using app registration
-- **Storage Location**: Application-level configuration (`application` key in store)
-- **API Keys**: Stored securely for system-wide access
-- **Use Case**: IT administrators, enterprise scenarios, enhanced permissions
-- **Configuration**: Requires `CLIENT_ID`, `CLIENT_SECRET`, and `TENANT_ID`
+### 2. **Enhanced Graph Access Mode**  
+- **Authentication**: Delegated permissions using Microsoft Graph PowerShell client ID
+- **Storage Location**: User-specific configuration with enhanced Graph access flag
+- **Client ID**: Pre-configured Microsoft Graph PowerShell application (`14d82eec-204b-4c2f-b7e8-296a70dab67e`)
+- **Use Case**: Users requiring comprehensive Microsoft Graph permissions
+- **Permissions**: Extensive delegated permissions for mail, calendar, files, directory, and more
 
 ### 🔄 **Runtime Mode Switching**
-Users can switch between authentication modes in Settings → Entra Configuration:
-- Toggle between "Use User Token" and "Use Application Credentials"
+Users can switch between authentication modes in Settings → Entra Application Settings:
+- Toggle between "Custom Application" and "Enhanced Graph Access"
 - Automatic MCP server restart when switching modes
 - Configuration context automatically switches
 - No application restart required
-
-### 3. **Enhanced Graph Access Mode**
 - **Authentication**: Uses the Microsoft Graph PowerShell application (`14d82eec-204b-4c2f-b7e0-296602dcde65`) with delegated user permissions
 - **Use Case**: Users who want broader Graph API permissions without needing their own app registration
 - **Configuration**: Requires user sign-in AND tenant ID only (no client secret needed)
@@ -62,14 +60,16 @@ Users can switch between authentication modes in Settings → Entra Configuratio
 ### Configuration Structure
 ```typescript
 {
-  application: {           // Application Credentials mode
-    llm: { ... },
-    modelCache: { ... },
-    statusMonitoring: {    // LLM Status Monitoring settings
-      pollingInterval: 5000,
-      lastCheckTime: "2023-11-01T12:00:00Z",
-      localLLMAvailable: true
-    },
+  users: {                 // User-specific configurations
+    user_[userId]: {
+      llm: { ... },
+      modelCache: { ... },
+      enhancedGraphAccess: boolean,  // Enhanced Graph Access flag
+      statusMonitoring: {    // LLM Status Monitoring settings
+        pollingInterval: 5000,
+        lastCheckTime: "2023-11-01T12:00:00Z",
+        localLLMAvailable: true
+      },
     entra: {              // Application-level Entra config
       clientId: "...",
       clientSecret: "...",
@@ -104,19 +104,18 @@ Users can switch between authentication modes in Settings → Entra Configuratio
 
 ## Benefits
 
-1. **🔒 Security**: API keys are isolated by authentication context
-2. **👥 Dual Authentication**: Support for both user token and application credentials modes
+1. **🔒 Security**: API keys are isolated by authentication context, all access uses delegated permissions
+2. **👥 Dual Authentication**: Support for both Custom Application and Enhanced Graph Access modes
 3. **⚡ Performance**: Intelligent caching reduces API calls
 4. **🔄 Runtime Switching**: Switch authentication modes without restart
 5. **🧹 Clean Separation**: No cross-contamination between auth mode configs
 6. **💾 Persistence**: Configuration survives app restarts
-7. **🎯 Progressive Permissions**: Smart permission requests in user token mode
+7. **🎯 User Context**: All API calls respect user permissions and organizational access
 
 ## Current Status
 
-- ✅ **User Token Mode**: Fully implemented with progressive permissions
-- ✅ **Application Credentials Mode**: Full client credentials support
-- ✅ **Enhanced Graph Access**: Hybrid authentication mode combining user tokens with application credentials
+- ✅ **Custom Application Mode**: User's own app registration with delegated permissions
+- ✅ **Enhanced Graph Access**: Microsoft Graph PowerShell client with comprehensive delegated permissions
 - ✅ **Runtime Mode Switching**: Toggle between modes in UI
 - ✅ **Secure Storage**: Encrypted configuration with electron-store
 - ✅ **Model Caching**: 24-hour cache with deduplication
@@ -126,16 +125,16 @@ Users can switch between authentication modes in Settings → Entra Configuratio
 ## Usage
 
 ### Initial Setup
-1. Start the application (defaults to User Token Mode)
+1. Start the application (defaults to Custom Application Mode)
 2. Sign in with your Microsoft account
-3. Optionally switch to Application Credentials Mode in Settings
+3. Optionally enable Enhanced Graph Access Mode in Settings
 
 ### Switching Authentication Modes
-1. Go to Settings → Entra Configuration
-2. Toggle "Use Application Credentials" on/off
-3. If enabling: Enter Client ID, Client Secret, and Tenant ID
-4. If disabling: Keep credentials for future use or clear them
-5. **Enhanced Graph Access**: When application credentials are configured, toggle "Enhanced Graph Access" to use hybrid authentication
-6. MCP servers automatically restart with new authentication mode
+1. Go to Settings → Entra Application Settings
+2. Toggle "Enhanced Graph Access (Microsoft Graph PowerShell)" on/off
+3. If enabling Enhanced Graph Access: Only Tenant ID is required
+4. If using Custom Application: Enter Client ID and Tenant ID
+5. MCP servers automatically restart with new authentication mode
+6. All modes use delegated permissions with user context
 
-The SettingsDialog now includes cache management controls, and duplicate models are properly handled through both API-level deduplication and intelligent caching.
+The SettingsDialog now includes cache management controls, permission visibility, and duplicate models are properly handled through both API-level deduplication and intelligent caching.

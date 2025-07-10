@@ -266,8 +266,18 @@ export const EnhancedSettingsDialog: React.FC<EnhancedSettingsDialogProps> = ({
       return;
     }
     
-    // Only load permissions if Enhanced Graph Access is enabled
-    if (!entraConfig?.useGraphPowerShell) {
+    // Load permissions for both Enhanced Graph Access and custom applications
+    const shouldLoadPermissions = entraConfig?.useGraphPowerShell || 
+                                 (entraConfig?.clientId && entraConfig?.clientId.trim());
+    
+    console.log('🔍 Loading graph permissions check:', {
+      useGraphPowerShell: entraConfig?.useGraphPowerShell,
+      hasClientId: Boolean(entraConfig?.clientId && entraConfig?.clientId.trim()),
+      shouldLoadPermissions
+    });
+    
+    if (!shouldLoadPermissions) {
+      console.log('❌ Not loading permissions - neither Enhanced Graph Access nor custom client ID configured');
       setGraphPermissions({ granted: [], available: [], loading: false });
       return;
     }
@@ -286,17 +296,39 @@ export const EnhancedSettingsDialog: React.FC<EnhancedSettingsDialogProps> = ({
         throw new Error(currentPermissions.error);
       }
       
-      // Delegated permissions for Enhanced Graph Access
-      const requiredPermissions = [
-        'User.Read',
-        'User.ReadBasic.All', 
-        'Mail.Read',
-        'Mail.ReadWrite',
-        'Calendars.Read',
-        'Files.Read.All',
-        'Directory.Read.All'
-      ];
+      // Delegated permissions - different sets for Enhanced Graph Access vs Custom Apps
+      let requiredPermissions: string[];
       
+      if (entraConfig?.useGraphPowerShell) {
+        // Enhanced Graph Access permissions
+        console.log('📋 Using Enhanced Graph Access permission set');
+        requiredPermissions = [
+          'User.Read',
+          'User.ReadBasic.All', 
+          'Mail.Read',
+          'Mail.ReadWrite',
+          'Calendars.Read',
+          'Files.Read.All',
+          'Directory.Read.All'
+        ];
+      } else {
+        // For custom applications, use the actual granted permissions as the "available" set
+        // since we don't know what permissions are configured in their Azure app registration
+        console.log('📋 Using custom application permissions - actual granted permissions:', currentPermissions.permissions);
+        requiredPermissions = currentPermissions.permissions || [
+          'User.Read',
+          'profile',
+          'openid',
+          'email'
+        ];
+      }
+      
+      console.log('✅ Graph permissions loaded successfully:', {
+        granted: currentPermissions.permissions || [],
+        available: requiredPermissions,
+        mode: entraConfig?.useGraphPowerShell ? 'Enhanced Graph Access' : 'Custom Application'
+      });
+
       setGraphPermissions({
         granted: currentPermissions.permissions || [],
         available: requiredPermissions,
@@ -464,6 +496,14 @@ export const EnhancedSettingsDialog: React.FC<EnhancedSettingsDialogProps> = ({
       clearInterval(authCheckInterval);
     };
   }, [open]); // Remove tenantInfo.error from dependencies to prevent restart loops
+
+  // Load permissions when entraConfig changes (after save)
+  useEffect(() => {
+    if (open && entraConfig) {
+      console.log('🔄 Entra config changed, reloading permissions...');
+      loadGraphPermissions();
+    }
+  }, [entraConfig, open]);
 
   const loadCloudProviders = async () => {
     try {
@@ -1786,13 +1826,16 @@ const EntraConfigForm: React.FC<EntraConfigFormProps> = ({ config, onSave, onCle
     }
   }, [config, isUserEditing]);
 
-  // Load permissions when Enhanced Graph Access is enabled
+  // Load permissions when Enhanced Graph Access is enabled OR when custom client ID is provided
   useEffect(() => {
-    if (localConfig.useGraphPowerShell) {
-      console.log('🔄 Loading permissions for Enhanced Graph Access mode (component mount/config change)...');
+    const shouldLoadPermissions = localConfig.useGraphPowerShell || 
+                                 (localConfig.clientId && localConfig.clientId.trim());
+    
+    if (shouldLoadPermissions) {
+      console.log('🔄 Loading permissions for authentication mode (Enhanced Graph Access or Custom App)...');
       loadGraphPermissions();
     }
-  }, [localConfig.useGraphPowerShell, loadGraphPermissions]);
+  }, [localConfig.useGraphPowerShell, localConfig.clientId, loadGraphPermissions]);
 
   const handleSave = async () => {
     try {
@@ -2129,17 +2172,131 @@ const EntraConfigForm: React.FC<EntraConfigFormProps> = ({ config, onSave, onCle
                     </Box>
                   </>
                 )}                {!localConfig.useGraphPowerShell && (
-                  <Alert severity="info" sx={{ mt: 2 }}>
-                    <Typography variant="body2">
-                      <strong>Standard Access:</strong> {
-                        localConfig.clientId && localConfig.clientId.trim()
-                          ? "Using your custom app registration for delegated permissions. Access depends on permissions configured in your Azure app registration."
-                          : "Using default Microsoft authentication with basic permissions (User.Read, profile, openid, email)."
-                      }
-                      <br/>Enable "Enhanced Graph Access" above to access mailbox, calendar, and other advanced user data 
-                      through the Microsoft Graph PowerShell client ID.
-                    </Typography>
-                  </Alert>
+                  <>
+                    <Alert severity="info" sx={{ mt: 2 }}>
+                      <Typography variant="body2">
+                        <strong>Standard Access:</strong> {
+                          localConfig.clientId && localConfig.clientId.trim()
+                            ? "Using your custom app registration for delegated permissions. Access depends on permissions configured in your Azure app registration."
+                            : "Using default Microsoft authentication with basic permissions (User.Read, profile, openid, email)."
+                        }
+                        <br/>Enable "Enhanced Graph Access" above to access mailbox, calendar, and other advanced user data 
+                        through the Microsoft Graph PowerShell client ID.
+                      </Typography>
+                    </Alert>
+
+                    {/* Show permissions for custom applications too */}
+                    {localConfig.clientId && localConfig.clientId.trim() && (
+                      <Alert severity="info" sx={{ mb: 2 }}>
+                        <Typography variant="body2">
+                          <strong>Permissions Status:</strong> <br/>
+                          {graphPermissions.loading ? (
+                            <>
+                              • <strong>Checking permissions...</strong> <CircularProgress size={12} sx={{ ml: 1 }} />
+                            </>
+                          ) : graphPermissions.error ? (
+                            <>
+                              • <strong>Unable to check current permissions</strong><br/>
+                              • <strong>Note:</strong> Sign in to see actual permissions granted to your custom application<br/>
+                              • <strong>Contact your Entra Administrator</strong> if you encounter "Access is denied" errors
+                            </>
+                          ) : (
+                            <>
+                              • <strong>Current access:</strong> {graphPermissions.granted.length > 0 ? 
+                                graphPermissions.granted.slice(0, 3).join(', ') + 
+                                (graphPermissions.granted.length > 3 ? ` and ${graphPermissions.granted.length - 3} more` : '') 
+                                : 'Basic profile only'}<br/>
+                              {graphPermissions.available.length > graphPermissions.granted.length && (
+                                <>• <strong>Admin consent required for:</strong> {
+                                  graphPermissions.available
+                                    .filter(p => !graphPermissions.granted.includes(p))
+                                    .slice(0, 3)
+                                    .join(', ')
+                                }{graphPermissions.available.filter(p => !graphPermissions.granted.includes(p)).length > 3 ? ' and more' : ''}<br/></>
+                              )}
+                              • Contact your Entra Administrator if you encounter "Access is denied" errors.
+                            </>
+                          )}
+                        </Typography>
+                      </Alert>
+                    )}
+
+                    {/* Show detailed permissions breakdown for custom applications */}
+                    {localConfig.clientId && localConfig.clientId.trim() && !graphPermissions.loading && !graphPermissions.error && (
+                      <Box sx={{ mt: 2, p: 2, bgcolor: 'background.default', borderRadius: 1 }}>
+                        <Typography variant="caption" display="block" gutterBottom>
+                          <strong>Client ID:</strong> {localConfig.clientId.substring(0, 8)}... (Custom Application)
+                        </Typography>
+                        <Typography variant="caption" display="block" gutterBottom>
+                          <strong>User Tenant:</strong> {
+                            tenantInfo.loading ? (
+                              <span>
+                                Loading... <CircularProgress size={10} sx={{ ml: 1 }} />
+                              </span>
+                            ) : tenantInfo.error === 'User not authenticated' || tenantInfo.error === 'Could not verify authentication' ? (
+                              <span style={{ color: 'orange' }}>
+                                Please sign in to authenticate
+                              </span>
+                            ) : tenantInfo.error ? (
+                              <span style={{ color: 'red' }}>
+                                Error: {tenantInfo.error}
+                              </span>
+                            ) : tenantInfo.tenantId ? (
+                              <span>
+                                {tenantInfo.tenantDisplayName && tenantInfo.tenantDisplayName !== tenantInfo.tenantId ? (
+                                  <strong>{tenantInfo.tenantDisplayName}</strong>
+                                ) : (
+                                  tenantInfo.tenantId
+                                )}
+                                <span style={{ marginLeft: 8, color: '#666', fontSize: '0.9em' }}>
+                                  ({tenantInfo.tenantId})
+                                </span>
+                              </span>
+                            ) : (
+                              'Not authenticated'
+                            )
+                          }
+                        </Typography>
+                        <Typography variant="caption" display="block" color="text.secondary" sx={{ mt: 1 }}>
+                          Custom application using delegated permissions configured in Azure app registration
+                        </Typography>
+                        <Typography variant="caption" display="block" color="text.secondary">
+                          <strong>Permissions Status:</strong> {
+                            <Box component="span" sx={{ ml: 1 }}>
+                              <Chip 
+                                label={`${graphPermissions.granted.length} granted`} 
+                                size="small" 
+                                color={graphPermissions.granted.length > 3 ? "success" : "warning"} 
+                                sx={{ mr: 0.5 }} 
+                              />
+                              <Chip 
+                                label={`${graphPermissions.available.length - graphPermissions.granted.length} pending`} 
+                                size="small" 
+                                color="default" 
+                              />
+                            </Box>
+                          }
+                        </Typography>
+                        
+                        <Box sx={{ mt: 1 }}>
+                          <Typography variant="caption" display="block" color="text.secondary">
+                            <strong>Granted:</strong> {graphPermissions.granted.length > 0 ? 
+                              graphPermissions.granted.join(', ') : 'Basic profile only'
+                            }
+                          </Typography>
+                          {graphPermissions.available.length > graphPermissions.granted.length && (
+                            <Typography variant="caption" display="block" color="warning.main">
+                              <strong>Requires admin consent:</strong> {
+                                graphPermissions.available
+                                  .filter(p => !graphPermissions.granted.includes(p))
+                                  .join(', ')
+                              }
+                            </Typography>
+                          )}
+                        </Box>
+                      </Box>
+                    )}
+                  </>
                 )}
               </Box>
         </Box>

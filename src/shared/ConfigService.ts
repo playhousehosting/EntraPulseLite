@@ -772,24 +772,45 @@ export class ConfigService {
       return null;
     }
 
-    const config = this.getCurrentContext();
-    let entraConfig = config.entraConfig || null;
+    // Get Entra config based on current authentication mode without fallback
+    let entraConfig: EntraConfig | null = null;
     
-    // Fallback: If no Entra config in current context, check application config
-    if (!entraConfig) {
+    if (this.currentAuthMode === 'client-credentials') {
+      // In client-credentials mode, use application config
       try {
         const appConfig = this.store.get('application');
         entraConfig = appConfig?.entraConfig || null;
         if (entraConfig) {
-          console.log('[ConfigService] getEntraConfig - Using fallback from application config');
+          console.log('[ConfigService] getEntraConfig - Using application config (client-credentials mode)');
         }
       } catch (error) {
-        console.warn('[ConfigService] Failed to get Entra config fallback:', error);
+        console.warn('[ConfigService] Failed to get Entra config from application config:', error);
       }
+    } else if (this.currentAuthMode === 'interactive' && this.currentUserKey) {
+      // In interactive mode, use user-specific config ONLY - no fallback to application config
+      try {
+        const users = this.store.get('users');
+        if (users && users[this.currentUserKey]) {
+          entraConfig = users[this.currentUserKey].entraConfig || null;
+          if (entraConfig) {
+            console.log(`[ConfigService] getEntraConfig - Using user config for ${this.currentUserKey}`);
+          } else {
+            console.log(`[ConfigService] getEntraConfig - No Entra config found for user ${this.currentUserKey}`);
+          }
+        } else {
+          console.log(`[ConfigService] getEntraConfig - No user config found for ${this.currentUserKey}`);
+        }
+      } catch (error) {
+        console.warn('[ConfigService] Failed to get Entra config from user config:', error);
+      }
+    } else {
+      console.log('[ConfigService] getEntraConfig - No valid authentication context');
     }
     
     if (entraConfig) {
       console.log('[ConfigService] getEntraConfig - Found config with Enhanced Graph Access:', entraConfig.useGraphPowerShell);
+    } else {
+      console.log('[ConfigService] getEntraConfig - No Entra config found');
     }
     
     return entraConfig;
@@ -810,21 +831,33 @@ export class ConfigService {
       useGraphPowerShell: entraConfig.useGraphPowerShell
     });
 
-    const currentConfig = this.getCurrentContext();
-    currentConfig.entraConfig = entraConfig;
-    this.saveCurrentContext(currentConfig);
+    console.log(`[ConfigService] saveEntraConfig - Mode: ${this.currentAuthMode}, UserKey: ${this.currentUserKey}`);
 
-    // Additional safety: For Enhanced Graph Access, also save to application config as fallback
-    // This ensures the setting is available even if user context is not properly maintained
-    if (entraConfig.useGraphPowerShell !== undefined) {
+    if (this.currentAuthMode === 'client-credentials') {
+      // Save to application config
       try {
-        console.log('[ConfigService] Saving Enhanced Graph Access setting to application config as backup:', entraConfig.useGraphPowerShell);
-        const appConfig = this.store.get('application') || this.getDefaultUserConfig();
-        appConfig.entraConfig = { ...appConfig.entraConfig, ...entraConfig };
+        const appConfig = this.store.get('application') || {};
+        appConfig.entraConfig = entraConfig;
         this.store.set('application', appConfig);
+        console.log('[ConfigService] saveEntraConfig - Saved to application config (client-credentials mode)');
       } catch (error) {
-        console.warn('[ConfigService] Failed to save Enhanced Graph Access backup:', error);
+        console.warn('[ConfigService] Failed to save to application config:', error);
       }
+    } else if (this.currentAuthMode === 'interactive' && this.currentUserKey) {
+      // Save to user-specific config only
+      try {
+        const users = this.store.get('users') || {};
+        if (!users[this.currentUserKey]) {
+          users[this.currentUserKey] = this.getDefaultUserConfig();
+        }
+        users[this.currentUserKey].entraConfig = entraConfig;
+        this.store.set('users', users);
+        console.log(`[ConfigService] saveEntraConfig - Saved to user config for ${this.currentUserKey}`);
+      } catch (error) {
+        console.warn('[ConfigService] Failed to save to user config:', error);
+      }
+    } else {
+      console.log('[ConfigService] saveEntraConfig - No valid authentication context to save to');
     }
 
     // Update authentication context based on new config
@@ -841,9 +874,35 @@ export class ConfigService {
       return;
     }
 
-    const currentConfig = this.getCurrentContext();
-    delete currentConfig.entraConfig;
-    this.saveCurrentContext(currentConfig);
+    console.log(`[ConfigService] clearEntraConfig - Mode: ${this.currentAuthMode}, UserKey: ${this.currentUserKey}`);
+
+    if (this.currentAuthMode === 'client-credentials') {
+      // Clear from application config
+      try {
+        const appConfig = this.store.get('application') || {};
+        delete appConfig.entraConfig;
+        this.store.set('application', appConfig);
+        console.log('[ConfigService] clearEntraConfig - Cleared from application config (client-credentials mode)');
+      } catch (error) {
+        console.warn('[ConfigService] Failed to clear application config:', error);
+      }
+    } else if (this.currentAuthMode === 'interactive' && this.currentUserKey) {
+      // Clear from user-specific config only
+      try {
+        const users = this.store.get('users') || {};
+        if (users[this.currentUserKey]) {
+          delete users[this.currentUserKey].entraConfig;
+          this.store.set('users', users);
+          console.log(`[ConfigService] clearEntraConfig - Cleared from user config for ${this.currentUserKey}`);
+        } else {
+          console.log(`[ConfigService] clearEntraConfig - No user config found for ${this.currentUserKey}`);
+        }
+      } catch (error) {
+        console.warn('[ConfigService] Failed to clear user config:', error);
+      }
+    } else {
+      console.log('[ConfigService] clearEntraConfig - No valid authentication context to clear');
+    }
 
     console.log('[ConfigService] clearEntraConfig - Configuration cleared successfully');
   }

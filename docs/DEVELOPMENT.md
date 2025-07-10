@@ -323,7 +323,7 @@ describe('YourComponent', () => {
 2. **Integration Tests** (`src/tests/integration/`)
    - Service integration testing
    - API integration testing
-   - Authentication flow testing (both User Token and Application Credentials modes)
+   - Authentication flow testing (both Custom Application and Enhanced Graph Access modes)
    - Authentication mode switching
    - MCP server authentication integration
    - Configuration context switching
@@ -632,15 +632,15 @@ EntraPulse Lite supports two authentication modes that can be switched at runtim
 
 #### User Token Mode (Default)
 - **Flow**: Interactive user authentication via MSAL
-- **Permissions**: Progressive permission requests starting with `User.Read`
+- **Permissions**: Delegated permissions configured in your app registration
 - **Storage**: User-specific configuration context
-- **Use Case**: Individual users, personal usage, basic scenarios
+- **Use Case**: Individual users, custom permission scopes, tailored organizational needs
 
-#### Application Credentials Mode
-- **Flow**: Client credentials authentication using app registration
-- **Permissions**: Custom scopes defined in the app registration
-- **Storage**: Application-level configuration context
-- **Use Case**: Enterprise scenarios, enhanced permissions, IT administrators
+#### Enhanced Graph Access Mode
+- **Flow**: Delegated permissions using Microsoft Graph PowerShell client ID
+- **Permissions**: Comprehensive delegated permissions for mail, calendar, files, directory, and more
+- **Storage**: User-specific configuration with Enhanced Graph Access flag
+- **Use Case**: Users requiring extensive Microsoft Graph functionality without custom app registration
 
 ### Implementation Details
 
@@ -685,33 +685,32 @@ private async getEnvironmentVariables(): Promise<Record<string, string>> {
 ```typescript
 // Example test for authentication mode switching
 describe('Authentication Mode Switching', () => {
-  it('should switch from user token to application credentials', async () => {
-    // Start in user token mode
-    expect(configService.getAuthenticationPreference()).toBe('user-token');
+  it('should switch from custom application to enhanced graph access', async () => {
+    // Start in custom application mode
+    expect(configService.getAuthenticationMode()).toBe('custom-application');
     
-    // Switch to application credentials
+    // Switch to Enhanced Graph Access
     await configService.updateAuthenticationContext({
-      useApplicationCredentials: true,
-      clientId: 'test-client-id',
-      clientSecret: 'test-secret',
+      useGraphPowerShell: true,
+      clientId: '9a446f47-428d-4a73-a610-52386f7a4233',
       tenantId: 'test-tenant-id'
     });
     
-    expect(configService.getAuthenticationPreference()).toBe('application-credentials');
+    expect(configService.getAuthenticationMode()).toBe('enhanced-graph-access');
   });
 });
 ```
 
 ### UI Integration
 The authentication mode toggle is available in:
-- **Settings → Entra Configuration**
-- **Toggle Switch**: "Use Application Credentials"
-- **Form Fields**: Client ID, Client Secret, Tenant ID (shown when enabled)
+- **Settings → Entra Application Settings**
+- **Toggle Switch**: "Enhanced Graph Access (Microsoft Graph PowerShell)"
+- **Form Fields**: Client ID, Tenant ID (Client Secret not needed for delegated permissions)
 - **Automatic Save**: Changes saved immediately with validation
 
 ### Enhanced Graph Access Implementation
 
-Enhanced Graph Access provides a hybrid authentication approach that combines the best of both User Token and Application Credentials modes:
+Enhanced Graph Access provides comprehensive delegated permissions using the Microsoft Graph PowerShell client ID for seamless Microsoft Graph API access:
 
 #### Development Pattern
 ```typescript
@@ -722,12 +721,12 @@ const configService = new ConfigService();
 const authContext = configService.getAuthenticationContext();
 const entraConfig = configService.getEntraConfig();
 
-if (entraConfig?.enhancedGraphAccess && authContext.mode === 'interactive') {
-  // Enhanced Graph Access is enabled
-  // Use application credentials for Graph queries while maintaining user token context
-  console.log('Using Enhanced Graph Access mode');
+if (entraConfig?.useGraphPowerShell && authContext.mode === 'interactive') {
+  // Enhanced Graph Access is enabled - using Microsoft Graph PowerShell client ID
+  // All queries use delegated permissions with comprehensive scope
+  console.log('Using Enhanced Graph Access mode with Microsoft Graph PowerShell client');
 } else {
-  // Standard authentication mode
+  // Custom application mode with user-configured delegated permissions
   console.log(`Using standard ${authContext.mode} mode`);
 }
 ```

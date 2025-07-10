@@ -4,9 +4,9 @@ A free community desktop application that provides natural language querying of 
 
 ## 🚀 Features
 
-- **Enhanced Graph Access**: Hybrid authentication mode combining user tokens with application credentials for optimal permissions
-- **Progressive Authentication**: Start with basic permissions, request more as needed  
-- **Dual Authentication Modes**: Switch between User Token and Application Credentials modes at runtime
+- **Enhanced Graph Access**: Uses Microsoft Graph PowerShell client ID for comprehensive delegated permissions
+- **Custom Application Support**: Use your own Entra App Registration with delegated permissions for tailored access  
+- **Dual Authentication Modes**: Switch between Enhanced Graph Access and Custom Application modes at runtime
 - **Work or School Microsoft Account**: Secure login with MSAL integration
 - **Natural Language Querying**: Chat with your Microsoft Graph data using plain English
 - **Multi-Provider LLM Integration**: Works with local (Ollama, LM Studio) and cloud (OpenAI, Anthropic, Google Gemini, Azure OpenAI) AI models
@@ -18,7 +18,7 @@ A free community desktop application that provides natural language querying of 
   - Fetch MCP for general web searches and documentation retrieval
 - **Chat Interface**: Modern UI with trace visualization, permission management, code copy functionality, and conversation context management
 - **Enhanced User Experience**: Copy code blocks with one click, start new conversations to clear context
-- **Free Community Tool**: No App Registration required for basic usage
+- **Free Community Tool**: Enhanced Graph Access mode requires no App Registration setup
 
 ## 🏗️ Architecture
 
@@ -71,16 +71,17 @@ This warning appears because our beta releases are not yet code-signed with a di
 **Required:**
 - **Entra ID Work/School Account** - The application uses your delegated permissions to access Microsoft Graph
 - **LLM Provider** (flexible configuration):
+  - **Cloud LLM API Keys** (Recommended) - Reliable performance with Anthropic Claude Sonnet, Azure OpenAI GPT-4o, OpenAI, or Google Gemini
   - **Local LLM** (Ollama or LM Studio) - Privacy-focused processing with hardware-dependent performance
-  - **Cloud LLM API Keys** - Reliable performance with OpenAI, Azure OpenAI, Anthropic, or Google Gemini
-  - **Hybrid Mode** - Prefer local with cloud fallback, or use both based on availability
+  - **Hybrid Mode** - Prefer cloud with local fallback, or use both based on availability
 
 **Authentication Options:**
-- **User Token Mode** (Default) - Uses your delegated user permissions to access Microsoft Graph
-- **Application Credentials Mode** - Use your own Entra App Registration for enhanced access and permissions
+- **Enhanced Graph Access** (Recommended) - Uses Microsoft Graph PowerShell client ID with comprehensive delegated permissions
+- **Custom Application Mode** - Use your own Entra App Registration with delegated permissions configured for your specific needs
 
-**Optional (for enhanced enterprise features):**
-- **Microsoft Entra App Registration** - Required only if using Application Credentials mode for custom permissions and enhanced access
+**Required for functional use:**
+- **Microsoft Graph PowerShell client ID** (Enhanced Graph Access mode) - No setup required, built-in comprehensive permissions
+- **OR Custom Entra App Registration** - Required for Custom Application mode with delegated permissions configured for intended Microsoft Graph operations
 
 ## 👨‍💻 For Developers & Contributors
 
@@ -109,10 +110,30 @@ npm start
 1. **Run the application** - No initial configuration required
 2. **Sign in** with your Microsoft account
 3. **Choose an LLM provider**:
-   - **Local**: Install Ollama or LM Studio (see [Local LLM Setup](#local-llm-setup))
-   - **Cloud**: Add API keys in Settings for OpenAI, Anthropic, or Google Gemini
+   - **Cloud** (Recommended): Add API keys in Settings for Anthropic Claude Sonnet, Azure OpenAI GPT-4o, OpenAI, or Google Gemini
+   - **Local**: Install Ollama or LM Studio for privacy-focused processing (see [Local LLM Setup](#local-llm-setup))
 
-### Local LLM Setup
+### Cloud LLM Setup (Recommended)
+
+For optimal performance and reliability, we recommend using cloud-based AI providers:
+
+#### Option 1: Anthropic Claude Sonnet (Recommended)
+1. Visit [Anthropic Console](https://console.anthropic.com)
+2. Create an account and generate an API key
+3. In EntraPulse Lite Settings → LLM Configuration → Add Claude Sonnet
+4. Enter your API key and select the `claude-3-5-sonnet-20241022` model
+
+#### Option 2: Azure OpenAI GPT-4o (Enterprise)
+1. Access your Azure OpenAI resource in the Azure Portal
+2. Get your endpoint URL and API key from Keys and Endpoint
+3. In EntraPulse Lite Settings → LLM Configuration → Add Azure OpenAI
+4. Configure with your endpoint, API key, and `gpt-4o` deployment
+
+#### Alternative Cloud Options:
+- **OpenAI**: Direct API access to GPT-4 and GPT-3.5 models
+- **Google Gemini**: Google's advanced AI models
+
+### Local LLM Setup (Privacy-Focused Alternative)
 
 For privacy-focused AI processing, install a local LLM:
 
@@ -134,33 +155,33 @@ See [docs/INSTALLATION.md](docs/INSTALLATION.md) for detailed setup instructions
 
 ## 🎯 Key Capabilities
 
-### Progressive Authentication
-EntraPulse Lite implements smart permission management with flexible authentication modes:
+### Delegated Permission Modes
+EntraPulse Lite uses delegated permissions exclusively for secure, user-context access to Microsoft Graph:
 
-**User Token Mode (Default):**
-- Starts with minimal permissions (`User.Read`)
-- Requests additional permissions only when needed
-- Reduces admin consent requirements
-- Provides clear context for permission requests
+**Enhanced Graph Access (Recommended):**
+- Uses the Microsoft Graph PowerShell client ID (14d82eec-204b-4c2f-b7e8-296a70dab67e)
+- Provides comprehensive delegated permissions out-of-the-box
+- No application registration setup required
+- Includes permissions for mail, calendar, files, directory, and more
 
-**Application Credentials Mode:**
+**Custom Application Mode:**
 - Uses your own Entra App Registration
-- Access via Client ID and Client Secret
-- Supports custom permission scopes
-- Enhanced enterprise integration capabilities
+- Requires configuring delegated permissions in Azure Portal
+- Allows tailored permission scopes for specific organizational needs
+- Full control over which Microsoft Graph APIs are accessible
 
-You can switch between authentication modes in Settings → Entra Configuration.
+You can switch between modes in Settings → Entra Application Settings.
 
 ### Multi-Provider LLM Support
+**Cloud Providers** (Recommended):
+- Anthropic Claude Sonnet (Claude 3.5 Sonnet)
+- Azure OpenAI (Enterprise-grade GPT-4o, GPT-4, GPT-3.5)
+- OpenAI (GPT-4, GPT-3.5)
+- Google Gemini
+
 **Local Providers** (Privacy-focused):
 - Ollama
 - LM Studio
-
-**Cloud Providers** (Advanced features):
-- OpenAI (GPT-4, GPT-3.5)
-- Azure OpenAI (Enterprise-grade OpenAI models)
-- Anthropic (Claude)
-- Google Gemini
 
 ### Natural Language Queries
 Ask questions in plain English:
