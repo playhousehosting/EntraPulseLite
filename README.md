@@ -48,26 +48,6 @@ src/
 
 **No prerequisites required!** EntraPulse Lite is a self-contained desktop application.
 
-### 🔒 Windows Security Notice
-
-When downloading and running EntraPulse Lite on Windows, you may encounter a Windows Defender SmartScreen warning that says "Windows protected your PC" or "Microsoft Defender SmartScreen prevented an unrecognized app from starting."
-
-**This is expected behavior** for unsigned beta releases. To proceed:
-
-1. Click **"More info"** on the SmartScreen dialog
-2. Click **"Run anyway"** to continue with the installation
-
-This warning appears because our beta releases are not yet code-signed with a digital certificate. Future stable releases will be properly signed to eliminate this warning.
-
-**Why this happens:**
-- Beta builds are unsigned to speed up development and testing
-- Windows SmartScreen protects users by warning about unsigned executables
-- The application is safe - this is just a security precaution for unsigned software
-
-**Alternative installation methods:**
-- Build from source (see Developer Setup below)
-- Wait for future signed stable releases
-
 **Required:**
 - **Entra ID Work/School Account** - The application uses your delegated permissions to access Microsoft Graph
 - **LLM Provider** (flexible configuration):
@@ -121,16 +101,16 @@ For optimal performance and reliability, we recommend using cloud-based AI provi
 1. Visit [Anthropic Console](https://console.anthropic.com)
 2. Create an account and generate an API key
 3. In EntraPulse Lite Settings → LLM Configuration → Add Claude Sonnet
-4. Enter your API key and select the `claude-3-5-sonnet-20241022` model
+4. Enter your API key and select Update then select the `claude-sonnet-4-20250514` model
 
 #### Option 2: Azure OpenAI GPT-4o (Enterprise)
 1. Access your Azure OpenAI resource in the Azure Portal
 2. Get your endpoint URL and API key from Keys and Endpoint
 3. In EntraPulse Lite Settings → LLM Configuration → Add Azure OpenAI
-4. Configure with your endpoint, API key, and `gpt-4o` deployment
+4. Configure with your endpoint, API key, then select Update then select your `gpt-4o` deployment
 
 #### Alternative Cloud Options:
-- **OpenAI**: Direct API access to GPT-4 and GPT-3.5 models
+- **OpenAI**: Direct API access to GPT-4o and other models
 - **Google Gemini**: Google's advanced AI models
 
 ### Local LLM Setup (Privacy-Focused Alternative)
