@@ -122,7 +122,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       'update:not-available',
       'update:error',
       'update:download-progress',
-      'update:downloaded'
+      'update:downloaded',
+      'main-debug' // Debug messages from main process
     ];
     if (validChannels.includes(channel)) {
       // Get current listener count BEFORE adding
@@ -170,7 +171,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       'update:not-available',
       'update:error',
       'update:download-progress',
-      'update:downloaded'
+      'update:downloaded',
+      'main-debug' // Debug messages from main process
     ];
     if (validChannels.includes(channel)) {
       ipcRenderer.removeListener(channel, callback);
@@ -192,7 +194,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       'update:not-available',
       'update:error',
       'update:download-progress',
-      'update:downloaded'
+      'update:downloaded',
+      'main-debug' // Debug messages from main process
     ];
     if (validChannels.includes(channel)) {
       ipcRenderer.removeAllListeners(channel);
@@ -214,7 +217,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       'update:not-available',
       'update:error',
       'update:download-progress',
-      'update:downloaded'
+      'update:downloaded',
+      'main-debug' // Debug messages from main process
     ];
     const diagnostics = {};
     
@@ -238,7 +242,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       'auth:configurationAvailable', 
       'auth:enhancedGraphAccessChanged',
       'auth:logout',
-      'llm:forceStatusRefresh'
+      'llm:forceStatusRefresh',
+      'main-debug' // Debug messages from main process
     ];
     if (validChannels.includes(channel)) {
       const beforeCount = ipcRenderer.listenerCount(channel);

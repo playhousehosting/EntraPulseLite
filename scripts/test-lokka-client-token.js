@@ -124,7 +124,7 @@ async function testLokkaClientToken() {
     jsonrpc: '2.0',
     method: 'tools/call',
     params: {
-      name: 'Lokka-Microsoft',
+      name: 'microsoft_graph_query',
       arguments: {
         apiType: 'graph',
         method: 'get',

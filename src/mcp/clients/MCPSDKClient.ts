@@ -70,9 +70,17 @@ export class MCPClient {
 
   /**
    * Get a list of available servers
+   * @returns List of enabled server configurations
+   */
+  getAvailableServers(): MCPServerConfig[] {
+    return Array.from(this.serverConfigs.values());
+  }
+
+  /**
+   * Get a list of available server names
    * @returns List of enabled server names
    */
-  getAvailableServers(): string[] {
+  getAvailableServerNames(): string[] {
     return Array.from(this.serverConfigs.keys());
   }
 

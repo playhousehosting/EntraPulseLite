@@ -54,7 +54,7 @@ async function testLokkaIntegration() {
       
       // Wait for response
       setTimeout(() => {
-        console.log('\nTesting Lokka-Microsoft tool...');
+        console.log('\nTesting microsoft_graph_query tool...');
         testLokkaQuery();
       }, 2000);
       
@@ -63,7 +63,7 @@ async function testLokkaIntegration() {
     }
   }
   
-  // Test Lokka-Microsoft tool
+  // Test microsoft_graph_query tool
   async function testLokkaQuery() {
     try {
       const queryRequest = {
@@ -71,7 +71,7 @@ async function testLokkaIntegration() {
         id: Date.now(),
         method: 'tools/call',
         params: {
-          name: 'Lokka-Microsoft',
+          name: 'microsoft_graph_query',
           arguments: {
             apiType: 'graph',
             method: 'get',

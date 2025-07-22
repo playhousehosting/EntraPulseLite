@@ -14,7 +14,7 @@ import { GraphMCPClient } from '../mcp/clients/GraphMCPClient';
 import { MCPErrorHandler, ErrorCode } from '../mcp/utils';
 import { debugMCP, checkMCPServerHealth } from '../mcp/mcp-debug';
 import { AutoUpdaterService } from './AutoUpdaterService';
-import { AppConfig, MCPServerConfig } from '../types';
+import { AppConfig, MCPServerConfig, MCPConfig } from '../types';
 import { exposeVersionToRenderer } from '../shared/VersionUtils';
 
 // Get version from package.json
@@ -48,8 +48,26 @@ class EntraPulseLiteApp {
   private previousClientId?: string; // Track client ID changes for cache clearing
 
   constructor() {
+    console.log('[Main] ===== ENTRAPULSE LITE CONSTRUCTOR CALLED =====');
+    console.log('[Main] Process type:', process.type);
+    console.log('[Main] Environment:', process.env.NODE_ENV || 'not set');
+    console.log('[Main] Is packaged:', app.isPackaged);
+    console.log('[Main] App path:', app.getAppPath());
+    
+    // Send debug message to renderer process (when window is ready)
+    this.sendDebugToRenderer('[Main] ===== ENTRAPULSE LITE CONSTRUCTOR CALLED =====');
+    this.sendDebugToRenderer(`[Main] Process type: ${process.type}`);
+    this.sendDebugToRenderer(`[Main] Environment: ${process.env.NODE_ENV || 'not set'}`);
+    this.sendDebugToRenderer(`[Main] Is packaged: ${app.isPackaged}`);
+    this.sendDebugToRenderer(`[Main] App path: ${app.getAppPath()}`);
+    
     this.initializeServices().then(() => {
+      console.log('[Main] Services initialization completed, setting up event handlers...');
+      this.sendDebugToRenderer('[Main] Services initialization completed, setting up event handlers...');
       this.setupEventHandlers();
+    }).catch((error) => {
+      console.error('[Main] Services initialization failed:', error);
+      this.sendDebugToRenderer(`[Main] Services initialization failed: ${error.message}`);
     });
   }
 
@@ -65,15 +83,29 @@ class EntraPulseLiteApp {
       default:        return 'gpt-4o-mini';
     }
   }
-  private async initializeServices(): Promise<void> {    // Initialize configuration service first
-    this.configService = new ConfigService();    // Get authentication configuration (stored config takes precedence)
+  private async initializeServices(): Promise<void> {
+    console.log('[Main] ===== INITIALIZE SERVICES CALLED =====');
+    console.log('[Main] Starting service initialization...');
+    this.sendDebugToRenderer('[Main] ===== INITIALIZE SERVICES CALLED =====');
+    this.sendDebugToRenderer('[Main] Starting service initialization...');
+    
+    // Initialize configuration service first
+    console.log('[Main] Initializing ConfigService...');
+    this.sendDebugToRenderer('[Main] Initializing ConfigService...');
+    this.configService = new ConfigService();
+    console.log('[Main] ConfigService initialized');
+    this.sendDebugToRenderer('[Main] ConfigService initialized');
+    
+    // Get authentication configuration (stored config takes precedence)
     console.log('[Main] ===== DEBUGGING AUTH INITIALIZATION =====');
+    this.sendDebugToRenderer('[Main] ===== DEBUGGING AUTH INITIALIZATION =====');
     const authConfig = await this.getAuthConfiguration();
     console.log('[Main] authConfig result:', {
       clientId: authConfig.clientId.substring(0, 8) + '...',
       tenantId: authConfig.tenantId.substring(0, 8) + '...',
       hasClientSecret: Boolean(authConfig.clientSecret)
     });
+    this.sendDebugToRenderer(`[Main] authConfig received - clientId: ${authConfig.clientId.substring(0, 8)}..., tenantId: ${authConfig.tenantId.substring(0, 8)}..., hasClientSecret: ${Boolean(authConfig.clientSecret)}`);
       // Check if we have Lokka credentials OR if user can authenticate interactively
     const hasLokkaCreds = authConfig.clientSecret && authConfig.clientId && authConfig.tenantId;
     const canUseTokenAuth = authConfig.clientId && authConfig.tenantId; // Token auth only needs these
@@ -106,98 +138,47 @@ class EntraPulseLiteApp {
     this.configService.setAuthenticationContext(authMode);
     // Initialize configuration using stored config
     const storedLLMConfig = this.configService.getLLMConfig();
-    const storedEntraConfig = this.configService.getEntraConfig();
     
-    // Determine the client ID and prepare Lokka environment based on Enhanced Graph Access setting
-    let lokkaClientId = authConfig.clientId;
-    let lokkaEnv: Record<string, string>;
+    // Initialize MCP configuration in storage if not exists
+    console.log('[Main] About to initialize MCP configuration...');
+    this.sendDebugToRenderer('[Main] About to initialize MCP configuration...');
+    await this.initializeMCPConfiguration();
+    console.log('[Main] MCP configuration initialization completed');
+    this.sendDebugToRenderer('[Main] MCP configuration initialization completed');
     
-    console.log('[Main] Enhanced Graph Access check:', {
-      storedEntraConfigExists: Boolean(storedEntraConfig),
-      useGraphPowerShell: storedEntraConfig?.useGraphPowerShell,
-      authPreference
-    });
+    // Main AuthService configuration - always use delegated permissions (User Token mode only)
+    console.log('[Main] Main AuthService configured for User Token mode with client:', authConfig.clientId.substring(0, 8) + '...');
+    this.sendDebugToRenderer(`[Main] Main AuthService configured for User Token mode with client: ${authConfig.clientId.substring(0, 8)}...`);
     
-    // Check if Enhanced Graph Access is enabled (delegated mode only)
-    if (storedEntraConfig?.useGraphPowerShell) {
-      console.log('🔧 Enhanced Graph Access mode detected during initialization');
-      lokkaEnv = {
-        TENANT_ID: 'common', // Use 'common' for multi-tenant Enhanced Graph Access
-        CLIENT_ID: authConfig.clientId, // Use current client ID
-        USE_CLIENT_TOKEN: 'true' // During startup, we don't have a token yet, so use client token mode
-      };
-    } else {
-      lokkaEnv = {
-        TENANT_ID: authConfig.tenantId,
-        CLIENT_ID: authConfig.clientId,
-        ...(authConfig.clientSecret && { CLIENT_SECRET: authConfig.clientSecret })
-      };
-    }
-    
-    // Main AuthService configuration - use explicit client ID based on authentication mode
-    // This ensures the UI shows the correct authentication information
-    let mainAuthClientId: string;
-    
-    console.log('[Main] Main AuthService configuration - checking authentication mode:', {
-      storedConfigExists: Boolean(storedEntraConfig),
-      storedClientId: storedEntraConfig?.clientId?.substring(0, 8) + '...',
-      authConfigClientId: authConfig.clientId.substring(0, 8) + '...'
-    });
-    
-    // Always use delegated permissions (User Token mode only)
-    mainAuthClientId = authConfig.clientId;
-    console.log('[Main] Main AuthService configured for User Token mode with client:', mainAuthClientId.substring(0, 8) + '...');
+    console.log('[Main] About to create MCP server configuration...');
+    this.sendDebugToRenderer('[Main] About to create MCP server configuration...');
+    const mcpServerConfig = this.createMCPServerConfig();
+    console.log('[Main] MCP server configuration created:', mcpServerConfig);
+    this.sendDebugToRenderer(`[Main] MCP server configuration created with ${mcpServerConfig.length} servers`);
     
     this.config = {
       auth: {
-        clientId: mainAuthClientId,
+        clientId: authConfig.clientId,
         tenantId: authConfig.tenantId,
         scopes: ['https://graph.microsoft.com/.default'], // Interactive flow using .default to inherit all app registration permissions
         useClientCredentials: false, // Always use delegated permissions (User Token mode)
       },
       llm: storedLLMConfig, // Use stored LLM configuration
-      mcpServers: [        {
-          name: 'external-lokka',
-          type: 'external-lokka',
-          port: 0, // Not used for stdin/stdout MCP servers
-          enabled: Boolean(canUseTokenAuth), // Enable if we can do token auth
-          command: 'npx',
-          args: ['-y', '@merill/lokka'],
-          env: lokkaEnv
-        },
-        {
-          name: 'fetch',
-          type: 'fetch',
-          port: 3002, // Only used for built-in fetch server
-          enabled: true,
-        },
-        {
-          name: 'microsoft-docs',
-          type: 'microsoft-docs',
-          port: 0, // Not used for HTTP-based MCP servers
-          enabled: true,
-          url: 'https://learn.microsoft.com/api/mcp',
-          authConfig: {
-            type: 'none' // Microsoft Docs MCP doesn't require authentication
-          }
-        },
-      ],
+      mcpServers: mcpServerConfig, // Use stored MCP configuration
       features: {
         enablePremiumFeatures: false, // Set via UI preferences
         enableTelemetry: false, // Set via UI preferences
       },
-    };    // Log the final Lokka MCP server configuration for debugging
+    };
+
+    // Log the final MCP server configuration for debugging
     const lokkaConfig = this.config.mcpServers.find(server => server.name === 'external-lokka');
-    console.log('[Main] Final Lokka MCP server configuration:', {
-      enabled: lokkaConfig?.enabled,
-      hasEnv: Boolean(lokkaConfig?.env),
-      envKeys: lokkaConfig?.env ? Object.keys(lokkaConfig.env) : [],
-      envValues: lokkaConfig?.env ? Object.keys(lokkaConfig.env).reduce((acc, key) => {
-        acc[key] = Boolean(lokkaConfig.env![key]);
-        return acc;
-      }, {} as Record<string, boolean>) : {},
-      enhancedAccess: Boolean(storedEntraConfig?.useGraphPowerShell),
-      clientId: lokkaClientId.substring(0, 8) + '...'
+    console.log('[Main] Final MCP server configuration loaded from storage:', {
+      lokkaEnabled: lokkaConfig?.enabled,
+      lokkaHasEnv: Boolean(lokkaConfig?.env),
+      lokkaEnvKeys: lokkaConfig?.env ? Object.keys(lokkaConfig.env) : [],
+      fetchEnabled: this.config.mcpServers.find(s => s.name === 'fetch')?.enabled,
+      microsoftDocsEnabled: this.config.mcpServers.find(s => s.name === 'microsoft-docs')?.enabled
     });
 
     // Initialize services
@@ -349,115 +330,33 @@ class EntraPulseLiteApp {
           : ['https://graph.microsoft.com/.default'],
         clientSecret: authConfig.clientSecret,
         useClientCredentials: Boolean(useAppCredentials),
-      };      // Update MCP server configuration with Enhanced Graph Access support
-      const lokkaServerIndex = this.config.mcpServers.findIndex(server => server.name === 'external-lokka');
-      if (lokkaServerIndex !== -1) {
-        // Get the stored Entra configuration to check for Enhanced Graph Access setting
-        const storedEntraConfig = this.configService.getEntraConfig();
-        
-        // Determine client ID and authentication mode based on priority:
-        // Priority 1: Custom application credentials (when provided)
-        // Priority 2: Enhanced Graph Access (when enabled and no custom credentials)  
-        // Priority 3: Default User Token mode
-        let clientId = authConfig.clientId || '';
-        let authMode = 'application-credentials';
-        let env: Record<string, string> = {}; // Initialize to avoid TypeScript errors
-
-        // Priority 1: Check for custom application credentials first
-        if (authConfig.clientSecret && storedEntraConfig?.clientId && storedEntraConfig?.tenantId) {
-          console.log('🔧 Using custom application credentials (Priority 1) during reinitialize');
-          clientId = storedEntraConfig.clientId;
-          authMode = 'application-credentials';
-          env = {
-            TENANT_ID: storedEntraConfig.tenantId,
-            CLIENT_ID: clientId,
-            CLIENT_SECRET: authConfig.clientSecret
-          };
+      };      // Update MCP configuration in storage with latest authentication settings
+      await this.initializeMCPConfiguration();
+      
+      // Update MCP server configuration from stored settings
+      try {
+        // Get user access token for passing to MCP servers if available
+        let userToken: string | undefined;
+        try {
+          const tokenResult = await this.authService.getToken();
+          userToken = tokenResult?.accessToken;
+          console.log('[Main] Retrieved user token for MCP server reinitialization:', !!userToken);
+        } catch (error) {
+          console.log('[Main] No user token available for MCP server reinitialization:', error);
         }
-        // Priority 2: Enhanced Graph Access (when enabled and no custom credentials)
-        else if (storedEntraConfig?.useGraphPowerShell && 
-            this.configService.getAuthenticationPreference() !== 'application-credentials') {
-          console.log('🔧 Using Enhanced Graph Access mode (Priority 2) with Microsoft Graph PowerShell client ID during reinitialize');
-          clientId = '14d82eec-204b-4c2f-b7e8-296a70dab67e'; // Microsoft Graph PowerShell client ID
-          authMode = 'enhanced-graph-access';
-          env = {
-            TENANT_ID: 'common', // Use 'common' for multi-tenant Enhanced Graph Access
-            CLIENT_ID: clientId
-          };
-          
-          // For Enhanced Graph Access, use the current user's access token directly
-          try {
-            console.log('🔐 Getting current user access token for Enhanced Graph Access mode during reinitialize...');
-            const userToken = await this.authService.getToken();
-            
-            if (userToken && userToken.accessToken) {
-              console.log('🔐 Successfully obtained user access token for Enhanced Graph Access during reinitialize');
-              env.ACCESS_TOKEN = userToken.accessToken;
-              env.USE_INTERACTIVE = 'false'; // Use provided token, don't authenticate interactively
-            } else {
-              console.error('❌ Failed to get user access token for Enhanced Graph Access during reinitialize, falling back to client token mode');
-              env.USE_CLIENT_TOKEN = 'true';
-            }
-          } catch (error) {
-            console.error('❌ Error getting Enhanced Graph Access token during reinitialize:', error);
-            console.log('🔧 Falling back to standard client token mode');
-            env.USE_CLIENT_TOKEN = 'true';
-          }
-        } else if (authConfig.clientSecret) {
-          console.log('🔧 Using standard user token mode (Priority 3) during reinitialize');
-          authMode = 'delegated';
-          
-          // In standard user token mode, we need to get the current user's access token
-          // and pass it directly to Lokka
-          try {
-            const userToken = await this.authService.getToken();
-            if (userToken && userToken.accessToken) {
-              console.log('🔐 Successfully obtained user access token for Lokka MCP server');
-              env = {
-                ACCESS_TOKEN: userToken.accessToken,
-                USE_INTERACTIVE: 'false' // Tell Lokka to use the provided token
-              };
-            } else {
-              console.warn('⚠️ No user access token available, falling back to client token mode');
-              env = {
-                TENANT_ID: authConfig.tenantId || '',
-                CLIENT_ID: clientId,
-                USE_CLIENT_TOKEN: 'true'
-              };
-            }
-          } catch (error) {
-            console.error('❌ Error getting user access token for Lokka:', error);
-            console.log('🔧 Falling back to client token mode');
-            env = {
-              TENANT_ID: authConfig.tenantId || '',
-              CLIENT_ID: clientId,
-              USE_CLIENT_TOKEN: 'true'
-            };
-          }
-        }
-
-        const updatedLokkaConfig: MCPServerConfig = {
-          name: 'external-lokka',
-          type: 'external-lokka' as const,
-          port: 0, // Not used for stdin/stdout MCP servers
-          enabled: Boolean(hasLokkaCreds || storedEntraConfig?.useGraphPowerShell || env.ACCESS_TOKEN),
-          command: 'npx',
-          args: ['-y', '@merill/lokka'],
-          env
-        };
-        this.config.mcpServers[lokkaServerIndex] = updatedLokkaConfig;
         
-        console.log(`[Main] Updated Lokka MCP server config (mode: ${authMode}):`, {
-          enabled: updatedLokkaConfig.enabled,
-          hasTenantId: Boolean(updatedLokkaConfig.env?.TENANT_ID),
-          hasClientId: Boolean(updatedLokkaConfig.env?.CLIENT_ID),
-          hasClientSecret: Boolean(updatedLokkaConfig.env?.CLIENT_SECRET),
-          useClientToken: Boolean(updatedLokkaConfig.env?.USE_CLIENT_TOKEN),
-          enhancedAccess: Boolean(storedEntraConfig?.useGraphPowerShell),
-          clientId: clientId.substring(0, 8) + '...'
+        // Update MCP server configurations using stored settings
+        this.config.mcpServers = this.createMCPServerConfig(userToken);
+        
+        console.log('[Main] Updated MCP server configurations from storage:', {
+          lokkaEnabled: this.config.mcpServers.find(s => s.name === 'external-lokka')?.enabled,
+          lokkaHasEnv: Boolean(this.config.mcpServers.find(s => s.name === 'external-lokka')?.env),
+          lokkaEnvKeys: this.config.mcpServers.find(s => s.name === 'external-lokka')?.env ? Object.keys(this.config.mcpServers.find(s => s.name === 'external-lokka')!.env!) : [],
+          fetchEnabled: this.config.mcpServers.find(s => s.name === 'fetch')?.enabled,
+          microsoftDocsEnabled: this.config.mcpServers.find(s => s.name === 'microsoft-docs')?.enabled
         });
-      } else {
-        console.warn('[Main] Lokka server not found in config for update');
+      } catch (error) {
+        console.error('[Main] Error updating MCP server configuration:', error);
       }
       
       // Get updated authentication configuration before reinitializing services
@@ -568,20 +467,31 @@ class EntraPulseLiteApp {
             await this.mcpClient.startServer('external-lokka');
             console.log('[Main] ✅ Lokka MCP server started explicitly through client');
           } catch (error) {
-            console.error('[Main] Failed to start Lokka MCP server through client:', error);
-            
-            // Fallback to using server manager directly
-            const lokkaServer = this.mcpServerManager.getServer('external-lokka');
-            if (lokkaServer && lokkaServer.startServer) {
-              console.log('[Main] Attempting to start Lokka MCP server through manager...');
-              try {
-                await lokkaServer.startServer();
-                console.log('[Main] ✅ Lokka MCP server started explicitly through manager');
-              } catch (error) {
-                console.error('[Main] Failed to start Lokka MCP server through manager:', error);
-              }
+            // Check if this is an authentication error (user not logged in yet)
+            if (error instanceof Error && error.message.includes('without valid access token')) {
+              console.log('[Main] ⏸️ Lokka MCP server startup delayed - waiting for user authentication');
+              console.log('[Main] 📌 Lokka will be started automatically after successful login');
             } else {
-              console.warn('[Main] Could not find Lokka server instance in manager');
+              console.error('[Main] Failed to start Lokka MCP server through client:', error);
+              
+              // Fallback to using server manager directly
+              const lokkaServer = this.mcpServerManager.getServer('external-lokka');
+              if (lokkaServer && lokkaServer.startServer) {
+                console.log('[Main] Attempting to start Lokka MCP server through manager...');
+                try {
+                  await lokkaServer.startServer();
+                  console.log('[Main] ✅ Lokka MCP server started explicitly through manager');
+                } catch (managerError) {
+                  // Check if this is also an authentication error
+                  if (managerError instanceof Error && managerError.message.includes('without valid access token')) {
+                    console.log('[Main] ⏸️ Lokka MCP server startup delayed via manager - waiting for user authentication');
+                  } else {
+                    console.error('[Main] Failed to start Lokka MCP server through manager:', managerError);
+                  }
+                }
+              } else {
+                console.warn('[Main] Could not find Lokka server instance in manager');
+              }
             }
           }
         } else {
@@ -593,13 +503,13 @@ class EntraPulseLiteApp {
         const availableServers = this.mcpClient.getAvailableServers();
         console.log('[Main] Number of available MCP servers after reinitialization:', availableServers.length);
         
-        // MCPClient.getAvailableServers() returns string[] of server names
-        const lokkaServerExists = availableServers.includes('external-lokka');
+        // MCPClient.getAvailableServers() returns MCPServerConfig[] of enabled servers
+        const lokkaServerExists = availableServers.some(server => server.name === 'external-lokka');
         if (lokkaServerExists) {
           console.log('[Main] ✅ External Lokka MCP server is available');
         } else {
           console.warn('[Main] ⚠️ External Lokka MCP server is NOT available');
-          console.log('[Main] Available servers:', availableServers);
+          console.log('[Main] Available servers:', availableServers.map(s => s.name));
         }
         
         console.log('[Main] MCP services reinitialized successfully');
@@ -764,10 +674,59 @@ class EntraPulseLiteApp {
       }
     });
 
-    // Open DevTools in development
-    if (process.env.NODE_ENV === 'development') {
+    // Open DevTools in development or if explicitly enabled
+    if (process.env.NODE_ENV === 'development' || 
+        process.env.ENABLE_DEVTOOLS === 'true' ||
+        process.env.DEBUG_MODE === 'true') {
       this.mainWindow.webContents.openDevTools();
     }
+    // Show additional debugging information in console when debug mode is enabled
+    if (process.env.DEBUG_MODE === 'true') {
+      console.log('🐛 Debug mode enabled - Enhanced logging active');
+      this.mainWindow.webContents.openDevTools();
+    }
+    globalShortcut.register('CommandOrControl+Shift+I', () => {
+      if (this.mainWindow) {
+        if (this.mainWindow.webContents.isDevToolsOpened()) {
+          this.mainWindow.webContents.closeDevTools();
+        } else {
+          this.mainWindow.webContents.openDevTools();
+        }
+      }
+    });
+    
+    // Also register F12 as alternative DevTools shortcut
+    globalShortcut.register('F12', () => {
+      if (this.mainWindow) {
+        if (this.mainWindow.webContents.isDevToolsOpened()) {
+          this.mainWindow.webContents.closeDevTools();
+        } else {
+          this.mainWindow.webContents.openDevTools();
+        }
+      }
+    });
+    
+    // Ctrl+Shift+J - Chrome DevTools console shortcut
+    globalShortcut.register('CommandOrControl+Shift+J', () => {
+      if (this.mainWindow) {
+        if (this.mainWindow.webContents.isDevToolsOpened()) {
+          this.mainWindow.webContents.closeDevTools();
+        } else {
+          this.mainWindow.webContents.openDevTools();
+        }
+      }
+    });
+    
+    // Ctrl+Shift+K - Firefox DevTools console shortcut
+    globalShortcut.register('CommandOrControl+Shift+K', () => {
+      if (this.mainWindow) {
+        if (this.mainWindow.webContents.isDevToolsOpened()) {
+          this.mainWindow.webContents.closeDevTools();
+        } else {
+          this.mainWindow.webContents.openDevTools();
+        }
+      }
+    });
   }
 
   private setupMenu(): void {
@@ -866,19 +825,81 @@ class EntraPulseLiteApp {
   }
 
   private setupIpcHandlers(): void {
-    // Asset path handler
+    // Asset path handler with comprehensive debugging
     ipcMain.handle('app:getAssetPath', (event, assetName: string) => {
-      const assetPath = path.join(process.resourcesPath || app.getAppPath(), 'assets', assetName);
+      // Handle different asset locations based on build system
+      let assetPath: string;
+      
+      this.sendDebugToRenderer(`Asset path request for: ${assetName}`);
+      this.sendDebugToRenderer(`App is packaged: ${app.isPackaged}`);
+      this.sendDebugToRenderer(`Process resourcesPath: ${process.resourcesPath}`);
+      this.sendDebugToRenderer(`App getAppPath: ${app.getAppPath()}`);
+      this.sendDebugToRenderer(`__dirname: ${__dirname}`);
+      
+      if (app.isPackaged) {
+        // For packaged apps, try multiple possible asset locations
+        if (process.resourcesPath) {
+          // Electron Builder puts assets in resources/assets
+          assetPath = path.join(process.resourcesPath, 'assets', assetName);
+          this.sendDebugToRenderer(`Using Electron Builder path: ${assetPath}`);
+        } else {
+          // Fallback to app path for other packagers
+          assetPath = path.join(app.getAppPath(), 'assets', assetName);
+          this.sendDebugToRenderer(`Using fallback app path: ${assetPath}`);
+        }
+      } else {
+        // Development mode - assets are in the project root
+        assetPath = path.join(__dirname, '..', '..', 'assets', assetName);
+        this.sendDebugToRenderer(`Using development path: ${assetPath}`);
+      }
+      
+      // Check if the file exists and log the result
+      const fs = require('fs');
+      const exists = fs.existsSync(assetPath);
+      this.sendDebugToRenderer(`Asset path exists: ${exists} - ${assetPath}`);
+      
       return assetPath;
+    });
+
+    // DevTools toggle handler
+    ipcMain.handle('app:toggleDevTools', () => {
+      if (this.mainWindow) {
+        if (this.mainWindow.webContents.isDevToolsOpened()) {
+          this.mainWindow.webContents.closeDevTools();
+        } else {
+          this.mainWindow.webContents.openDevTools();
+        }
+      }
     });
 
     // Authentication handlers
     ipcMain.handle('auth:login', async () => {
+      // Send debug info to renderer immediately
+      this.mainWindow?.webContents.send('main-debug', '🔐 [AUTH-HANDLER] *** IPC AUTH:LOGIN HANDLER CALLED ***');
+      
+      console.log('🔐 [AUTH-HANDLER] auth:login IPC handler called!');
       try {
+        console.log('🔐 [AUTH-HANDLER] Starting authService.login()...');
+        this.mainWindow?.webContents.send('main-debug', '🔐 [AUTH-HANDLER] Starting authService.login()...');
+        
         const result = await this.authService.login();
+        
+        console.log('🔐 [AUTH-HANDLER] authService.login() completed:', {
+          success: !!result,
+          resultType: typeof result
+        });
+        this.mainWindow?.webContents.send('main-debug', `🔐 [AUTH-HANDLER] authService.login() completed: success=${!!result}`);
           // After successful login, reinitialize LLM service with full configuration
         if (result) {
-          console.log('🔐 Login successful, reloading LLM configuration...');
+          this.mainWindow?.webContents.send('main-debug', '🔐 [AUTH-SUCCESS] Login successful, reloading LLM configuration...');
+          
+          console.log('🔐 [AUTH-SUCCESS] Login successful, reloading LLM configuration...');
+          console.log('🔐 [AUTH-SUCCESS] Authentication result:', {
+            success: !!result,
+            hasAccessToken: !!(result && result.accessToken),
+            tokenLength: result?.accessToken?.length || 0,
+            scopes: result?.scopes || []
+          });
             // CRITICAL: Set authentication verification flag first
           this.configService.setAuthenticationVerified(true);
           
@@ -922,19 +943,50 @@ class EntraPulseLiteApp {
               // Stored Entra config exists - use Enhanced Graph Access or custom credentials
               console.log('🔐 Using stored Entra credentials for Lokka MCP...');
               
-              // Priority 1: Custom credentials (when custom client ID and tenant ID are provided)
-              if (storedEntraConfig.clientId && storedEntraConfig.tenantId) {
+              // Priority 1: Custom credentials (when custom client ID and tenant ID are provided and NOT using Enhanced Graph Access)
+              if (storedEntraConfig.clientId && storedEntraConfig.tenantId && !storedEntraConfig.useGraphPowerShell) {
                 console.log('🔧 Using custom application credentials (Priority 1) for Lokka MCP');
                 const clientId = storedEntraConfig.clientId;
                 authMode = 'custom-credentials';
-                env = {
-                  TENANT_ID: storedEntraConfig.tenantId,
-                  CLIENT_ID: clientId,
-                  USE_CLIENT_TOKEN: 'true'
-                };
+                
+                // CRITICAL FIX: Even for custom credentials, we need to get the user's access token when using USE_CLIENT_TOKEN=true
+                try {
+                  const token = await this.authService.getToken();
+                  
+                  if (token && token.accessToken) {
+                    console.log('🔐 [ACCESS-TOKEN-CUSTOM] Successfully obtained user access token for custom credentials');
+                    console.log(`🔧 [ACCESS-TOKEN-CUSTOM] Token length: ${token.accessToken.length} characters`);
+                    console.log(`🔧 [ACCESS-TOKEN-CUSTOM] Token expires: ${token.expiresOn ? new Date(token.expiresOn).toISOString() : 'Unknown'}`);
+                    this.mainWindow?.webContents.send('main-debug', `🔐 [ACCESS-TOKEN-CUSTOM] Got user access token for custom credentials: ${token.accessToken.length} chars`);
+                    
+                    env = {
+                      TENANT_ID: storedEntraConfig.tenantId,
+                      CLIENT_ID: clientId,
+                      ACCESS_TOKEN: token.accessToken,
+                      USE_INTERACTIVE: 'false', // Use provided token, don't authenticate interactively
+                      USE_CLIENT_TOKEN: 'true'
+                    };
+                  } else {
+                    console.error('❌ Failed to get user access token for custom credentials, falling back to client token mode');
+                    this.mainWindow?.webContents.send('main-debug', '❌ Failed to get user access token for custom credentials');
+                    env = {
+                      TENANT_ID: storedEntraConfig.tenantId,
+                      CLIENT_ID: clientId,
+                      USE_CLIENT_TOKEN: 'true'
+                    };
+                  }
+                } catch (error) {
+                  console.error('❌ Error getting user access token for custom credentials:', error);
+                  this.mainWindow?.webContents.send('main-debug', `❌ Error getting user access token for custom credentials: ${(error as Error).message}`);
+                  env = {
+                    TENANT_ID: storedEntraConfig.tenantId,
+                    CLIENT_ID: clientId,
+                    USE_CLIENT_TOKEN: 'true'
+                  };
+                }
               }
-              // Priority 2: Enhanced Graph Access (when enabled and no custom credentials)
-              else if (storedEntraConfig?.useGraphPowerShell) {
+              // Priority 2: Enhanced Graph Access (when explicitly enabled)
+              else if (storedEntraConfig.useGraphPowerShell) {
                 console.log('🔧 Using Enhanced Graph Access mode (Priority 2) - leveraging user\'s token with enhanced permissions');
                 authMode = 'enhanced-graph-access';
                 
@@ -944,15 +996,16 @@ class EntraPulseLiteApp {
                   const token = await this.authService.getToken();
                   
                   if (token && token.accessToken) {
-                    console.log('🔐 Successfully obtained user access token for Enhanced Graph Access');
-                    console.log(`🔧 Token length: ${token.accessToken.length} characters`);
-                    console.log(`🔧 Token expires: ${token.expiresOn ? new Date(token.expiresOn).toISOString() : 'Unknown'}`);
-                    
+                    console.log('🔐 [ACCESS-TOKEN] Successfully obtained user access token for Enhanced Graph Access');
+                    console.log(`🔧 [ACCESS-TOKEN] Token length: ${token.accessToken.length} characters`);
+                    console.log(`🔧 [ACCESS-TOKEN] Token expires: ${token.expiresOn ? new Date(token.expiresOn).toISOString() : 'Unknown'}`);
+                    console.log(`🔧 [ACCESS-TOKEN] Token preview: ${token.accessToken.substring(0, 50)}...`);
                     env = {
                       TENANT_ID: 'common', // Use 'common' for multi-tenant Enhanced Graph Access
                       CLIENT_ID: process.env.MSAL_CLIENT_ID || 'ad6e8b1b-4ced-4088-bd72-d3d02e71df4e', // Current client ID
                       ACCESS_TOKEN: token.accessToken,
-                      USE_INTERACTIVE: 'false' // Use provided token, don't authenticate interactively
+                      USE_INTERACTIVE: 'false', // Use provided token, don't authenticate interactively
+                      USE_CLIENT_TOKEN: 'true' // Required for Lokka to use client-provided-token mode
                     };
                   } else {
                     console.error('❌ Failed to get user access token for Enhanced Graph Access, falling back to client token mode');
@@ -975,7 +1028,7 @@ class EntraPulseLiteApp {
                 // Priority 3: Default fallback mode
                 console.log('🔧 Using default delegated mode with default client ID');
                 const clientId = process.env.MSAL_CLIENT_ID || 'ad6e8b1b-4ced-4088-bd72-d3d02e71df4e';
-                authMode = 'delegated-fallback';
+                authMode = 'delegated';
                 env = {
                   TENANT_ID: 'common',
                   CLIENT_ID: clientId,
@@ -992,16 +1045,16 @@ class EntraPulseLiteApp {
                 const token = await this.authService.getToken();
                 
                 if (token && token.accessToken) {
-                  console.log('🔐 Successfully obtained user access token for Lokka MCP');
-                  console.log(`🔧 Token length: ${token.accessToken.length} characters`);
-                  console.log(`🔧 Token expires: ${token.expiresOn ? new Date(token.expiresOn).toISOString() : 'Unknown'}`);
-                  
+                  console.log('🔐 [ACCESS-TOKEN-USER] Successfully obtained user access token for Lokka MCP');
+                  console.log(`🔧 [ACCESS-TOKEN-USER] Token length: ${token.accessToken.length} characters`);
+                  console.log(`🔧 [ACCESS-TOKEN-USER] Token expires: ${token.expiresOn ? new Date(token.expiresOn).toISOString() : 'Unknown'}`);
+                  console.log(`🔧 [ACCESS-TOKEN-USER] Token preview: ${token.accessToken.substring(0, 50)}...`);
                   env = {
                     TENANT_ID: 'common', // Use common for multi-tenant user tokens
                     CLIENT_ID: process.env.MSAL_CLIENT_ID || 'ad6e8b1b-4ced-4088-bd72-d3d02e71df4e', // Default EntraPulse Lite client ID
                     ACCESS_TOKEN: token.accessToken,
-                    USE_INTERACTIVE: 'false' // Use provided token, don't authenticate interactively
-                    // Don't set USE_CLIENT_TOKEN when providing ACCESS_TOKEN directly
+                    USE_INTERACTIVE: 'false', // Use provided token, don't authenticate interactively
+                    USE_CLIENT_TOKEN: 'true' // Required for Lokka to use client-provided-token mode
                   };
                 } else {
                   console.error('❌ Failed to get user access token for Lokka MCP');
@@ -1053,14 +1106,55 @@ class EntraPulseLiteApp {
             this.mcpClient = new MCPClient(this.config.mcpServers, mcpAuthService);
             
             console.log('🚀 MCP services reinitialized with authentication context');
+            
+            // NOW explicitly start the Lokka MCP server after successful authentication
+            console.log('🔄 [LOKKA-RESTART] Starting Lokka MCP server after successful authentication...');
+            this.mainWindow?.webContents.send('main-debug', '🔄 [LOKKA-RESTART] Starting Lokka MCP server after successful authentication...');
+            
+            console.log('🔄 [LOKKA-RESTART] Environment variables for restart:', {
+              hasAccessToken: !!env.ACCESS_TOKEN,
+              useClientToken: env.USE_CLIENT_TOKEN,
+              clientId: env.CLIENT_ID ? env.CLIENT_ID.substring(0, 8) + '...' : 'None',
+              tenantId: env.TENANT_ID,
+              authMode: authMode
+            });
+            this.mainWindow?.webContents.send('main-debug', `🔄 [LOKKA-RESTART] Environment variables for restart: hasAccessToken=${!!env.ACCESS_TOKEN}, authMode=${authMode}`);
+            
+            try {
+              await this.mcpClient.startServer('external-lokka');
+              console.log('✅ [LOKKA-RESTART] Lokka MCP server started successfully after authentication');
+            } catch (lokkaError) {
+              console.error('❌ [LOKKA-RESTART] Failed to start Lokka MCP server after authentication:', lokkaError);
+              // Try the server manager as fallback
+              try {
+                const lokkaServer = this.mcpServerManager.getServer('external-lokka');
+                if (lokkaServer && lokkaServer.startServer) {
+                  await lokkaServer.startServer();
+                  console.log('✅ [LOKKA-RESTART] Lokka MCP server started successfully via server manager after authentication');
+                } else {
+                  console.warn('⚠️ [LOKKA-RESTART] Could not find Lokka server instance in manager');
+                }
+              } catch (managerError) {
+                console.error('❌ [LOKKA-RESTART] Failed to start Lokka via server manager after authentication:', managerError);
+              }
+            }
           } else {
             console.log('⚠️ Lokka MCP server not found in configuration');
           }
         }
         
+        console.log('🔐 [AUTH-HANDLER] Authentication flow completed successfully');
+        this.mainWindow?.webContents.send('main-debug', '🔐 [AUTH-HANDLER] Authentication flow completed successfully');
         return result;
       } catch (error) {
-        console.error('Login failed:', error);
+        console.error('🔐 [AUTH-HANDLER] Login failed:', error);
+        this.mainWindow?.webContents.send('main-debug', `🔐 [AUTH-HANDLER] Login failed: ${(error as Error).message}`);
+        
+        console.error('🔐 [AUTH-HANDLER] Error details:', {
+          message: (error as Error).message,
+          stack: (error as Error).stack,
+          errorType: typeof error
+        });
         throw error;
       }
     });    ipcMain.handle('auth:logout', async () => {
@@ -1697,6 +1791,55 @@ class EntraPulseLiteApp {
       }
     });
 
+    // MCP Configuration handlers
+    ipcMain.handle('config:getMCPConfig', async () => {
+      try {
+        return this.configService.getMCPConfig();
+      } catch (error) {
+        console.error('Get MCP config failed:', error);
+        throw error;
+      }
+    });
+
+    ipcMain.handle('config:saveMCPConfig', async (event, mcpConfig) => {
+      try {
+        this.configService.saveMCPConfig(mcpConfig);
+        
+        // Reinitialize MCP services after configuration change
+        console.log('[Main] MCP config saved, reinitializing MCP services...');
+        await this.reinitializeServices();
+        
+        return true;
+      } catch (error) {
+        console.error('Save MCP config failed:', error);
+        throw error;
+      }
+    });
+
+    ipcMain.handle('config:updateLokkaMCPConfig', async (event, lokkaConfig) => {
+      try {
+        this.configService.updateLokkaMCPConfig(lokkaConfig);
+        
+        // Reinitialize MCP services after Lokka configuration change
+        console.log('[Main] Lokka MCP config updated, reinitializing MCP services...');
+        await this.reinitializeServices();
+        
+        return true;
+      } catch (error) {
+        console.error('Update Lokka MCP config failed:', error);
+        throw error;
+      }
+    });
+
+    ipcMain.handle('config:isLokkaMCPConfigured', async () => {
+      try {
+        return this.configService.isLokkaMCPConfigured();
+      } catch (error) {
+        console.error('Check Lokka MCP configuration failed:', error);
+        throw error;
+      }
+    });
+
     // Auto-updater handlers
     ipcMain.handle('updater:checkForUpdates', async () => {
       try {
@@ -2019,7 +2162,7 @@ class EntraPulseLiteApp {
             if (this.mcpClient) {
               console.log('🔍 Calling /organization endpoint without filters for tenant:', payload.tid);
               
-              const orgInfo = await this.mcpClient.callTool('external-lokka', 'Lokka-Microsoft', {
+              const orgInfo = await this.mcpClient.callTool('external-lokka', 'microsoft_graph_query', {
                 apiType: 'graph',
                 path: '/organization',
                 method: 'get'
@@ -2151,6 +2294,48 @@ class EntraPulseLiteApp {
         const fullLLMConfig = this.configService.getLLMConfig();
         console.log('🔧 Initializing LLM service with full configuration from existing session');
           this.llmService = new EnhancedLLMService(fullLLMConfig, this.authService, this.mcpClient);
+          
+          // Get current user token for MCP configuration
+          console.log('🔐 Getting current user access token for MCP configuration...');
+          let currentUserToken: string | undefined;
+          try {
+            const tokenResult = await this.authService.getToken();
+            currentUserToken = tokenResult?.accessToken;
+            console.log('🔐 Successfully retrieved current user token for MCP:', !!currentUserToken);
+            if (currentUserToken) {
+              console.log('🔐 Token details:', {
+                tokenLength: currentUserToken.length,
+                tokenPrefix: currentUserToken.substring(0, 20) + '...',
+                tokenType: currentUserToken.startsWith('ey') ? 'JWT' : 'other'
+              });
+            }
+          } catch (tokenError) {
+            console.warn('⚠️ Failed to retrieve current user token:', tokenError);
+          }
+          
+          // Update MCP server configuration with current user token
+          console.log('🔧 Updating MCP server configuration with current user token...');
+          this.config.mcpServers = this.createMCPServerConfig(currentUserToken);
+          
+          // Reinitialize MCP services with updated configuration
+          console.log('🔧 Reinitializing MCP services with updated configuration...');
+          const mcpAuthService = new MCPAuthService(this.authService);
+          
+          // Stop existing MCP services gracefully
+          if (this.mcpServerManager) {
+            try {
+              await this.mcpServerManager.stopAllServers();
+            } catch (error) {
+              console.warn('Error stopping existing MCP server manager:', error);
+            }
+          }
+          
+          // Initialize new MCP services with updated configuration
+          this.mcpServerManager = new MCPServerManager(this.config.mcpServers, mcpAuthService, this.configService);
+          this.mcpClient = new MCPClient(this.config.mcpServers, mcpAuthService);
+          
+          console.log('🚀 MCP services reinitialized with current user token');
+          
           // Check if we have stored Entra credentials and update MCP server config
           console.log('🔧 Checking for stored Entra credentials during initialization...');
           if (storedEntraConfig && (
@@ -2167,8 +2352,8 @@ class EntraPulseLiteApp {
               let authMode = 'application-credentials';
               let env: Record<string, string>;
               
-              // Priority 1: Custom application credentials (when custom client ID is provided)
-              if (storedEntraConfig.clientId && storedEntraConfig.tenantId) {
+              // Priority 1: Custom application credentials (when custom client ID is provided AND Enhanced Graph Access is NOT enabled)
+              if (storedEntraConfig.clientId && storedEntraConfig.tenantId && !storedEntraConfig.useGraphPowerShell) {
                 console.log('🔧 Using custom application credentials (Priority 1) during startup');
                 clientId = storedEntraConfig.clientId;
                 authMode = 'delegated';
@@ -2177,7 +2362,7 @@ class EntraPulseLiteApp {
                   CLIENT_ID: clientId
                 };
               }
-              // Priority 2: Enhanced Graph Access mode (when enabled and no custom credentials)
+              // Priority 2: Enhanced Graph Access mode (when explicitly enabled)
               else if (storedEntraConfig.useGraphPowerShell) {
                 console.log('🔧 Using Enhanced Graph Access mode (Priority 2) with Microsoft Graph PowerShell client ID during startup');
                 clientId = '14d82eec-204b-4c2f-b7e8-296a70dab67e'; // Microsoft Graph PowerShell client ID
@@ -2228,7 +2413,7 @@ class EntraPulseLiteApp {
                     console.log('🔐 Successfully obtained Enhanced Graph Access token during startup');
                     env.ACCESS_TOKEN = token.accessToken;
                     env.USE_INTERACTIVE = 'false'; // Use provided token, don't authenticate interactively
-                    // Don't set USE_CLIENT_TOKEN when providing ACCESS_TOKEN directly
+                    env.USE_CLIENT_TOKEN = 'true'; // Required for Lokka to use client-provided-token mode
                   } else {
                     console.error('❌ Failed to get Enhanced Graph Access token during startup, falling back to client token mode');
                     env.USE_CLIENT_TOKEN = 'true';
@@ -2260,6 +2445,25 @@ class EntraPulseLiteApp {
               enhancedAccess: Boolean(storedEntraConfig.useGraphPowerShell)
             });
             
+            // Save the ACCESS_TOKEN to the MCP configuration so it persists across restarts
+            try {
+              const currentMCPConfig = this.configService.getMCPConfig();
+              const updatedMCPConfig = {
+                ...currentMCPConfig,
+                lokka: {
+                  ...currentMCPConfig.lokka,
+                  enabled: true,
+                  authMode: authMode as any,
+                  accessToken: env.ACCESS_TOKEN, // Store the access token for persistence
+                  useGraphPowerShell: Boolean(storedEntraConfig.useGraphPowerShell)
+                }
+              };
+              this.configService.saveMCPConfig(updatedMCPConfig);
+              console.log('💾 Saved updated Lokka MCP configuration with access token to persistent storage');
+            } catch (saveError) {
+              console.warn('⚠️ Failed to save MCP config to storage:', saveError);
+            }
+            
             // Reinitialize MCP services with updated config
             const mcpAuthService = new MCPAuthService(this.authService);
             
@@ -2271,7 +2475,8 @@ class EntraPulseLiteApp {
                 console.warn('Error stopping MCP server manager:', error);
               }
             }
-              // Create new MCP services with updated configuration
+            
+            // Create new MCP services with updated configuration
             this.mcpServerManager = new MCPServerManager(this.config.mcpServers, mcpAuthService, this.configService);
             this.mcpClient = new MCPClient(this.config.mcpServers, mcpAuthService);
             
@@ -2330,8 +2535,8 @@ class EntraPulseLiteApp {
     if (storedEntraConfig && storedEntraConfig.tenantId) {
       console.log('[Main] Using stored Entra configuration');
       
-      // Priority 1: Custom application credentials (when custom client ID is provided)
-      if (storedEntraConfig.clientId) {
+      // Priority 1: Custom application credentials (when custom client ID is provided AND Enhanced Graph Access is NOT enabled)
+      if (storedEntraConfig.clientId && !storedEntraConfig.useGraphPowerShell) {
         console.log('[Main] Custom User Token mode (Priority 1) with user-provided app registration');
         return {
           clientId: storedEntraConfig.clientId,
@@ -2340,7 +2545,7 @@ class EntraPulseLiteApp {
         };
       }
       
-      // Priority 2: Enhanced Graph Access (when enabled and no custom credentials)
+      // Priority 2: Enhanced Graph Access (when enabled)
       if (storedEntraConfig.useGraphPowerShell) {
         console.log('[Main] Enhanced Graph Access enabled (Priority 2), using Microsoft Graph PowerShell client ID');
         return {
@@ -2390,7 +2595,7 @@ class EntraPulseLiteApp {
       
       // Check if the server is in the available servers list
       const availableServers = this.mcpClient.getAvailableServers();
-      const lokkaServerExists = availableServers.includes('external-lokka');
+      const lokkaServerExists = availableServers.some(server => server.name === 'external-lokka');
       
       console.log('[Main] MCP server availability check:', {
         availableServers,
@@ -2446,7 +2651,161 @@ class EntraPulseLiteApp {
       return false;
     }
   }
+
+  /**
+   * Initialize MCP configuration in storage if not exists
+   */
+  private async initializeMCPConfiguration(): Promise<void> {
+    console.log('[Main] ===== INITIALIZING MCP CONFIGURATION =====');
+    this.sendDebugToRenderer('[Main] ===== INITIALIZING MCP CONFIGURATION =====');
+    
+    try {
+      console.log('[Main] About to call getMCPConfig in initializeMCPConfiguration...');
+      this.sendDebugToRenderer('[Main] About to call getMCPConfig in initializeMCPConfiguration...');
+      
+      // Check if MCP config already exists
+      const existingMCPConfig = this.configService.getMCPConfig();
+      console.log('[Main] getMCPConfig returned in initializeMCPConfiguration:', existingMCPConfig);
+      this.sendDebugToRenderer(`[Main] getMCPConfig returned - exists: ${!!existingMCPConfig}`);
+      
+      console.log('[Main] About to call getAuthConfiguration in initializeMCPConfiguration...');
+      this.sendDebugToRenderer('[Main] About to call getAuthConfiguration in initializeMCPConfiguration...');
+      
+      // Always update the configuration with current Entra settings to ensure it's in sync
+      const authConfig = await this.getAuthConfiguration();
+      console.log('[Main] getAuthConfiguration completed in initializeMCPConfiguration');
+      this.sendDebugToRenderer('[Main] getAuthConfiguration completed in initializeMCPConfiguration');
+      
+      const storedEntraConfig = this.configService.getEntraConfig();
+      console.log('[Main] getEntraConfig completed in initializeMCPConfiguration');
+      this.sendDebugToRenderer('[Main] getEntraConfig completed in initializeMCPConfiguration');
+      
+      // Determine authentication mode based on current configuration
+      let authMode: 'client-credentials' | 'enhanced-graph-access' | 'delegated' = 'delegated';
+      let enabled = false;
+      
+      if (storedEntraConfig?.useGraphPowerShell) {
+        authMode = 'enhanced-graph-access';
+        enabled = true;
+      } else if (authConfig.clientSecret && authConfig.clientId && authConfig.tenantId) {
+        authMode = 'client-credentials';
+        enabled = true;
+      } else if (authConfig.clientId && authConfig.tenantId) {
+        authMode = 'delegated';
+        enabled = true;
+      }
+      
+      // Update MCP configuration (this will merge with existing settings)
+      const mcpConfigUpdate: Partial<MCPConfig['lokka']> = {
+        enabled,
+        authMode,
+        useGraphPowerShell: storedEntraConfig?.useGraphPowerShell || false
+      };
+
+      // Only store credentials that are actually needed for the specific auth mode
+      if (authMode === 'client-credentials') {
+        // Client credentials mode: store client ID, tenant ID, and client secret
+        mcpConfigUpdate.clientId = authConfig.clientId;
+        mcpConfigUpdate.tenantId = authConfig.tenantId;
+        mcpConfigUpdate.clientSecret = authConfig.clientSecret;
+      } else if (authMode === 'enhanced-graph-access') {
+        // Enhanced Graph Access: doesn't need stored credentials, uses Microsoft Graph PowerShell client ID and runtime tokens
+        // Clear any stored credentials as they're not needed
+        mcpConfigUpdate.clientId = undefined;
+        mcpConfigUpdate.tenantId = undefined;
+        mcpConfigUpdate.clientSecret = undefined;
+      } else if (authMode === 'delegated') {
+        // Delegated mode: store client ID and tenant ID for fallback, but primarily uses runtime access tokens
+        mcpConfigUpdate.clientId = authConfig.clientId;
+        mcpConfigUpdate.tenantId = authConfig.tenantId;
+        mcpConfigUpdate.clientSecret = undefined; // Not needed for delegated mode
+      }
+
+      this.configService.updateLokkaMCPConfig(mcpConfigUpdate);
+      
+      console.log('[Main] Updated MCP configuration with latest Entra settings:', {
+        authMode,
+        enabled,
+        hasClientSecret: !!authConfig.clientSecret,
+        useGraphPowerShell: storedEntraConfig?.useGraphPowerShell,
+        wasExistingConfig: !!existingMCPConfig.lokka
+      });
+    } catch (error) {
+      console.error('[Main] Failed to initialize MCP configuration:', error);
+    }
+  }
+
+  /**
+   * Create MCP server configuration from stored settings
+   */
+  private createMCPServerConfig(userToken?: string): MCPServerConfig[] {
+    console.log('[Main] createMCPServerConfig called with userToken:', !!userToken);
+    
+    console.log('[Main] About to call getMCPConfig...');
+    const mcpConfig = this.configService.getMCPConfig();
+    console.log('[Main] getMCPConfig returned:', mcpConfig);
+    
+    console.log('[Main] About to call getLokkaMCPEnvironment...');
+    const lokkaEnv = this.configService.getLokkaMCPEnvironment(userToken);
+    console.log('[Main] getLokkaMCPEnvironment returned:', lokkaEnv);
+    
+    console.log('[Main] About to call isLokkaMCPConfigured...');
+    const isLokkaConfigured = this.configService.isLokkaMCPConfigured();
+    console.log('[Main] isLokkaMCPConfigured returned:', isLokkaConfigured);
+    
+    const serverConfigs: MCPServerConfig[] = [
+      {
+        name: 'external-lokka',
+        type: 'external-lokka' as const,
+        port: 0, // Not used for stdin/stdout MCP servers
+        enabled: isLokkaConfigured,
+        command: 'npx',
+        args: ['-y', '@merill/lokka'],
+        env: lokkaEnv
+      },
+      {
+        name: 'fetch',
+        type: 'fetch' as const,
+        port: 3002, // Only used for built-in fetch server
+        enabled: mcpConfig.fetch?.enabled ?? true,
+      },
+      {
+        name: 'microsoft-docs',
+        type: 'microsoft-docs' as const,
+        port: 0, // Not used for HTTP-based MCP servers
+        enabled: mcpConfig.microsoftDocs?.enabled ?? true,
+        url: 'https://learn.microsoft.com/api/mcp',
+        authConfig: {
+          type: 'none' // Microsoft Docs MCP doesn't require authentication
+        }
+      },
+    ];
+    
+    console.log('[Main] createMCPServerConfig returning:', serverConfigs);
+    return serverConfigs;
+  }
+
+  /**
+   * Send debug messages from main process to renderer for DevTools visibility
+   */
+  private sendDebugToRenderer(message: string): void {
+    try {
+      if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+        this.mainWindow.webContents.send('main-debug', message);
+      }
+    } catch (error) {
+      // Silently ignore errors when window isn't ready yet
+    }
+  }
 }
 
 // Create and start the application
+console.log('[Main] ===== STARTING ENTRAPULSE LITE MAIN PROCESS =====');
+console.log('[Main] Node.js version:', process.version);
+console.log('[Main] Electron version:', process.versions.electron);
+console.log('[Main] Chrome version:', process.versions.chrome);
+console.log('[Main] Process PID:', process.pid);
+console.log('[Main] Working directory:', process.cwd());
+console.log('[Main] About to create EntraPulseLiteApp instance...');
+
 new EntraPulseLiteApp();

@@ -2,12 +2,13 @@
 // Secure configuration management service with user-context awareness
 
 import Store from 'electron-store';
-import { LLMConfig, CloudLLMProviderConfig, EntraConfig } from '../types';
+import { LLMConfig, CloudLLMProviderConfig, EntraConfig, MCPConfig } from '../types';
 
 interface UserConfigSchema {
   llm: LLMConfig;
   lastUsedProvider: string;
   entraConfig?: EntraConfig;
+  mcpConfig?: MCPConfig; // Add MCP configuration storage
   modelCache: {
     [provider: string]: {
       models: string[];
@@ -969,5 +970,245 @@ export class ConfigService {
     }
     
     return true; // Default to enabled
+  }
+
+  // =========================
+  // MCP Configuration Methods
+  // =========================
+
+  /**
+   * Get MCP configuration
+   * @returns Current MCP configuration or default
+   */
+  getMCPConfig(): MCPConfig {
+    console.log(`[ConfigService] getMCPConfig called - ServiceLevel: ${this.isServiceLevelAccess}, AuthVerified: ${this.isAuthenticationVerified}`);
+    
+    // For packaged apps, we need to be more permissive to ensure MCP config works
+    // The main process should always have access to MCP configuration
+    if (!this.isServiceLevelAccess && !this.isAuthenticationVerified) {
+      console.warn('[ConfigService] MCP config access with limited permissions - using stored config');
+      // Try to access stored config directly for MCP functionality
+      try {
+        const appConfig = this.store.get('application');
+        const usersConfig = this.store.get('users');
+        console.log('[ConfigService] Store access attempt:', {
+          hasAppConfig: !!appConfig,
+          hasUsersConfig: !!usersConfig,
+          appMcpConfig: !!appConfig?.mcpConfig,
+          userKeys: usersConfig ? Object.keys(usersConfig) : []
+        });
+        
+        const storedConfig = appConfig?.mcpConfig || 
+                           (usersConfig && Object.values(usersConfig)[0] as UserConfigSchema)?.mcpConfig;
+        if (storedConfig) {
+          console.log('[ConfigService] Successfully retrieved MCP config from store:', storedConfig);
+          return storedConfig;
+        }
+      } catch (error) {
+        console.warn('[ConfigService] Could not access stored MCP config:', error);
+      }
+      console.log('[ConfigService] Falling back to default MCP config');
+      return this.getDefaultMCPConfig();
+    }
+
+    try {
+      const context = this.getCurrentContext();
+      console.log('[ConfigService] Retrieved context MCP config:', context.mcpConfig);
+      return context.mcpConfig || this.getDefaultMCPConfig();
+    } catch (error) {
+      console.warn('Error getting MCP config:', error);
+      return this.getDefaultMCPConfig();
+    }
+  }
+
+  /**
+   * Save MCP configuration
+   * @param config MCP configuration to save
+   */
+  saveMCPConfig(config: MCPConfig): void {
+    // For packaged apps, we need to be more permissive to ensure MCP config works
+    if (!this.isServiceLevelAccess && !this.isAuthenticationVerified) {
+      console.warn('[ConfigService] MCP config save with limited permissions - saving to default location');
+      // Try to save to application config as fallback
+      try {
+        const appConfig = this.store.get('application') || this.getDefaultUserConfig();
+        appConfig.mcpConfig = config;
+        this.store.set('application', appConfig);
+        console.log('[ConfigService] MCP configuration saved to application config');
+        return;
+      } catch (error) {
+        console.error('Error saving MCP config to application config:', error);
+        throw error;
+      }
+    }
+
+    try {
+      const context = this.getCurrentContext();
+      context.mcpConfig = config;
+      this.saveCurrentContext(context);
+      console.log('[ConfigService] MCP configuration saved successfully');
+    } catch (error) {
+      console.error('Error saving MCP config:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get default MCP configuration
+   * @returns Default MCP configuration
+   */
+  private getDefaultMCPConfig(): MCPConfig {
+    return {
+      lokka: {
+        enabled: false,
+        authMode: 'delegated',
+        useGraphPowerShell: false
+      },
+      fetch: {
+        enabled: true
+      },
+      microsoftDocs: {
+        enabled: true
+      }
+    };
+  }
+
+  /**
+   * Update Lokka MCP configuration
+   * @param lokkaConfig Lokka-specific configuration
+   */
+  updateLokkaMCPConfig(lokkaConfig: Partial<MCPConfig['lokka']>): void {
+    const currentConfig = this.getMCPConfig();
+    const defaultLokka = this.getDefaultMCPConfig().lokka!;
+    const existingLokka = currentConfig.lokka;
+    
+    currentConfig.lokka = {
+      enabled: lokkaConfig?.enabled ?? existingLokka?.enabled ?? defaultLokka.enabled,
+      authMode: lokkaConfig?.authMode ?? existingLokka?.authMode ?? defaultLokka.authMode,
+      clientId: lokkaConfig?.clientId ?? existingLokka?.clientId,
+      tenantId: lokkaConfig?.tenantId ?? existingLokka?.tenantId,
+      clientSecret: lokkaConfig?.clientSecret ?? existingLokka?.clientSecret,
+      useGraphPowerShell: lokkaConfig?.useGraphPowerShell ?? existingLokka?.useGraphPowerShell ?? defaultLokka.useGraphPowerShell,
+      accessToken: lokkaConfig?.accessToken ?? existingLokka?.accessToken
+    };
+    this.saveMCPConfig(currentConfig);
+  }
+
+  /**
+   * Get Lokka MCP environment variables for current configuration
+   * @param userToken Optional user access token for runtime
+   * @returns Environment variables object for Lokka MCP server
+   */
+  getLokkaMCPEnvironment(userToken?: string): Record<string, string> {
+    console.log('[ConfigService] getLokkaMCPEnvironment called with userToken:', !!userToken);
+    const mcpConfig = this.getMCPConfig();
+    console.log('[ConfigService] MCP config retrieved:', mcpConfig);
+    const lokkaConfig = mcpConfig.lokka;
+    console.log('[ConfigService] Lokka config:', lokkaConfig);
+
+    if (!lokkaConfig || !lokkaConfig.enabled) {
+      return {};
+    }
+
+    let env: Record<string, string> = {
+      // Always add debug flag for better troubleshooting
+      DEBUG_ENTRAPULSE: 'true',
+      NODE_ENV: 'development'
+    };
+
+    switch (lokkaConfig.authMode) {
+      case 'client-credentials':
+        if (lokkaConfig.clientId && lokkaConfig.tenantId && lokkaConfig.clientSecret) {
+          env = {
+            ...env,
+            TENANT_ID: lokkaConfig.tenantId,
+            CLIENT_ID: lokkaConfig.clientId,
+            CLIENT_SECRET: lokkaConfig.clientSecret
+          };
+        }
+        break;
+
+      case 'enhanced-graph-access':
+        env = {
+          ...env,
+          TENANT_ID: 'common',
+          CLIENT_ID: '14d82eec-204b-4c2f-b7e8-296a70dab67e' // Microsoft Graph PowerShell client ID
+        };
+        // Check for runtime token first, then stored token
+        const accessToken = userToken || lokkaConfig.accessToken;
+        if (accessToken) {
+          env.ACCESS_TOKEN = accessToken;
+          env.USE_INTERACTIVE = 'false';
+          env.USE_CLIENT_TOKEN = 'true'; // Always needed for client-provided-token mode
+        } else {
+          env.USE_CLIENT_TOKEN = 'true';
+        }
+        break;
+
+      case 'delegated':
+      default:
+        // Check for runtime token first, then stored token
+        const delegatedAccessToken = userToken || lokkaConfig.accessToken;
+        if (delegatedAccessToken) {
+          env = {
+            ...env,
+            ACCESS_TOKEN: delegatedAccessToken,
+            USE_INTERACTIVE: 'false',
+            USE_CLIENT_TOKEN: 'true' // Always needed for client-provided-token mode
+          };
+        } else if (lokkaConfig.clientId && lokkaConfig.tenantId) {
+          env = {
+            ...env,
+            TENANT_ID: lokkaConfig.tenantId,
+            CLIENT_ID: lokkaConfig.clientId,
+            USE_CLIENT_TOKEN: 'true'
+          };
+        }
+        break;
+    }
+
+    console.log('[ConfigService] Generated Lokka MCP environment:', {
+      authMode: lokkaConfig.authMode,
+      hasRuntimeToken: !!userToken,
+      hasStoredToken: !!lokkaConfig.accessToken,
+      runtimeTokenLength: userToken ? userToken.length : 0,
+      storedTokenLength: lokkaConfig.accessToken ? lokkaConfig.accessToken.length : 0,
+      envKeys: Object.keys(env),
+      useClientToken: env.USE_CLIENT_TOKEN,
+      useInteractive: env.USE_INTERACTIVE,
+      tenantId: env.TENANT_ID,
+      clientId: env.CLIENT_ID ? env.CLIENT_ID.substring(0, 8) + '...' : 'none'
+    });
+
+    return env;
+  }
+
+  /**
+   * Check if Lokka MCP is properly configured
+   * @returns Whether Lokka MCP can be enabled
+   */
+  isLokkaMCPConfigured(): boolean {
+    console.log('[ConfigService] isLokkaMCPConfigured called');
+    const mcpConfig = this.getMCPConfig();
+    console.log('[ConfigService] MCP config for isConfigured check:', mcpConfig);
+    const lokkaConfig = mcpConfig.lokka;
+    console.log('[ConfigService] Lokka config for isConfigured check:', lokkaConfig);
+
+    if (!lokkaConfig || !lokkaConfig.enabled) {
+      console.log('[ConfigService] Lokka MCP not enabled or missing config');
+      return false;
+    }
+
+    switch (lokkaConfig.authMode) {
+      case 'client-credentials':
+        return !!(lokkaConfig.clientId && lokkaConfig.tenantId && lokkaConfig.clientSecret);
+      
+      case 'enhanced-graph-access':
+        return true; // Always available if enabled
+      
+      case 'delegated':
+      default:
+        return !!(lokkaConfig.clientId && lokkaConfig.tenantId);
+    }
   }
 }

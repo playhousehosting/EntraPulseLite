@@ -128,7 +128,7 @@ describe('GuestAccountAnalyzer', () => {
       // Verify correct call was made
       expect(mockMCPClient.callTool).toHaveBeenCalledWith(
         'external-lokka',
-        'd94_Lokka-Microsoft',
+        'microsoft_graph_query',
         {
           apiType: 'graph',
           method: 'get',

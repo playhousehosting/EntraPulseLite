@@ -64,27 +64,34 @@ export class StdioMCPClient {
     
     const env = {
       ...process.env,
-      ...this.config.options?.env
+      ...this.config.env
     };
 
     // CRITICAL DEBUG: Log the environment variables for any MCP process
     console.log('🚨 CRITICAL DEBUG: Environment variables being passed to MCP process:');
     console.log(`🚨 Config name: ${this.config.name}`);
+    console.log(`🚨 Config.env:`, this.config.env);
     console.log(`🚨 USE_CLIENT_TOKEN in process.env: ${process.env.USE_CLIENT_TOKEN}`);
-    console.log(`🚨 USE_CLIENT_TOKEN in config.options?.env: ${this.config.options?.env?.USE_CLIENT_TOKEN}`);
+    console.log(`🚨 USE_CLIENT_TOKEN in config.env: ${this.config.env?.USE_CLIENT_TOKEN}`);
     console.log(`🚨 USE_CLIENT_TOKEN in merged env: ${env.USE_CLIENT_TOKEN}`);
-    console.log(`🚨 Config options env keys: ${Object.keys(this.config.options?.env || {})}`);
+    console.log(`🚨 Config env keys: ${Object.keys(this.config.env || {})}`);
     console.log(`🚨 Merged env keys count: ${Object.keys(env).length}`);
     
     // Extra debug for Lokka specifically
     if (this.config.name?.includes('lokka') || this.config.command?.includes('lokka')) {
       console.log('🔥 LOKKA SPECIFIC DEBUG:');
-      console.log('🔥 TENANT_ID:', env.TENANT_ID ? 'SET' : 'NOT SET');
-      console.log('🔥 CLIENT_ID:', env.CLIENT_ID ? 'SET' : 'NOT SET');
-      console.log('🔥 CLIENT_SECRET:', env.CLIENT_SECRET ? 'SET' : 'NOT SET');
+      console.log('🔥 Raw config.env passed from main:', JSON.stringify(this.config.env, null, 2));
+      console.log('🔥 TENANT_ID:', env.TENANT_ID ? `SET (${env.TENANT_ID})` : 'NOT SET');
+      console.log('🔥 CLIENT_ID:', env.CLIENT_ID ? `SET (${env.CLIENT_ID})` : 'NOT SET');
+      console.log('🔥 CLIENT_SECRET:', env.CLIENT_SECRET ? 'SET (length: ' + env.CLIENT_SECRET.length + ')' : 'NOT SET');
+      console.log('🔥 ACCESS_TOKEN:', env.ACCESS_TOKEN ? `SET (${env.ACCESS_TOKEN.substring(0, 20)}...)` : 'NOT SET');
       console.log('🔥 USE_CLIENT_TOKEN:', env.USE_CLIENT_TOKEN);
+      console.log('🔥 USE_INTERACTIVE:', env.USE_INTERACTIVE);
       console.log('🔥 DEBUG_ENTRAPULSE:', env.DEBUG_ENTRAPULSE);
-      console.log('🔥 All env vars being passed:', JSON.stringify(env, null, 2));
+      console.log('🔥 NODE_ENV:', env.NODE_ENV);
+      console.log('🔥 All relevant env vars being passed to Lokka process:', Object.keys(env).filter(key => 
+        ['TENANT_ID', 'CLIENT_ID', 'CLIENT_SECRET', 'ACCESS_TOKEN', 'USE_CLIENT_TOKEN', 'USE_INTERACTIVE', 'DEBUG_ENTRAPULSE', 'NODE_ENV'].includes(key)
+      ).reduce((obj, key) => ({ ...obj, [key]: env[key] }), {}));
     }
 
     this.process = spawn(this.config.command!, this.config.args || [], {
@@ -109,9 +116,15 @@ export class StdioMCPClient {
       if (this.config.name?.includes('lokka') && stderrOutput) {
         console.log('🔥 LOKKA STDERR DETAILS:', stderrOutput);
         
-        // Check for specific messages about authentication mode
-        if (stderrOutput.includes('Client') || stderrOutput.includes('token') || stderrOutput.includes('auth')) {
-          console.log('🚨 LOKKA AUTHENTICATION MESSAGE DETECTED:', stderrOutput);
+        // Check for specific messages about authentication mode or token recognition
+        if (stderrOutput.includes('Client') || 
+            stderrOutput.includes('token') || 
+            stderrOutput.includes('auth') ||
+            stderrOutput.includes('environment') ||
+            stderrOutput.includes('TENANT_ID') ||
+            stderrOutput.includes('CLIENT_ID') ||
+            stderrOutput.includes('ACCESS_TOKEN')) {
+          console.log('🚨 LOKKA AUTHENTICATION/ENVIRONMENT MESSAGE DETECTED:', stderrOutput);
         }
       }
     });

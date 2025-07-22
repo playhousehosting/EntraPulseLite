@@ -94,6 +94,25 @@ export interface MCPAuthConfig {
   tenantId?: string;
 }
 
+// Add new interface for storing MCP configuration
+export interface MCPConfig {
+  lokka?: {
+    enabled: boolean;
+    authMode: 'client-credentials' | 'enhanced-graph-access' | 'delegated';
+    clientId?: string; // Used for 'client-credentials' and 'delegated' modes
+    tenantId?: string; // Used for 'client-credentials' and 'delegated' modes  
+    clientSecret?: string; // Only used for 'client-credentials' mode
+    useGraphPowerShell?: boolean; // Controls 'enhanced-graph-access' mode
+    accessToken?: string; // Runtime token for 'enhanced-graph-access' and 'delegated' modes
+  };
+  fetch?: {
+    enabled: boolean;
+  };
+  microsoftDocs?: {
+    enabled: boolean;
+  };
+}
+
 export interface MCPServerConfig {
   name: string;
   type: 'fetch' | 'external-lokka' | 'microsoft-docs';
@@ -155,7 +174,7 @@ export interface ElectronAPI {
     call: (server: string, toolName: string, arguments_: any) => Promise<any>;
     listServers: () => Promise<MCPServerConfig[]>;
     restartLokkaMCPServer: () => Promise<void>;
-  };config: {
+  };  config: {
     get: () => Promise<AppConfig>;
     update: (config: Partial<AppConfig>) => Promise<void>;
     getLLMConfig: () => Promise<LLMConfig>;
@@ -169,6 +188,11 @@ export interface ElectronAPI {
     getEntraConfig: () => Promise<EntraConfig | null>;
     saveEntraConfig: (config: EntraConfig) => Promise<void>;
     clearEntraConfig: () => Promise<void>;
+    // MCP Configuration methods
+    getMCPConfig: () => Promise<MCPConfig>;
+    saveMCPConfig: (config: MCPConfig) => Promise<void>;
+    updateLokkaMCPConfig: (config: Partial<MCPConfig['lokka']>) => Promise<void>;
+    isLokkaMCPConfigured: () => Promise<boolean>;
   };
   app: {
     getVersion: () => Promise<string>;

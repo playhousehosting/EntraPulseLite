@@ -108,7 +108,7 @@ describe('GuestAccountAnalyzer', () => {
       // Verify MCP client was called correctly
       expect(mockMcpClient.callTool).toHaveBeenCalledWith(
         'external-lokka',
-        'd94_Lokka-Microsoft',
+        'microsoft_graph_query',
         expect.objectContaining({
           apiType: 'graph',
           queryParams: expect.objectContaining({

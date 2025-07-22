@@ -123,8 +123,31 @@ export class MCPClient {
       arguments: arguments_,
     });
   }
+  async startServer(serverName: string): Promise<void> {
+    console.log(`Starting MCP server: ${serverName}`);
+    
+    const server = this.serverManager.getServer(serverName);
+    if (!server) {
+      throw new Error(`MCP server '${serverName}' not found`);
+    }
+    
+    if (server.startServer) {
+      await server.startServer();
+      console.log(`MCP server '${serverName}' started successfully`);
+    } else {
+      console.warn(`MCP server '${serverName}' has no startServer method`);
+    }
+  }
+
   getAvailableServers(): MCPServerConfig[] {
     return Array.from(this.servers.values()).filter(server => server.enabled);
+  }
+
+  getAvailableServerNames(): string[] {
+    return Array.from(this.servers.keys()).filter(name => {
+      const config = this.servers.get(name);
+      return config?.enabled || false;
+    });
   }
 
   async listResources(serverName: string): Promise<any[]> {

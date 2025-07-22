@@ -188,7 +188,7 @@ export class MCPExample {
     
     try {
       // Get the list of available servers
-      const servers = this.mcpClient.getAvailableServers();
+      const servers = this.mcpClient.getAvailableServerNames();
       
       // For each server, get the list of tools
       for (const server of servers) {

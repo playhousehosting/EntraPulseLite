@@ -85,6 +85,21 @@ const AppContent: React.FC<AppContentProps> = ({ settingsOpen, setSettingsOpen }
   // Setup event diagnostics for development
   useEffect(() => {
     setupEventDiagnostics();
+    
+    // Add listener for main process debug messages
+    const electronAPI = window.electronAPI as any;
+    if (electronAPI?.on) {
+      const handleMainDebug = (_event: any, message: string) => {
+        console.log(`[MAIN-DEBUG] ${message}`);
+      };
+      
+      electronAPI.on('main-debug', handleMainDebug);
+      
+      // Cleanup
+      return () => {
+        electronAPI.removeListener('main-debug', handleMainDebug);
+      };
+    }
   }, []);
   // Create dynamic theme based on mode
   const theme = createTheme({

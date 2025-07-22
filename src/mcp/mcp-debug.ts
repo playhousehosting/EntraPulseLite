@@ -28,7 +28,7 @@ export async function debugMCP(config: AppConfig): Promise<void> {
   const mcpClient = new MCPClient(config.mcpServers, mcpAuthService);
   
   // Check available servers
-  const servers = mcpClient.getAvailableServers();
+  const servers = mcpClient.getAvailableServerNames();
   console.log(`Available servers (${servers.length}):`, servers);
   
   // Try to list tools from each server

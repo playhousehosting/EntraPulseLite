@@ -207,6 +207,19 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
         console.log('📋 Authentication Info received:', authInfo);
         setAuthMode(authInfo.mode);
         
+        // CRITICAL: If user is already authenticated, trigger the backend authentication restart
+        // This ensures Lokka gets the proper ACCESS_TOKEN even for existing sessions
+        if (authInfo.isAuthenticated) {
+          console.log('🔐 [INIT] User already authenticated - triggering backend restart for Lokka...');
+          try {
+            // Call the auth:login handler to trigger Lokka restart with authentication
+            await window.electronAPI.auth.login();
+            console.log('✅ [INIT] Backend authentication restart completed for existing session');
+          } catch (restartError) {
+            console.warn('⚠️ [INIT] Failed to restart backend authentication for existing session:', restartError);
+          }
+        }
+        
         // Set permissions based on authentication mode and what's available
         if (authInfo.actualPermissions && authInfo.actualPermissions.length > 0) {
           console.log('✅ Using actual permissions from token:', authInfo.actualPermissions);
@@ -232,10 +245,16 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
       setError('Failed to initialize application');
     }
   };  const handleLogin = async () => {
+    console.log('🔐 [FRONTEND] handleLogin called - starting authentication...');
     try {
       setIsLoading(true);
       // Login with Microsoft
+      console.log('🔐 [FRONTEND] Calling window.electronAPI.auth.login()...');
       const token = await window.electronAPI.auth.login();
+      console.log('🔐 [FRONTEND] window.electronAPI.auth.login() completed:', {
+        success: !!token,
+        hasAccessToken: !!(token && token.accessToken)
+      });
       setAuthToken(token);
       const currentUser = await window.electronAPI.auth.getCurrentUser();      setUser(currentUser);
       setError(null);
