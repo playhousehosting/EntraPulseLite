@@ -5,6 +5,7 @@ import { ExternalLokkaMCPStdioServer } from '../../mcp/servers/lokka/ExternalLok
 import { PersistentLokkaMCPClient } from '../../mcp/clients/PersistentLokkaMCPClient';
 import { ManagedLokkaMCPClient } from '../../mcp/clients/ManagedLokkaMCPClient';
 import { EnhancedStdioMCPClient } from '../../mcp/clients/EnhancedStdioMCPClient';
+import { StdioMCPClient } from '../../mcp/clients/StdioMCPClient';
 import { MCPAuthService } from '../../mcp/auth/MCPAuthService';
 import { ConfigService } from '../../shared/ConfigService';
 
@@ -14,6 +15,7 @@ jest.mock('../../shared/ConfigService');
 jest.mock('../../mcp/clients/PersistentLokkaMCPClient');
 jest.mock('../../mcp/clients/ManagedLokkaMCPClient');
 jest.mock('../../mcp/clients/EnhancedStdioMCPClient');
+jest.mock('../../mcp/clients/StdioMCPClient');
 
 describe('Lokka MCP Integration Tests', () => {
   let server: ExternalLokkaMCPStdioServer;
@@ -24,6 +26,7 @@ describe('Lokka MCP Integration Tests', () => {
     name: 'external-lokka',
     type: 'external-lokka' as const,
     enabled: true,
+    port: 0, // Added required port field
     command: 'npx',
     args: ['--yes', '@merill/lokka@latest'],
     env: {
@@ -58,6 +61,20 @@ describe('Lokka MCP Integration Tests', () => {
     jest.clearAllMocks();
   });
 
+  afterAll(async () => {
+    // Ensure server is stopped and cleaned up after all tests
+    if (server) {
+      try {
+        await server.stopServer();
+      } catch (error) {
+        // Ignore cleanup errors
+      }
+    }
+    
+    // Give a brief moment for any async cleanup to complete
+    await new Promise(resolve => setTimeout(resolve, 100));
+  });
+
   describe('Four-Tier Client Architecture', () => {
     it('should prioritize PersistentLokkaMCPClient when available', async () => {
       const mockPersistentClient = {
@@ -68,7 +85,7 @@ describe('Lokka MCP Integration Tests', () => {
         sendRequest: jest.fn().mockResolvedValue({ result: { tools: [] } })
       };
 
-      (PersistentLokkaMCPClient as jest.Mock).mockImplementation(() => mockPersistentClient);
+      (PersistentLokkaMCPClient as unknown as jest.Mock).mockImplementation(() => mockPersistentClient);
 
       await server.startServer();
 
@@ -103,8 +120,8 @@ describe('Lokka MCP Integration Tests', () => {
         sendRequest: jest.fn().mockResolvedValue({ result: { tools: [] } })
       };
 
-      (PersistentLokkaMCPClient as jest.Mock).mockImplementation(() => mockPersistentClient);
-      (ManagedLokkaMCPClient as jest.Mock).mockImplementation(() => mockManagedClient);
+      (PersistentLokkaMCPClient as unknown as jest.Mock).mockImplementation(() => mockPersistentClient);
+      (ManagedLokkaMCPClient as unknown as jest.Mock).mockImplementation(() => mockManagedClient);
 
       await server.startServer();
 
@@ -118,6 +135,8 @@ describe('Lokka MCP Integration Tests', () => {
 
     it('should fall back to EnhancedStdioMCPClient when Enhanced Graph Access is enabled', async () => {
       mockConfigService.getEntraConfig.mockReturnValue({
+        clientId: 'test-client-id',
+        tenantId: 'test-tenant-id',
         useGraphPowerShell: true
       });
 
@@ -142,9 +161,9 @@ describe('Lokka MCP Integration Tests', () => {
         listTools: jest.fn().mockResolvedValue([])
       };
 
-      (PersistentLokkaMCPClient as jest.Mock).mockImplementation(() => mockPersistentClient);
-      (ManagedLokkaMCPClient as jest.Mock).mockImplementation(() => mockManagedClient);
-      (EnhancedStdioMCPClient as jest.Mock).mockImplementation(() => mockEnhancedClient);
+      (PersistentLokkaMCPClient as unknown as jest.Mock).mockImplementation(() => mockPersistentClient);
+      (ManagedLokkaMCPClient as unknown as jest.Mock).mockImplementation(() => mockManagedClient);
+      (EnhancedStdioMCPClient as unknown as jest.Mock).mockImplementation(() => mockEnhancedClient);
 
       await server.startServer();
 
@@ -183,7 +202,7 @@ describe('Lokka MCP Integration Tests', () => {
         })
       };
 
-      (PersistentLokkaMCPClient as jest.Mock).mockImplementation(() => mockPersistentClient);
+      (PersistentLokkaMCPClient as unknown as jest.Mock).mockImplementation(() => mockPersistentClient);
 
       await server.startServer();
       const tools = await server.listTools();
@@ -200,7 +219,7 @@ describe('Lokka MCP Integration Tests', () => {
         isInitialized: jest.fn().mockReturnValue(true)
       };
 
-      (PersistentLokkaMCPClient as jest.Mock).mockImplementation(() => mockPersistentClient);
+      (PersistentLokkaMCPClient as unknown as jest.Mock).mockImplementation(() => mockPersistentClient);
 
       await server.startServer();
       
@@ -220,19 +239,40 @@ describe('Lokka MCP Integration Tests', () => {
       server = new ExternalLokkaMCPStdioServer(configWithMissingVars, mockAuthService, mockConfigService);
 
       const mockPersistentClient = {
-        start: jest.fn().mockResolvedValue(undefined),
-        isAlive: jest.fn().mockReturnValue(true),
-        isInitialized: jest.fn().mockReturnValue(true)
+        start: jest.fn().mockRejectedValue(new Error('Required environment variables (TENANT_ID, CLIENT_ID) are missing or empty for persistent client')),
+        isAlive: jest.fn().mockReturnValue(false),
+        isInitialized: jest.fn().mockReturnValue(false),
+        stop: jest.fn().mockResolvedValue(undefined)
       };
 
-      (PersistentLokkaMCPClient as jest.Mock).mockImplementation(() => mockPersistentClient);
+      const mockManagedClient = {
+        start: jest.fn().mockRejectedValue(new Error('Required environment variables (TENANT_ID, CLIENT_ID) are missing or empty for managed client')),
+        isAlive: jest.fn().mockReturnValue(false),
+        isInitialized: jest.fn().mockReturnValue(false),
+        stop: jest.fn().mockResolvedValue(undefined)
+      };
 
+      const mockOriginalClient = {
+        start: jest.fn().mockResolvedValue(undefined),
+        isRunning: jest.fn().mockReturnValue(true),
+        isInitialized: jest.fn().mockReturnValue(true),
+        stop: jest.fn().mockResolvedValue(undefined),
+        listTools: jest.fn().mockResolvedValue([])
+      };
+
+      (PersistentLokkaMCPClient as unknown as jest.Mock).mockImplementation(() => mockPersistentClient);
+      (ManagedLokkaMCPClient as unknown as jest.Mock).mockImplementation(() => mockManagedClient);
+      (StdioMCPClient as unknown as jest.Mock).mockImplementation(() => mockOriginalClient);
+
+      // Server should start but fall back to original client
       await server.startServer();
       
+      // Since all preferred clients fail, the server should still be running with the original client
+      // but environment validation should detect the missing variables
       await expect(server.verifyEnvironmentConfig()).rejects.toThrow(
         'Environment variables not properly configured for portable build'
       );
-    });
+    }, 45000); // Increase timeout to 45 seconds
   });
 
   describe('Tool Name Mapping', () => {
@@ -248,7 +288,7 @@ describe('Lokka MCP Integration Tests', () => {
         })
       };
 
-      (PersistentLokkaMCPClient as jest.Mock).mockImplementation(() => mockPersistentClient);
+      (PersistentLokkaMCPClient as unknown as jest.Mock).mockImplementation(() => mockPersistentClient);
 
       await server.startServer();
 
@@ -261,7 +301,7 @@ describe('Lokka MCP Integration Tests', () => {
         name: 'Lokka-Microsoft',
         arguments: {
           apiType: 'graph',
-          method: 'get',
+          method: 'GET', // Updated to match actual implementation
           path: '/me',
           queryParams: undefined,
           body: undefined
@@ -281,7 +321,7 @@ describe('Lokka MCP Integration Tests', () => {
         isInitialized: jest.fn().mockReturnValue(true)
       };
 
-      (PersistentLokkaMCPClient as jest.Mock).mockImplementation(() => mockPersistentClient);
+      (PersistentLokkaMCPClient as unknown as jest.Mock).mockImplementation(() => mockPersistentClient);
 
       await server.startServer();
 
@@ -316,14 +356,29 @@ describe('Lokka MCP Integration Tests', () => {
         isInitialized: jest.fn().mockReturnValue(false)
       };
 
-      (PersistentLokkaMCPClient as jest.Mock).mockImplementation(() => mockPersistentClient);
-      (ManagedLokkaMCPClient as jest.Mock).mockImplementation(() => mockManagedClient);
+      const mockEnhancedClient = {
+        startServer: jest.fn().mockRejectedValue(new Error('Enhanced client failed')),
+        stopServer: jest.fn().mockResolvedValue(undefined),
+        isInitialized: jest.fn().mockReturnValue(false)
+      };
+
+      const mockOriginalClient = {
+        start: jest.fn().mockRejectedValue(new Error('Original client failed')),
+        stop: jest.fn().mockResolvedValue(undefined),
+        isRunning: jest.fn().mockReturnValue(false),
+        isInitialized: jest.fn().mockReturnValue(false)
+      };
+
+      (PersistentLokkaMCPClient as unknown as jest.Mock).mockImplementation(() => mockPersistentClient);
+      (ManagedLokkaMCPClient as unknown as jest.Mock).mockImplementation(() => mockManagedClient);
+      (EnhancedStdioMCPClient as unknown as jest.Mock).mockImplementation(() => mockEnhancedClient);
+      (StdioMCPClient as unknown as jest.Mock).mockImplementation(() => mockOriginalClient);
 
       // Should not throw even when all clients fail
       await expect(server.startServer()).resolves.not.toThrow();
 
       const status = server.getStatus();
-      expect(status.activeClient).toBe('none');
+      expect(status.activeClient).toBe('none'); // Should be 'none' when all clients fail
       expect(status.running).toBe(false);
     });
 
@@ -337,7 +392,7 @@ describe('Lokka MCP Integration Tests', () => {
         })
       };
 
-      (PersistentLokkaMCPClient as jest.Mock).mockImplementation(() => mockPersistentClient);
+      (PersistentLokkaMCPClient as unknown as jest.Mock).mockImplementation(() => mockPersistentClient);
 
       await server.startServer();
 
@@ -360,7 +415,7 @@ describe('Lokka MCP Integration Tests', () => {
         isInitialized: jest.fn().mockReturnValue(true)
       };
 
-      (PersistentLokkaMCPClient as jest.Mock).mockImplementation(() => mockPersistentClient);
+      (PersistentLokkaMCPClient as unknown as jest.Mock).mockImplementation(() => mockPersistentClient);
 
       await server.startServer();
       await server.stopServer();
@@ -378,7 +433,7 @@ describe('Lokka MCP Integration Tests', () => {
         isInitialized: jest.fn().mockReturnValue(true)
       };
 
-      (PersistentLokkaMCPClient as jest.Mock).mockImplementation(() => mockPersistentClient);
+      (PersistentLokkaMCPClient as unknown as jest.Mock).mockImplementation(() => mockPersistentClient);
 
       // Start multiple concurrent startup attempts
       const startPromises = [

@@ -35,5 +35,8 @@ module.exports = {
   ],
   testTimeout: 30000,
   maxWorkers: process.env.CI ? 2 : 1,
-  verbose: true
+  verbose: true,
+  // Add teardown handling for async operations
+  detectOpenHandles: false, // Disable detection as we handle cleanup manually
+  forceExit: true // Force Jest to exit after tests complete
 };

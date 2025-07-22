@@ -59,11 +59,38 @@ describe('ExternalLokkaMCPStdioServer Four-Tier Architecture', () => {
   afterEach(async () => {
     if (server) {
       try {
+        // Force stop with timeout to prevent hanging tests
+        await Promise.race([
+          server.stopServer(),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Timeout')), 5000)
+          )
+        ]);
+      } catch (error) {
+        // Ignore cleanup errors in tests, but log them for debugging
+        console.log('Test cleanup error (ignoring):', error instanceof Error ? error.message : String(error));
+      }
+      
+      // Give time for process events to complete before Jest teardown
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    
+    // Clear all mocks
+    jest.clearAllMocks();
+  });
+
+  afterAll(async () => {
+    // Final cleanup to ensure no lingering processes
+    if (server) {
+      try {
         await server.stopServer();
       } catch (error) {
-        // Ignore cleanup errors in tests
+        // Ignore cleanup errors
       }
     }
+    
+    // Give extra time for any lingering async operations
+    await new Promise(resolve => setTimeout(resolve, 200));
   });
 
   describe('Client Priority System', () => {

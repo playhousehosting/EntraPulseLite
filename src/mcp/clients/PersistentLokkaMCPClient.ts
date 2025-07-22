@@ -564,6 +564,17 @@ export class PersistentLokkaMCPClient extends EventEmitter {
    * Clean up resources
    */
   private cleanup(): void {
+    // Remove all event listeners from the process to prevent late firing
+    if (this.process) {
+      // In test environment, force removal of all listeners immediately
+      if (process.env.NODE_ENV === 'test' || typeof jest !== 'undefined') {
+        this.process.removeAllListeners();
+        this.process.kill('SIGKILL'); // Force kill in tests to prevent hanging
+      } else {
+        this.process.removeAllListeners();
+      }
+    }
+    
     this.process = null;
     this.isRunning = false;
     this.initialized = false;
@@ -630,6 +641,18 @@ export class PersistentLokkaMCPClient extends EventEmitter {
    */
   private sendDebugToRenderer(message: string): void {
     try {
+      // Check if we're in a test environment, Jest is tearing down, or Electron isn't available
+      if (
+        typeof jest !== 'undefined' || 
+        process.env.NODE_ENV === 'test' ||
+        typeof require === 'undefined' ||
+        !this.isElectronAvailable()
+      ) {
+        // In test environment or when Electron is not available, just log to console
+        console.log(`[PERSISTENT-LOKKA-TRACE] ${message}`);
+        return;
+      }
+
       const { BrowserWindow } = require('electron');
       const mainWindow = BrowserWindow.getAllWindows().find((win: any) => !win.isDestroyed());
       
@@ -642,6 +665,20 @@ export class PersistentLokkaMCPClient extends EventEmitter {
       }
     } catch (error) {
       // Silently fail - this is just for debugging
+      // In case of Jest teardown, just log to console
+      console.log(`[PERSISTENT-LOKKA-TRACE] ${message}`);
+    }
+  }
+
+  /**
+   * Check if Electron is available and not being torn down
+   */
+  private isElectronAvailable(): boolean {
+    try {
+      // Try to access electron without importing it
+      return process.versions.electron !== undefined && typeof require !== 'undefined';
+    } catch {
+      return false;
     }
   }
 }
