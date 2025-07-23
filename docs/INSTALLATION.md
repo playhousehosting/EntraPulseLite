@@ -3,7 +3,7 @@
 ## 🚀 Quick Start for End Users
 
 ### Prerequisites
-- **Windows 10/11** (primary platform)- `"What applications are registered in my tenant?"` - App information (Enhanced Graph Access)
+- **Windows 10/11** (primary platform)- `"What groups am I a member of?"` - App information (Enhanced Graph Access)
 
 ## 🛠️ Developer Installation
 
@@ -12,7 +12,7 @@
 - **npm** 8.0 or higher (or **yarn** 1.22+)
 - **Git** for version control
 
-### Optional but RecommendedMicrosoft Work/School Account** (required for Microsoft Graph access)
+### Microsoft Work/School Account** 
 - **Internet Connection** for cloud LLM providers & Setup Guide
 
 ## � Quick Start for End Users
@@ -23,11 +23,6 @@
 - **npm** 8.0 or higher (or **yarn** 1.22+)
 - **Git** for version control
 
-### Optional but Recommendedquisites
-- **Windows 10/11** (primary platform)
-- **Microsoft Work/School Account** (required for Microsoft Graph access)
-- **Internet Connection** for cloud LLM providers
-
 ### 1. Download and Run
 1. Download the **EntraPulse Lite Portable** executable from [GitHub Releases](https://github.com/darrenjrobinson/EntraPulseLite/releases)
 2. Run `EntraPulse Lite.exe` - no installation required!
@@ -35,7 +30,7 @@
 
 ### 2. Sign In to Microsoft
 1. Click **"Sign In"** when prompted
-2. Use your **Work or School Microsoft account** (personal accounts have limited functionality)
+2. Use your **Work or School Microsoft account** (personal MSA Accounts will not work)
 3. Grant the requested permissions when prompted
 4. You'll see your profile information once authenticated
 
@@ -45,14 +40,14 @@
 1. Go to **Settings** → **Cloud Providers** → **Anthropic**
 2. Get your API key from [console.anthropic.com](https://console.anthropic.com)
 3. Enter your API key
-4. Select **Claude 4 Sonnet** as your model (optimal for Microsoft Graph queries and documentation)
+4. Select **Claude 4 Sonnet** as your model (optimal for Microsoft Graph knowledge)
 5. Click **Save**
 
 #### Option B: OpenAI GPT-4o (Alternative)
 1. Go to **Settings** → **Cloud Providers** → **OpenAI** 
 2. Get your API key from [platform.openai.com](https://platform.openai.com)
 3. Enter your API key
-4. Select **GPT-4o** as your model (excellent for Microsoft Graph integration)
+4. Select **GPT-4o** as your model (excellent for Microsoft Graph knowledge)
 5. Click **Save**
 
 #### Option C: Azure OpenAI (Enterprise)
@@ -72,10 +67,10 @@ For enterprise users with Azure OpenAI deployments:
 
 EntraPulse Lite supports two delegated permission modes:
 
-#### Option A: Enhanced Graph Access (Recommended)
+#### Option A: Enhanced Graph Access (Quick Start)
 1. Go to **Settings** → **Entra Application Settings**
 2. Toggle **"Enhanced Graph Access (Microsoft Graph PowerShell)"** to **ON**
-3. Enter your **Tenant ID** only (the Microsoft Graph PowerShell Client ID is pre-configured)
+3. Enter your **Tenant ID** only (optional to direct authentication to your tenant rather than the common login endpoint. The Microsoft Graph PowerShell Client ID is pre-configured)
 4. Click **Save Configuration**
 
 The application will automatically use the Microsoft Graph PowerShell application registration (`14d82eec-204b-4c2f-b7e8-296a70dab67e`) which provides comprehensive delegated permissions for Graph API access.
@@ -98,7 +93,7 @@ The application will automatically use the Microsoft Graph PowerShell applicatio
 1. In the chat interface, ask: **"Who am I?"**
 2. You should see your Microsoft profile information
 3. Try: **"What groups am I a member of?"**
-4. Try: **"Show me recent emails"** (will request additional permissions if needed)
+4. Try: **"Show me the organiation configuration for the tenant"** (will advise if additional permissions are needed)
 
 ### 🎉 You're Ready to Go!
 
@@ -129,7 +124,7 @@ Your EntraPulse Lite is now configured with:
 **❌ "Permission denied" for Graph queries:**
 - Try queries that require basic permissions first: "Who am I?"
 - Enhanced Graph Access may need admin consent for some permissions
-- Some queries may require additional permissions - the app will prompt you
+- Some queries may require additional permissions - the app will advise you
 
 **✅ Working correctly? Try these sample queries:**
 
@@ -139,8 +134,6 @@ Your EntraPulse Lite is now configured with:
 - `"Show me my recent emails"` - Email access (requires consent)
 - `"List users in my organization"` - Directory queries (Enhanced Graph Access)
 - `"What applications are registered in my tenant?"` - App information (Enhanced Graph Access)
-- `"Show me the latest files in my OneDrive"` - File access
-- `"Get my calendar events for this week"` - Calendar access
 
 ### Microsoft Docs MCP Knowledge Queries
 - `"What is the Microsoft Graph API to get transitive group memberships?"`
@@ -199,7 +192,6 @@ All configuration is done through the application UI:
 **Authentication Field Requirements:**
 - **Client ID**: Optional - only used when Enhanced Graph Access is disabled
 - **Tenant ID**: Required for both custom app authentication and Enhanced Graph Access
-- **Client Secret**: Not used - all authentication uses delegated permissions
 
 No environment files are needed - all settings are stored securely using `electron-store` with encryption.
 
@@ -290,9 +282,9 @@ EntraPulse Lite supports multiple delegated authentication modes, each providing
 |------|------------|-------------------|--------------|----------|
 | **Default User Token** | Delegated | Microsoft defaults | ✅ Yes | Basic personal use |
 | **Custom User Token** | Delegated | Your app registration | ✅ Yes | Enhanced personal use |
-| **Enhanced Graph Access** | Delegated | Microsoft Graph PowerShell | ✅ Yes | Broad API access |
+| **Enhanced Graph Access** | Delegated | Microsoft Graph PowerShell | ✅ Yes | Broad basic API access |
 
-> **📝 Note**: All authentication modes use delegated permissions with user context. True application-only authentication (client credentials flow) is not currently implemented.
+> **📝 Note**: All authentication modes use delegated permissions with user context. True application-only authentication (client credentials flow) is not implemented.
 
 ### Basic Setup (Default)
 EntraPulse Lite works out of the box with Microsoft's authentication:
@@ -372,7 +364,7 @@ For enterprise scenarios requiring custom permissions:
    - Go to **Settings** → **Entra Configuration**
    - Toggle **"Enhanced Graph Access"** to **ON**
    - Enter your **Tenant ID** only
-   - **Leave Client ID and Client Secret fields empty** (automatically uses Microsoft Graph PowerShell client)
+   - **Leave Client ID fields empty** (automatically uses Microsoft Graph PowerShell client)
    - Click **Save Configuration**
    - **Result**: Microsoft Graph PowerShell delegated permissions
 
@@ -390,7 +382,6 @@ For enterprise scenarios requiring custom permissions:
 > - **Platform Type**: Use "Mobile and desktop applications" NOT "Single-page application"
 > - **Redirect URI**: Must be exactly `http://localhost` to match the authentication flow
 > - **Public Client Flows**: Must be enabled for desktop applications
-> - **Client Secret**: Optional for delegated permissions, required for application permissions
 
 ## 🧪 Verification
 

@@ -2,7 +2,7 @@
 
 A free community desktop application that provides natural language querying of Microsoft Graph APIs through local LLM integration. EntraPulse Lite is a lightweight derivative of the EntraPulse project, designed as an all-in-one desktop solution similar to Claude Desktop.
 
-[](./docs/EntraPulse%20Lite%20-%20Hello.png)
+![](./docs/EntraPulse%20Lite%20-%20Hello.png)
 
 ## 🚀 Features
 
@@ -58,12 +58,14 @@ src/
   - **Hybrid Mode** - Prefer cloud with local fallback, or use both based on availability
 
 **Authentication Options:**
-- **Enhanced Graph Access** (Recommended) - Uses Microsoft Graph PowerShell client ID with comprehensive delegated permissions
+- **Enhanced Graph Access** (Quick Start) - Uses Microsoft Graph PowerShell client ID with built-in delegated permissions
+
+![](./docs/EntraPulse%20Lite%20MSGraph%20PowerShell%20App%20Mode.png)
+
 - **Custom Application Mode** - Use your own Entra App Registration with delegated permissions configured for your specific needs
 
-**Required for functional use:**
-- **Microsoft Graph PowerShell client ID** (Enhanced Graph Access mode) - No setup required, built-in comprehensive permissions
-- **OR Custom Entra App Registration** - Required for Custom Application mode with delegated permissions configured for intended Microsoft Graph operations
+![](./docs/EntraPulse%20Lite%20MSGraph%20Custom%20App%20Mode.png)
+
 
 ## 👨‍💻 For Developers & Contributors
 
@@ -95,9 +97,13 @@ npm start
    - **Cloud** (Recommended): Add API keys in Settings for Anthropic Claude Sonnet, Azure OpenAI GPT-4o, OpenAI, or Google Gemini
    - **Local**: Install Ollama or LM Studio for privacy-focused processing (see [Local LLM Setup](#local-llm-setup))
 
+![](./docs/EntraPulse%20Lite%20Local%20LLM%20Settings.png)
+
 ### Cloud LLM Setup (Recommended)
 
 For optimal performance and reliability, we recommend using cloud-based AI providers:
+
+![](./docs/EntraPulse%20Lite%20Cloud%20LLM%20Settings.png)
 
 #### Option 1: Anthropic Claude Sonnet (Recommended)
 1. Visit [Anthropic Console](https://console.anthropic.com)
@@ -119,7 +125,7 @@ For optimal performance and reliability, we recommend using cloud-based AI provi
 
 For privacy-focused AI processing, install a local LLM:
 
-#### Option 1: Ollama (Recommended)
+#### Option 1: Ollama (Recommended using Docker)
 ```bash
 # Install Ollama
 curl -fsSL https://ollama.ai/install.sh | sh
@@ -140,7 +146,7 @@ See [docs/INSTALLATION.md](docs/INSTALLATION.md) for detailed setup instructions
 ### Delegated Permission Modes
 EntraPulse Lite uses delegated permissions exclusively for secure, user-context access to Microsoft Graph:
 
-**Enhanced Graph Access (Recommended):**
+**Enhanced Graph Access (Quick Start):**
 - Uses the Microsoft Graph PowerShell client ID (14d82eec-204b-4c2f-b7e8-296a70dab67e)
 - Provides comprehensive delegated permissions out-of-the-box
 - No application registration setup required
