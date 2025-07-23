@@ -2,6 +2,8 @@
 
 A free community desktop application that provides natural language querying of Microsoft Graph APIs through local LLM integration. EntraPulse Lite is a lightweight derivative of the EntraPulse project, designed as an all-in-one desktop solution similar to Claude Desktop.
 
+[](./docs/EntraPulse%20Lite%20-%20Hello.png)
+
 ## 🚀 Features
 
 - **Enhanced Graph Access**: Uses Microsoft Graph PowerShell client ID for comprehensive delegated permissions
