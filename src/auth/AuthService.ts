@@ -385,14 +385,16 @@ export class AuthService {
   }
 
   /**
-   * Get the current authentication token
+   * Get the current authentication token with automatic refresh
    * @returns Authentication token or null if not authenticated
    */
   async getToken(): Promise<AuthToken | null> {
     try {
       if (!this.pca || !this.config?.auth?.scopes) {
         throw new Error('Authentication service not initialized');
-      }      if (this.useClientCredentials && this.pca instanceof ConfidentialClientApplication) {
+      }
+
+      if (this.useClientCredentials && this.pca instanceof ConfidentialClientApplication) {
         // For client credentials flow, just get a new token each time
         return this.signIn();
       } else if (this.pca instanceof PublicClientApplication) {
@@ -401,21 +403,51 @@ export class AuthService {
         
         if (accounts.length > 0 && this.account) {
           try {
-            // Try to acquire token silently
+            // Try to acquire token silently - MSAL will automatically refresh if needed
+            console.log('🔄 Attempting silent token acquisition...');
             const result = await this.pca.acquireTokenSilent({
               scopes: this.config.auth.scopes,
-              account: this.account
+              account: this.account,
+              forceRefresh: false // Let MSAL decide when to refresh
             });
             
+            console.log('✅ Silent token acquisition successful');
             return {
               accessToken: result.accessToken,
               idToken: result.idToken || '',
               expiresOn: result.expiresOn || new Date(Date.now() + 3600 * 1000),
               scopes: this.config.auth.scopes
             };
-          } catch (error) {
-            console.log('Silent token acquisition failed, requiring sign-in');
-            // Fall through to require sign-in
+          } catch (silentError) {
+            console.log('⚠️ Silent token acquisition failed, trying force refresh...', silentError);
+            
+            // If silent acquisition fails, try with force refresh
+            try {
+              const refreshResult = await this.pca.acquireTokenSilent({
+                scopes: this.config.auth.scopes,
+                account: this.account,
+                forceRefresh: true // Force refresh the token
+              });
+              
+              console.log('✅ Force refresh token acquisition successful');
+              return {
+                accessToken: refreshResult.accessToken,
+                idToken: refreshResult.idToken || '',
+                expiresOn: refreshResult.expiresOn || new Date(Date.now() + 3600 * 1000),
+                scopes: this.config.auth.scopes
+              };
+            } catch (refreshError) {
+              console.error('❌ Force refresh also failed:', refreshError);
+              
+              // If both silent and force refresh fail, the user needs to sign in again
+              // This could happen if the refresh token has also expired (usually after 90 days)
+              const errorMessage = (refreshError as any)?.errorCode || (refreshError as any)?.message || 'Token refresh failed';
+              console.log('🔐 User needs to authenticate again due to:', errorMessage);
+              
+              // Clear the cached account and require sign-in
+              this.account = null;
+              throw new Error('Authentication token expired - please sign in again');
+            }
           }
         }
         

@@ -781,6 +781,22 @@ export class ExternalLokkaMCPStdioServer {
         result = await activeClient.callTool(actualToolName, mappedArguments);
       }
       
+      // Check if the result indicates a token error
+      if (this.isTokenError(result)) {
+        console.log('🔄 Token error detected, attempting to refresh and retry...');
+        await this.refreshTokenAndRestart();
+        
+        // Retry the call with refreshed token
+        if (clientType === 'persistent' || clientType === 'managed') {
+          result = await activeClient.sendRequest('tools/call', {
+            name: actualToolName,
+            arguments: mappedArguments
+          });
+        } else {
+          result = await activeClient.callTool(actualToolName, mappedArguments);
+        }
+      }
+      
       // Debug the result for portable build
       const resultDebug = {
         success: !result?.isError,
@@ -807,8 +823,32 @@ export class ExternalLokkaMCPStdioServer {
       console.log(`🔧 ExternalLokkaMCPStdioServer: Tool result from ${clientType} client:`, result);
       return result;
     } catch (error) {
+      // Check if this is a token error
+      const errorMessage = (error as Error).message || '';
+      if (this.isTokenErrorFromException(error)) {
+        console.log('🔄 Token error detected in exception, attempting to refresh and retry...');
+        try {
+          await this.refreshTokenAndRestart();
+          
+          // Retry the call with refreshed token
+          let result;
+          if (clientType === 'persistent' || clientType === 'managed') {
+            result = await activeClient.sendRequest('tools/call', {
+              name: actualToolName,
+              arguments: mappedArguments
+            });
+          } else {
+            result = await activeClient.callTool(actualToolName, mappedArguments);
+          }
+          return result;
+        } catch (refreshError) {
+          console.error('❌ Token refresh failed:', refreshError);
+          throw new Error('Authentication token expired and refresh failed. Please sign in again.');
+        }
+      }
+      
       console.error('🔧 [Portable Debug] Tool call failed:', {
-        error: (error as Error).message,
+        error: errorMessage,
         toolName,
         clientType,
         hasEnvVars: Object.keys(this.config.env || {}).length > 0
@@ -1169,6 +1209,71 @@ export class ExternalLokkaMCPStdioServer {
       console.log('✅ [Lokka Restart] Lokka MCP server restarted after authentication');
     } catch (error) {
       console.error('❌ [Lokka Restart] Failed to restart Lokka with authentication:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Check if the result indicates a token error
+   */
+  private isTokenError(result: any): boolean {
+    if (!result) return false;
+    
+    // Check for error text in response content
+    const content = result.content?.[0]?.text || '';
+    const lowerContent = content.toLowerCase();
+    
+    return lowerContent.includes('failed to acquire access token') ||
+           lowerContent.includes('token has expired') ||
+           lowerContent.includes('unauthorized') ||
+           lowerContent.includes('401') ||
+           lowerContent.includes('authentication failed') ||
+           lowerContent.includes('access token is invalid');
+  }
+
+  /**
+   * Check if an exception indicates a token error
+   */
+  private isTokenErrorFromException(error: any): boolean {
+    const message = ((error as Error)?.message || '').toLowerCase();
+    
+    return message.includes('failed to acquire access token') ||
+           message.includes('token has expired') ||
+           message.includes('unauthorized') ||
+           message.includes('401') ||
+           message.includes('authentication failed') ||
+           message.includes('access token is invalid') ||
+           message.includes('authentication token expired');
+  }
+
+  /**
+   * Refresh the authentication token and restart the MCP server
+   */
+  private async refreshTokenAndRestart(): Promise<void> {
+    try {
+      console.log('🔄 [Token Refresh] Starting token refresh and server restart...');
+      
+      // Get a fresh token from the auth service (this will trigger MSAL refresh)
+      const freshToken = await this.authService.getToken();
+      
+      if (!freshToken || !freshToken.accessToken) {
+        throw new Error('Failed to obtain fresh authentication token');
+      }
+      
+      console.log('✅ [Token Refresh] Fresh token obtained successfully');
+      
+      // Update environment with fresh token
+      if (this.config.env) {
+        this.config.env.ACCESS_TOKEN = freshToken.accessToken;
+      }
+      
+      // Restart the server to use the fresh token
+      await this.restartAfterAuthentication();
+      
+      console.log('✅ [Token Refresh] Server restarted with fresh token');
+      
+    } catch (error) {
+      console.error('❌ [Token Refresh] Token refresh failed:', error);
       throw error;
     }
   }
