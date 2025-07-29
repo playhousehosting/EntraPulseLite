@@ -32,7 +32,16 @@ export class ArtifactParser {
     sql: /\b(SELECT|INSERT|UPDATE|DELETE|CREATE|ALTER|DROP)\b/i,
     
     // Python content
-    python: /\b(def\s+\w+|class\s+\w+|import\s+\w+|from\s+\w+\s+import)\b/
+    python: /\b(def\s+\w+|class\s+\w+|import\s+\w+|from\s+\w+\s+import)\b/,
+    
+    // Streamlit content
+    streamlit: /\b(st\.|streamlit|import streamlit)/,
+    
+    // Next.js content
+    nextjs: /(import.*from\s+['"]next|export\s+default\s+function.*Page|getStaticProps|getServerSideProps)/,
+    
+    // Web app generation requests
+    webAppRequest: /\b(create|generate|build)\s+(streamlit|html|react|nextjs|web)\s+(app|application|dashboard|site)/i
   };
 
   /**
@@ -173,7 +182,11 @@ export class ArtifactParser {
       'yml': 'text/yaml',
       'markdown': 'text/markdown',
       'md': 'text/markdown',
-      'svg': 'image/svg+xml'
+      'svg': 'image/svg+xml',
+      'streamlit': 'application/streamlit',
+      'nextjs': 'application/nextjs',
+      'webapp': 'application/webapp',
+      'dashboard': 'application/dashboard'
     };
 
     if (languageMap[lowerLang]) {
@@ -181,6 +194,14 @@ export class ArtifactParser {
     }
 
     // Content-based detection
+    if (this.ARTIFACT_PATTERNS.streamlit.test(code)) {
+      return 'application/streamlit';
+    }
+    
+    if (this.ARTIFACT_PATTERNS.nextjs.test(code)) {
+      return 'application/nextjs';
+    }
+    
     if (this.ARTIFACT_PATTERNS.html.test(code)) {
       return 'text/html';
     }
@@ -232,7 +253,11 @@ export class ArtifactParser {
       'application/json': 'JSON Data',
       'text/yaml': 'YAML Configuration',
       'text/markdown': 'Markdown Document',
-      'image/svg+xml': 'SVG Image'
+      'image/svg+xml': 'SVG Image',
+      'application/streamlit': 'Streamlit App',
+      'application/nextjs': 'Next.js Application',
+      'application/webapp': 'Web Application',
+      'application/dashboard': 'Interactive Dashboard'
     };
 
     const baseName = typeNames[type] || 'Code';

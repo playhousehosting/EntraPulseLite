@@ -159,6 +159,91 @@ export const ArtifactViewer: React.FC<ArtifactViewerProps> = ({
           </Box>
         );
       
+      case 'application/streamlit':
+        return (
+          <Box sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+            <Typography variant="caption" color="textSecondary" gutterBottom>
+              Streamlit Application Preview
+            </Typography>
+            <Box sx={{ 
+              backgroundColor: '#f8f9fa', 
+              padding: '16px', 
+              borderRadius: '8px',
+              border: '2px dashed #dee2e6',
+              textAlign: 'center',
+              mb: 2
+            }}>
+              <Typography variant="h6" color="primary" gutterBottom>
+                🚀 Streamlit App
+              </Typography>
+              <Typography variant="body2" color="textSecondary">
+                Run with: <code>streamlit run {artifact.title.toLowerCase().replace(/\s/g, '_')}.py</code>
+              </Typography>
+            </Box>
+            <pre style={{ 
+              backgroundColor: '#f5f5f5', 
+              padding: '12px', 
+              borderRadius: '4px',
+              fontSize: '12px',
+              overflow: 'auto',
+              maxHeight: '300px'
+            }}>
+              {editedContent}
+            </pre>
+          </Box>
+        );
+      
+      case 'application/nextjs':
+        return (
+          <Box sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+            <Typography variant="caption" color="textSecondary" gutterBottom>
+              Next.js Application Preview
+            </Typography>
+            <Box sx={{ 
+              backgroundColor: '#f8f9fa', 
+              padding: '16px', 
+              borderRadius: '8px',
+              border: '2px dashed #dee2e6',
+              textAlign: 'center',
+              mb: 2
+            }}>
+              <Typography variant="h6" color="primary" gutterBottom>
+                ⚡ Next.js App
+              </Typography>
+              <Typography variant="body2" color="textSecondary">
+                Run with: <code>npm run dev</code> (after setup)
+              </Typography>
+            </Box>
+            <pre style={{ 
+              backgroundColor: '#f5f5f5', 
+              padding: '12px', 
+              borderRadius: '4px',
+              fontSize: '12px',
+              overflow: 'auto',
+              maxHeight: '300px'
+            }}>
+              {editedContent}
+            </pre>
+          </Box>
+        );
+      
+      case 'application/webapp':
+      case 'application/dashboard':
+        return (
+          <iframe
+            ref={previewRef}
+            srcDoc={editedContent}
+            style={{
+              width: '100%',
+              height: '500px',
+              border: 'none',
+              borderRadius: '4px',
+              backgroundColor: 'white'
+            }}
+            title={artifact.title}
+          />
+        );
+      
       case 'image/svg+xml':
         return (
           <Box sx={{ p: 2, textAlign: 'center' }}>
@@ -270,7 +355,16 @@ export const ArtifactViewer: React.FC<ArtifactViewerProps> = ({
   };
 
   const canExecute = ['text/javascript', 'text/python', 'application/json'].includes(artifact.type);
-  const canPreview = ['text/html', 'application/react', 'image/svg+xml', 'text/markdown'].includes(artifact.type);
+  const canPreview = [
+    'text/html', 
+    'application/react', 
+    'image/svg+xml', 
+    'text/markdown',
+    'application/streamlit',
+    'application/nextjs',
+    'application/webapp',
+    'application/dashboard'
+  ].includes(artifact.type);
 
   return (
     <>
@@ -372,7 +466,11 @@ function getFileExtension(type: ArtifactType): string {
     'application/json': '.json',
     'text/yaml': '.yaml',
     'text/markdown': '.md',
-    'image/svg+xml': '.svg'
+    'image/svg+xml': '.svg',
+    'application/streamlit': '.py',
+    'application/nextjs': '.jsx',
+    'application/webapp': '.html',
+    'application/dashboard': '.html'
   };
   return extensions[type] || '.txt';
 }

@@ -11,7 +11,11 @@ export type ArtifactType =
   | 'text/sql'
   | 'application/json'
   | 'text/yaml'
-  | 'image/svg+xml';
+  | 'image/svg+xml'
+  | 'application/streamlit'
+  | 'application/nextjs'
+  | 'application/webapp'
+  | 'application/dashboard';
 
 export interface Artifact {
   id: string;
@@ -51,4 +55,51 @@ export interface ArtifactExecutionResult {
   error?: string;
   logs?: string[];
   executionTime?: number;
+}
+
+export interface WebAppConfig {
+  framework: 'streamlit' | 'html' | 'react' | 'nextjs';
+  title: string;
+  description?: string;
+  features: string[];
+  dataSource?: {
+    type: 'json' | 'csv' | 'api' | 'database';
+    content?: string;
+    url?: string;
+    headers?: Record<string, string>;
+  };
+  styling?: {
+    theme: 'light' | 'dark' | 'auto';
+    primaryColor?: string;
+    customCSS?: string;
+  };
+  components: WebAppComponent[];
+}
+
+export interface WebAppComponent {
+  id: string;
+  type: 'chart' | 'table' | 'metric' | 'text' | 'input' | 'filter' | 'map' | 'form';
+  title?: string;
+  config: Record<string, any>;
+  data?: any;
+  position?: { x: number; y: number; width: number; height: number };
+}
+
+export interface WebAppTemplate {
+  id: string;
+  name: string;
+  description: string;
+  framework: 'streamlit' | 'html' | 'react' | 'nextjs';
+  category: 'dashboard' | 'form' | 'visualization' | 'report' | 'app';
+  template: string;
+  requiredData?: string[];
+  features: string[];
+  preview?: string;
+}
+
+export interface WebAppGenerationRequest {
+  data: any;
+  config: WebAppConfig;
+  template?: string;
+  customizations?: Record<string, any>;
 }

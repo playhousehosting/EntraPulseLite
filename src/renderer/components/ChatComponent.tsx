@@ -42,6 +42,7 @@ import {
   CheckCircle as CheckCircleIcon,
   History as HistoryIcon,
   ArrowDropDown as ArrowDropDownIcon,
+  Web as WebIcon,
 } from '@mui/icons-material';
 import { getAssetPath } from '../utils/assetUtils';
 import { ChatMessage, User, AuthToken, EnhancedLLMResponse, QueryAnalysis, ChatSession } from '../../types';
@@ -51,6 +52,7 @@ import { UserProfileAvatar } from './UserProfileAvatar';
 import { UserProfileDropdown } from './UserProfileDropdown';
 import { ArtifactViewer } from './ArtifactViewer';
 import { ChatHistoryDialog } from './ChatHistoryDialog';
+import { WebAppGeneratorDialog } from './WebAppGeneratorDialog';
 import { useLLMStatus } from '../context/LLMStatusContext';
 import { eventManager } from '../../shared/EventManager';
 import { ArtifactParser } from '../../shared/ArtifactParser';
@@ -83,6 +85,10 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
   // Chat history state
   const [chatHistoryOpen, setChatHistoryOpen] = useState(false);
   const [currentChatTitle, setCurrentChatTitle] = useState<string>('New Chat');
+  
+  // Web app generator state
+  const [webAppGeneratorOpen, setWebAppGeneratorOpen] = useState(false);
+  const [webAppData, setWebAppData] = useState<any>(null);
   
   // Cloud LLM status tracking
   const [cloudLLMStatus, setCloudLLMStatus] = useState<{
@@ -644,6 +650,156 @@ What would you like to explore?`,
     }
     return title || cleanMessage.substring(0, 50) + '...';
   };
+  
+  // Web app generation handlers
+  const handleWebAppGenerate = (artifact: Artifact) => {
+    // Add the generated web app as an artifact to the current conversation
+    const assistantMessage: ChatMessage = {
+      id: `msg-${Date.now()}`,
+      role: 'assistant',
+      content: `I've generated a ${artifact.type.replace('application/', '')} web application for you:`,
+      timestamp: new Date(),
+      artifacts: [artifact],
+      metadata: {
+        hasArtifacts: true
+      }
+    };
+
+    setMessages(prev => [...prev, assistantMessage]);
+    setWebAppGeneratorOpen(false);
+    setWebAppData(null);
+
+    // Update chat title if this is the first substantial message
+    if (messages.length <= 1) {
+      const newTitle = `${artifact.title} - Generated App`;
+      setCurrentChatTitle(newTitle);
+    }
+  };
+
+  const handleExtractDataForWebApp = () => {
+    // Extract data from recent messages for web app generation
+    let extractedData = null;
+    
+    // Look for JSON data, tables, or structured content in recent messages
+    for (let i = messages.length - 1; i >= Math.max(0, messages.length - 10); i--) {
+      const message = messages[i];
+      
+      // Try to extract JSON from message content
+      const jsonRegex = /```json\s*([\s\S]*?)\s*```/gi;
+      const jsonMatch = jsonRegex.exec(message.content);
+      if (jsonMatch) {
+        try {
+          extractedData = JSON.parse(jsonMatch[1]);
+          break;
+        } catch (e) {
+          // Continue looking
+        }
+      }
+      
+      // Try to extract tabular data (like CA policies)
+      const tableData = extractTableData(message.content);
+      if (tableData && tableData.length > 0) {
+        extractedData = {
+          type: 'conditional_access_policies',
+          data: tableData,
+          message: `Found ${tableData.length} items in tabular format`
+        };
+        break;
+      }
+      
+      // Check if message has artifacts with data
+      if (message.artifacts) {
+        for (const artifact of message.artifacts) {
+          if (artifact.type === 'application/json') {
+            try {
+              extractedData = JSON.parse(artifact.content);
+              break;
+            } catch (e) {
+              // Continue looking
+            }
+          }
+        }
+        if (extractedData) break;
+      }
+    }
+
+    // If no structured data found, create sample data
+    if (!extractedData) {
+      extractedData = {
+        message: "No structured data found in recent messages. This is sample data.",
+        data: [
+          { name: "Sample Item 1", value: 100, category: "A" },
+          { name: "Sample Item 2", value: 150, category: "B" },
+          { name: "Sample Item 3", value: 80, category: "A" },
+          { name: "Sample Item 4", value: 200, category: "C" }
+        ]
+      };
+    }
+
+    setWebAppData(extractedData);
+    setWebAppGeneratorOpen(true);
+  };
+
+  // Helper function to extract tabular data from message content
+  const extractTableData = (content: string): any[] | null => {
+    try {
+      // Look for table-like data patterns
+      const lines = content.split('\n');
+      const dataLines: string[] = [];
+      let headerLine: string | null = null;
+      
+      // Find potential table data
+      for (const line of lines) {
+        const trimmed = line.trim();
+        
+        // Look for header patterns (multiple columns separated by spaces/tabs)
+        if (trimmed.includes('Display Name') && trimmed.includes('Id') && trimmed.includes('Created Date')) {
+          headerLine = trimmed;
+          continue;
+        }
+        
+        // Look for data rows (policy names, IDs, dates)
+        if (trimmed.length > 50 && 
+            (trimmed.includes('authentication') || 
+             trimmed.includes('Policy') || 
+             trimmed.includes('CISA-') ||
+             trimmed.includes('Report-only') ||
+             trimmed.includes('Block') ||
+             trimmed.includes('Require'))) {
+          dataLines.push(trimmed);
+        }
+      }
+      
+      if (dataLines.length > 0) {
+        const parsedData: any[] = [];
+        
+        for (const line of dataLines) {
+          // Parse each line as tab/space separated values
+          const parts = line.split(/\s{2,}|\t/).filter(part => part.trim());
+          
+          if (parts.length >= 3) {
+            const policy = {
+              displayName: parts[0] || 'Unknown Policy',
+              id: parts[1] || 'unknown-id',
+              createdDate: parts[2] || 'Unknown Date',
+              conditions: parts[3] || 'Not specified',
+              grantControls: parts[4] || 'Not specified',
+              modifiedDateTime: parts[5] || 'Not specified',
+              type: 'conditional_access_policy'
+            };
+            parsedData.push(policy);
+          }
+        }
+        
+        return parsedData.length > 0 ? parsedData : null;
+      }
+      
+      return null;
+    } catch (error) {
+      console.warn('Error extracting table data:', error);
+      return null;
+    }
+  };
 
   const loadChatSession = (session: ChatSession) => {
     // Save current session before loading new one
@@ -972,9 +1128,20 @@ What would you like to explore?`,
               size="small"
               startIcon={<HistoryIcon />}
               onClick={() => setChatHistoryOpen(true)}
-              sx={{ mr: 1 }}
+              sx={{ mr: 0.5 }}
             >
               History
+            </Button>
+          </Tooltip>
+          <Tooltip title="Generate Web App from Data">
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<WebIcon />}
+              onClick={handleExtractDataForWebApp}
+              sx={{ mr: 1 }}
+            >
+              Web App
             </Button>
           </Tooltip>
           {user && <UserProfileAvatar user={user} />}
@@ -1485,6 +1652,14 @@ What would you like to explore?`,
         onClose={() => setChatHistoryOpen(false)}
         onLoadSession={loadChatSession}
         currentSessionId={sessionId}
+      />
+
+      {/* Web App Generator Dialog */}
+      <WebAppGeneratorDialog
+        open={webAppGeneratorOpen}
+        onClose={() => setWebAppGeneratorOpen(false)}
+        onGenerate={handleWebAppGenerate}
+        initialData={webAppData}
       />
 
       {/* User Profile Dropdown */}
