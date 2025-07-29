@@ -78,6 +78,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getEntraConfig: () => ipcRenderer.invoke('config:getEntraConfig'),
     saveEntraConfig: (config) => ipcRenderer.invoke('config:saveEntraConfig', config),
     clearEntraConfig: () => ipcRenderer.invoke('config:clearEntraConfig'),
+    // MCP Configuration methods
+    getMCPConfig: () => ipcRenderer.invoke('config:getMCPConfig'),
+    saveMCPConfig: (config) => ipcRenderer.invoke('config:saveMCPConfig', config),
+    updateLokkaMCPConfig: (config) => ipcRenderer.invoke('config:updateLokkaMCPConfig', config),
+    isLokkaMCPConfigured: () => ipcRenderer.invoke('config:isLokkaMCPConfigured'),
+    // Custom MCP Server management
+    getCustomMCPServers: () => ipcRenderer.invoke('config:getCustomMCPServers'),
+    addCustomMCPServer: (server) => ipcRenderer.invoke('config:addCustomMCPServer', server),
+    removeCustomMCPServer: (serverName) => ipcRenderer.invoke('config:removeCustomMCPServer', serverName),
+    updateCustomMCPServer: (serverName, updates) => ipcRenderer.invoke('config:updateCustomMCPServer', serverName, updates),
+    testMCPServerConnection: (server) => ipcRenderer.invoke('config:testMCPServerConnection', server),
+    validateMCPServerConfig: (server) => ipcRenderer.invoke('config:validateMCPServerConfig', server),
   },
 
   // App methods

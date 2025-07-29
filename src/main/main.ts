@@ -1,4 +1,4 @@
-// Main Electron process for EntraPulse Lite
+// Main Electron process for DynamicEndpoint Assistant
 import { app, BrowserWindow, ipcMain, Menu, globalShortcut, shell } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -31,10 +31,10 @@ function getAppVersion(): string {
 
 // Set app ID for Windows taskbar integration
 if (process.platform === 'win32') {
-  app.setAppUserModelId('com.darrenjrobinson.entrapulselite');
+  app.setAppUserModelId('com.darrenjrobinson.dynamicendpointassistant');
 }
 
-class EntraPulseLiteApp {
+class DynamicEndpointAssistantApp {
   private mainWindow: BrowserWindow | null = null;
   private authService!: AuthService;
   private graphService!: GraphService;
@@ -48,14 +48,14 @@ class EntraPulseLiteApp {
   private previousClientId?: string; // Track client ID changes for cache clearing
 
   constructor() {
-    console.log('[Main] ===== ENTRAPULSE LITE CONSTRUCTOR CALLED =====');
+    console.log('[Main] ===== DYNAMICENDPOINT ASSISTANT CONSTRUCTOR CALLED =====');
     console.log('[Main] Process type:', process.type);
     console.log('[Main] Environment:', process.env.NODE_ENV || 'not set');
     console.log('[Main] Is packaged:', app.isPackaged);
     console.log('[Main] App path:', app.getAppPath());
     
     // Send debug message to renderer process (when window is ready)
-    this.sendDebugToRenderer('[Main] ===== ENTRAPULSE LITE CONSTRUCTOR CALLED =====');
+    this.sendDebugToRenderer('[Main] ===== DYNAMICENDPOINT ASSISTANT CONSTRUCTOR CALLED =====');
     this.sendDebugToRenderer(`[Main] Process type: ${process.type}`);
     this.sendDebugToRenderer(`[Main] Environment: ${process.env.NODE_ENV || 'not set'}`);
     this.sendDebugToRenderer(`[Main] Is packaged: ${app.isPackaged}`);
@@ -1840,6 +1840,168 @@ class EntraPulseLiteApp {
       }
     });
 
+    // Custom MCP Server Management handlers
+    ipcMain.handle('config:getCustomMCPServers', async () => {
+      try {
+        const mcpConfig = this.configService.getMCPConfig();
+        return mcpConfig.customServers || [];
+      } catch (error) {
+        console.error('Get custom MCP servers failed:', error);
+        throw error;
+      }
+    });
+
+    ipcMain.handle('config:addCustomMCPServer', async (event, server: MCPServerConfig) => {
+      try {
+        const mcpConfig = this.configService.getMCPConfig();
+        const customServers = mcpConfig.customServers || [];
+        
+        // Check if server already exists
+        if (customServers.find(s => s.name === server.name)) {
+          return { success: false, error: 'Server with this name already exists' };
+        }
+        
+        // Add the new server
+        customServers.push({
+          ...server,
+          isUserDefined: true,
+          category: 'custom'
+        });
+        
+        await this.configService.saveMCPConfig({
+          ...mcpConfig,
+          customServers
+        });
+        
+        // Reinitialize MCP services
+        console.log('[Main] Custom MCP server added, reinitializing MCP services...');
+        await this.reinitializeServices();
+        
+        return { success: true };
+      } catch (error) {
+        console.error('Add custom MCP server failed:', error);
+        return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+      }
+    });
+
+    ipcMain.handle('config:updateCustomMCPServer', async (event, serverName: string, updates: Partial<MCPServerConfig>) => {
+      try {
+        const mcpConfig = this.configService.getMCPConfig();
+        const customServers = mcpConfig.customServers || [];
+        
+        const serverIndex = customServers.findIndex(s => s.name === serverName);
+        if (serverIndex === -1) {
+          return { success: false, error: 'Server not found' };
+        }
+        
+        // Update the server
+        customServers[serverIndex] = { ...customServers[serverIndex], ...updates };
+        
+        await this.configService.saveMCPConfig({
+          ...mcpConfig,
+          customServers
+        });
+        
+        // Reinitialize MCP services
+        console.log('[Main] Custom MCP server updated, reinitializing MCP services...');
+        await this.reinitializeServices();
+        
+        return { success: true };
+      } catch (error) {
+        console.error('Update custom MCP server failed:', error);
+        return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+      }
+    });
+
+    ipcMain.handle('config:removeCustomMCPServer', async (event, serverName: string) => {
+      try {
+        const mcpConfig = this.configService.getMCPConfig();
+        const customServers = mcpConfig.customServers || [];
+        
+        const initialLength = customServers.length;
+        const filteredServers = customServers.filter(s => s.name !== serverName);
+        
+        if (filteredServers.length === initialLength) {
+          return { success: false, error: 'Server not found' };
+        }
+        
+        await this.configService.saveMCPConfig({
+          ...mcpConfig,
+          customServers: filteredServers
+        });
+        
+        // Reinitialize MCP services
+        console.log('[Main] Custom MCP server removed, reinitializing MCP services...');
+        await this.reinitializeServices();
+        
+        return { success: true };
+      } catch (error) {
+        console.error('Remove custom MCP server failed:', error);
+        return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+      }
+    });
+
+    ipcMain.handle('config:testMCPServerConnection', async (event, server: MCPServerConfig) => {
+      try {
+        // For now, return a basic validation check
+        // In a full implementation, you'd actually try to connect to the server
+        const isValid = server.name && server.type && (server.command || server.url);
+        
+        if (!isValid) {
+          return { 
+            success: false, 
+            error: 'Invalid server configuration: missing required fields' 
+          };
+        }
+        
+        // Basic validation passed
+        return { 
+          success: true, 
+          tools: [], // Would normally list available tools
+          message: 'Configuration appears valid (connection test not fully implemented)' 
+        };
+      } catch (error) {
+        console.error('Test MCP server connection failed:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    ipcMain.handle('config:validateMCPServerConfig', async (event, server: MCPServerConfig) => {
+      try {
+        const errors: string[] = [];
+        
+        if (!server.name || server.name.trim() === '') {
+          errors.push('Server name is required');
+        }
+        
+        if (!server.type) {
+          errors.push('Server type is required');
+        }
+        
+        if (server.type === 'custom-stdio' && !server.command) {
+          errors.push('Command is required for STDIO servers');
+        }
+        
+        if (server.type === 'custom-http' && !server.url) {
+          errors.push('URL is required for HTTP servers');
+        }
+        
+        return {
+          valid: errors.length === 0,
+          errors
+        };
+      } catch (error) {
+        console.error('Validate MCP server config failed:', error);
+        return {
+          valid: false,
+          errors: ['Validation failed: ' + (error instanceof Error ? error.message : 'Unknown error')]
+        };
+      }
+    });
+
     // Auto-updater handlers
     ipcMain.handle('updater:checkForUpdates', async () => {
       try {
@@ -2779,6 +2941,33 @@ class EntraPulseLiteApp {
           type: 'none' // Microsoft Docs MCP doesn't require authentication
         }
       },
+      // Example: Add GitHub MCP Server
+      {
+        name: 'github',
+        type: 'custom-stdio' as const,
+        port: 0,
+        enabled: true,
+        displayName: 'GitHub',
+        description: 'Access GitHub repositories and issues',
+        command: 'npx',
+        args: ['-y', '@modelcontextprotocol/server-github'],
+        env: {
+          GITHUB_PERSONAL_ACCESS_TOKEN: process.env.GITHUB_TOKEN || ''
+        },
+        category: 'community'
+      },
+      // Example: Add File System MCP Server
+      {
+        name: 'filesystem',
+        type: 'custom-stdio' as const,
+        port: 0,
+        enabled: true,
+        displayName: 'File System',
+        description: 'Read and write files on the local system',
+        command: 'npx',
+        args: ['-y', '@modelcontextprotocol/server-filesystem', '/path/to/allowed/directory'],
+        category: 'community'
+      },
     ];
     
     console.log('[Main] createMCPServerConfig returning:', serverConfigs);
@@ -2800,12 +2989,12 @@ class EntraPulseLiteApp {
 }
 
 // Create and start the application
-console.log('[Main] ===== STARTING ENTRAPULSE LITE MAIN PROCESS =====');
+console.log('[Main] ===== STARTING DYNAMICENDPOINT ASSISTANT MAIN PROCESS =====');
 console.log('[Main] Node.js version:', process.version);
 console.log('[Main] Electron version:', process.versions.electron);
 console.log('[Main] Chrome version:', process.versions.chrome);
 console.log('[Main] Process PID:', process.pid);
 console.log('[Main] Working directory:', process.cwd());
-console.log('[Main] About to create EntraPulseLiteApp instance...');
+console.log('[Main] About to create DynamicEndpointAssistantApp instance...');
 
-new EntraPulseLiteApp();
+new DynamicEndpointAssistantApp();

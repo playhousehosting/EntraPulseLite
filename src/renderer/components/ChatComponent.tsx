@@ -40,14 +40,20 @@ import {
   Warning as WarningIcon,
   Error as ErrorIcon,
   CheckCircle as CheckCircleIcon,
+  History as HistoryIcon,
+  ArrowDropDown as ArrowDropDownIcon,
 } from '@mui/icons-material';
 import { getAssetPath } from '../utils/assetUtils';
-import { ChatMessage, User, AuthToken, EnhancedLLMResponse, QueryAnalysis } from '../../types';
+import { ChatMessage, User, AuthToken, EnhancedLLMResponse, QueryAnalysis, ChatSession } from '../../types';
+import { Artifact } from '../../types/artifacts';
 import { AppIcon } from './AppIcon';
 import { UserProfileAvatar } from './UserProfileAvatar';
 import { UserProfileDropdown } from './UserProfileDropdown';
+import { ArtifactViewer } from './ArtifactViewer';
+import { ChatHistoryDialog } from './ChatHistoryDialog';
 import { useLLMStatus } from '../context/LLMStatusContext';
 import { eventManager } from '../../shared/EventManager';
+import { ArtifactParser } from '../../shared/ArtifactParser';
 
 interface ChatComponentProps {}
 
@@ -74,6 +80,10 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
   const [copyStatus, setCopyStatus] = useState<{ [key: string]: boolean }>({});
   const [sessionId, setSessionId] = useState<string>(() => `session-${Date.now()}`);
   
+  // Chat history state
+  const [chatHistoryOpen, setChatHistoryOpen] = useState(false);
+  const [currentChatTitle, setCurrentChatTitle] = useState<string>('New Chat');
+  
   // Cloud LLM status tracking
   const [cloudLLMStatus, setCloudLLMStatus] = useState<{
     isAvailable: boolean;
@@ -90,6 +100,20 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
   useEffect(() => {
     initializeApp();
   }, []);
+
+  // Save chat session when component unmounts or on page unload
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      saveCurrentChatSession();
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      saveCurrentChatSession(); // Save when component unmounts
+    };
+  }, [messages, sessionId, currentChatTitle]); // Dependencies for saving
 
   // Listen for default cloud provider changes
   useEffect(() => {
@@ -345,6 +369,11 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
       timestamp: new Date(),
     };
 
+    // Set chat title based on first user message
+    if (currentChatTitle === 'New Chat' && messages.filter(m => m.role === 'user').length === 0) {
+      setCurrentChatTitle(generateChatTitle(userMessage.content));
+    }
+
     setMessages(prev => [...prev, userMessage]);
     setInputMessage('');
     setIsLoading(true);
@@ -381,12 +410,19 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
         content = 'Sorry, I received an unexpected response format.';
       }
       
+      // Parse artifacts from the assistant's response
+      const parsedResponse = ArtifactParser.parseResponse(content);
+      
       const assistantMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content,
+        content: parsedResponse.content,
         timestamp: new Date(),
-        metadata,
+        artifacts: parsedResponse.artifacts,
+        metadata: {
+          ...metadata,
+          hasArtifacts: parsedResponse.artifacts.length > 0
+        },
       };
 
       setMessages(prev => [...prev, assistantMessage]);
@@ -517,6 +553,9 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
   };  // Start new chat (clear conversation context)
   const startNewChat = async () => {
     try {
+      // Save current chat session if it has messages
+      await saveCurrentChatSession();
+      
       // Clear local messages
       setMessages([]);
       setError(null);
@@ -525,12 +564,13 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
       // Generate a new session ID for fresh context
       const newSessionId = `session-${Date.now()}`;
       setSessionId(newSessionId);
+      setCurrentChatTitle('New Chat');
       
       // Add welcome message after clearing
       const welcomeMessage: ChatMessage = {
         id: 'welcome-new',
         role: 'assistant',
-        content: `Welcome to EntraPulse Lite! I'm your Microsoft Entra assistant. I can help you query your Microsoft Graph data, understand identity concepts, and analyze your directory structure.
+        content: `Welcome to DynamicEndpoint Assistant! I'm your Microsoft Entra assistant. I can help you query your Microsoft Graph data, understand identity concepts, and analyze your directory structure.
 
 What would you like to explore?`,
         timestamp: new Date(),
@@ -542,6 +582,79 @@ What would you like to explore?`,
       console.error('Failed to start new chat:', error);
       setError('Failed to start new chat. Please try again.');
     }
+  };
+
+  const saveCurrentChatSession = async () => {
+    // Only save if we have actual user messages (not just welcome message)
+    const userMessages = messages.filter(m => m.role === 'user');
+    if (userMessages.length === 0) return;
+
+    try {
+      const session: ChatSession = {
+        id: sessionId,
+        title: currentChatTitle,
+        messages: messages,
+        createdAt: new Date(parseInt(sessionId.replace('session-', ''))),
+        updatedAt: new Date(),
+        summary: generateChatSummary(messages)
+      };
+
+      // Load existing chat history
+      const existingHistory = localStorage.getItem('dynamicEndpoint_chatHistory');
+      const chatHistory: ChatSession[] = existingHistory ? JSON.parse(existingHistory) : [];
+      
+      // Update existing session or add new one
+      const existingIndex = chatHistory.findIndex(s => s.id === sessionId);
+      if (existingIndex >= 0) {
+        chatHistory[existingIndex] = session;
+      } else {
+        chatHistory.unshift(session); // Add to beginning
+      }
+      
+      // Keep only last 50 sessions to manage storage
+      const trimmedHistory = chatHistory.slice(0, 50);
+      
+      localStorage.setItem('dynamicEndpoint_chatHistory', JSON.stringify(trimmedHistory));
+    } catch (error) {
+      console.error('Failed to save chat session:', error);
+    }
+  };
+
+  const generateChatSummary = (messages: ChatMessage[]): string => {
+    const userMessages = messages.filter(m => m.role === 'user');
+    if (userMessages.length === 0) return 'Empty chat';
+    
+    const firstMessage = userMessages[0].content;
+    return firstMessage.length > 100 ? 
+      firstMessage.substring(0, 100) + '...' : 
+      firstMessage;
+  };
+
+  const generateChatTitle = (firstUserMessage: string): string => {
+    // Generate a title based on the first user message
+    const cleanMessage = firstUserMessage.trim();
+    if (cleanMessage.length <= 50) return cleanMessage;
+    
+    // Try to find a natural breaking point
+    const words = cleanMessage.split(' ');
+    let title = '';
+    for (const word of words) {
+      if ((title + ' ' + word).length > 50) break;
+      title += (title ? ' ' : '') + word;
+    }
+    return title || cleanMessage.substring(0, 50) + '...';
+  };
+
+  const loadChatSession = (session: ChatSession) => {
+    // Save current session before loading new one
+    saveCurrentChatSession();
+    
+    // Load the selected session
+    setMessages(session.messages);
+    setSessionId(session.id);
+    setCurrentChatTitle(session.title);
+    setError(null);
+    setPermissionRequests([]);
   };
   const checkAuthenticationStatus = async () => {
     try {
@@ -718,7 +831,7 @@ What would you like to explore?`,
           </Box>
           
           <Typography variant="h4" component="h1" align="center" gutterBottom>
-            Welcome to EntraPulse Lite
+            Welcome to DynamicEndpoint Assistant
           </Typography>
           
           <Typography variant="body1" align="center" color="textSecondary" paragraph>
@@ -848,9 +961,20 @@ What would you like to explore?`,
               size="small"
               startIcon={<ChatIcon />}
               onClick={startNewChat}
-              sx={{ mr: 1 }}
+              sx={{ mr: 0.5 }}
             >
               New Chat
+            </Button>
+          </Tooltip>
+          <Tooltip title="View Chat History">
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<HistoryIcon />}
+              onClick={() => setChatHistoryOpen(true)}
+              sx={{ mr: 1 }}
+            >
+              History
             </Button>
           </Tooltip>
           {user && <UserProfileAvatar user={user} />}
@@ -881,7 +1005,7 @@ What would you like to explore?`,
                   primary={
                     <Box display="flex" alignItems="center" gap={1} mb={1}>
                       <Typography variant="subtitle2">
-                        {message.role === 'user' ? 'You' : 'EntraPulse Assistant'}
+                        {message.role === 'user' ? 'You' : 'DynamicEndpoint Assistant'}
                       </Typography>
                       <Typography variant="caption" color="textSecondary">
                         {message.timestamp.toLocaleTimeString()}
@@ -1169,6 +1293,20 @@ What would you like to explore?`,
                         </ReactMarkdown>
                       </Box>
                       
+                      {/* Artifacts Display */}
+                      {message.artifacts && message.artifacts.length > 0 && (
+                        <Box sx={{ mt: 2 }}>
+                          {message.artifacts.map((artifact) => (
+                            <ArtifactViewer
+                              key={artifact.id}
+                              artifact={artifact}
+                              editable={false}
+                              showControls={true}
+                            />
+                          ))}
+                        </Box>
+                      )}
+                      
                       {/* Enhanced trace data display */}
                       {message.metadata?.traceData && expandedTraces.has(message.id) && (
                         <Box sx={{ mt: 2, p: 2, bgcolor: 'background.default', borderRadius: 1 }}>
@@ -1283,7 +1421,7 @@ What would you like to explore?`,
               </Avatar>              <Box display="flex" alignItems="center" gap={1}>
                 <CircularProgress size={20} />
                 <Typography variant="body2" color="textSecondary">
-                  EntraPulse Assistant is thinking...
+                  DynamicEndpoint Assistant is thinking...
                 </Typography>
               </Box>
             </ListItem>
@@ -1340,6 +1478,14 @@ What would you like to explore?`,
           </Button>
         </Box>
       </Box>
+
+      {/* Chat History Dialog */}
+      <ChatHistoryDialog
+        open={chatHistoryOpen}
+        onClose={() => setChatHistoryOpen(false)}
+        onLoadSession={loadChatSession}
+        currentSessionId={sessionId}
+      />
 
       {/* User Profile Dropdown */}
       <UserProfileDropdown

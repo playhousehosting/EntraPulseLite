@@ -1,6 +1,6 @@
-# EntraPulse Lite
+# DynamicEndpoint Assistant
 
-A free community desktop application that provides natural language querying of Microsoft Graph APIs through local LLM integration. EntraPulse Lite is a lightweight derivative of the EntraPulse project, designed as an all-in-one desktop solution similar to Claude Desktop.
+A free community desktop application that provides natural language querying of Microsoft Graph APIs through local LLM integration. DynamicEndpoint Assistant is a lightweight derivative of the EntraPulse project, designed as an all-in-one desktop solution similar to Claude Desktop.
 
 ![](./docs/EntraPulse%20Lite%20-%20Hello.png)
 
@@ -48,7 +48,7 @@ src/
 
 ## 🛠️ For End Users
 
-**No prerequisites required!** EntraPulse Lite is a self-contained desktop application.
+**No prerequisites required!** DynamicEndpoint Assistant is a self-contained desktop application.
 
 **Required:**
 - **Entra ID Work/School Account** - The application uses your delegated permissions to access Microsoft Graph
@@ -108,13 +108,13 @@ For optimal performance and reliability, we recommend using cloud-based AI provi
 #### Option 1: Anthropic Claude Sonnet (Recommended)
 1. Visit [Anthropic Console](https://console.anthropic.com)
 2. Create an account and generate an API key
-3. In EntraPulse Lite Settings → LLM Configuration → Add Claude Sonnet
+3. In DynamicEndpoint Assistant Settings → LLM Configuration → Add Claude Sonnet
 4. Enter your API key and select Update then select the `claude-sonnet-4-20250514` model
 
 #### Option 2: Azure OpenAI GPT-4o (Enterprise)
 1. Access your Azure OpenAI resource in the Azure Portal
 2. Get your endpoint URL and API key from Keys and Endpoint
-3. In EntraPulse Lite Settings → LLM Configuration → Add Azure OpenAI
+3. In DynamicEndpoint Assistant Settings → LLM Configuration → Add Azure OpenAI
 4. Configure with your endpoint, API key, then select Update then select your `gpt-4o` deployment
 
 #### Alternative Cloud Options:
@@ -144,7 +144,7 @@ See [docs/INSTALLATION.md](docs/INSTALLATION.md) for detailed setup instructions
 ## 🎯 Key Capabilities
 
 ### Delegated Permission Modes
-EntraPulse Lite uses delegated permissions exclusively for secure, user-context access to Microsoft Graph:
+DynamicEndpoint Assistant uses delegated permissions exclusively for secure, user-context access to Microsoft Graph:
 
 **Enhanced Graph Access (Quick Start):**
 - Uses the Microsoft Graph PowerShell client ID (14d82eec-204b-4c2f-b7e8-296a70dab67e)

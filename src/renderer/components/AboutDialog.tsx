@@ -27,7 +27,7 @@ export const AboutDialog: React.FC<AboutDialogProps> = ({
 }) => {
   const version = VERSION; // Using centralized version from shared/version.ts// Use dialog instead of opening external file
   const handleOpenPrivacyPolicy = () => {
-    window.alert('Privacy Policy: EntraPulse Lite processes data only with your permissions. No data is stored externally or in the cloud. All processing happens locally when using local LLMs, and the app only accesses Entra data and services you have permission to view through Microsoft Graph.');
+    window.alert('Privacy Policy: DynamicEndpoint Assistant processes data only with your permissions. No data is stored externally or in the cloud. All processing happens locally when using local LLMs, and the app only accesses Entra data and services you have permission to view through Microsoft Graph.');
   };
 
   const handleOpenGitHub = () => {
@@ -40,13 +40,13 @@ export const AboutDialog: React.FC<AboutDialogProps> = ({
       <DialogTitle>
         <Box display="flex" alignItems="center" gap={1}>
           <ShieldIcon color="primary" />
-          <Typography variant="h6">About EntraPulse Lite</Typography>
+          <Typography variant="h6">About DynamicEndpoint Assistant</Typography>
         </Box>
       </DialogTitle>
       <DialogContent>
         <Box sx={{ mb: 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
           <Typography variant="body1">
-            EntraPulse Lite is a freemium desktop application that provides natural language querying of Microsoft Graph APIs through local LLM integration.
+            DynamicEndpoint Assistant is a freemium desktop application that provides natural language querying of Microsoft Graph APIs through local LLM integration.
           </Typography>
           
           <Box>
@@ -54,7 +54,7 @@ export const AboutDialog: React.FC<AboutDialogProps> = ({
               Version: {version}
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              A lightweight derivative of the EntraPulse project.
+              A lightweight derivative of the DynamicEndpoint project.
             </Typography>
           </Box>
           
@@ -66,7 +66,7 @@ export const AboutDialog: React.FC<AboutDialogProps> = ({
               Privacy Information
             </Typography>
             <Typography variant="body2" paragraph>
-              EntraPulse Lite processes data with the permissions you authorize. All processing happens locally when using local LLMs.
+              DynamicEndpoint Assistant processes data with the permissions you authorize. All processing happens locally when using local LLMs.
             </Typography>
             <Typography variant="body2">
               • No data is stored externally

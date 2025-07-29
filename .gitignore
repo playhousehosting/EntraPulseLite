@@ -207,3 +207,49 @@ Temporary Items
 .directory
 .Trash-*
 .nfs*
+
+# DynamicEndpoint Assistant specific
+# User configuration and data
+user-configs/
+chat-history/
+mcp-server-configs/
+session-data/
+
+# Application logs
+app-logs/
+crash-reports/
+electron-logs/
+
+# MCP server temporary files
+mcp-temp/
+mcp-cache/
+
+# Auto-generated artifacts
+src/generated/
+*.generated.*
+
+# Backup files
+*.bak
+*.backup
+*.orig
+
+# Webpack and build artifacts  
+.webpack/
+webpack-stats.json
+
+# Testing and coverage
+test-output/
+e2e-results/
+playwright-report/
+test-results/
+
+# Cloud provider config files (these may contain API keys)
+.anthropic
+.openai
+.azure-config
+.google-cloud/
+
+# Development files
+dev-notes.md
+TODO.md
+.dev-config

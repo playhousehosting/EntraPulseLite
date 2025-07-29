@@ -1,16 +1,16 @@
-// ExternalLokkaMCPStdioServer.ts
-// Proper implementation of Lokka MCP Server using stdio communication
+// ExternalDynamic_Endpoint_AssistantMCPStdioServer.ts
+// Proper implementation of Dynamic_Endpoint_Assistant MCP Server using stdio communication
 
 import { MCPRequest, MCPResponse, MCPServerConfig, MCPTool } from '../../types';
 import { MCPErrorHandler, ErrorCode } from '../../utils';
 import { MCPAuthService } from '../../auth/MCPAuthService';
 import { StdioMCPClient } from '../../clients/StdioMCPClient';
 import { EnhancedStdioMCPClient } from '../../clients/EnhancedStdioMCPClient';
-import { ManagedLokkaMCPClient } from '../../clients/ManagedLokkaMCPClient';
-import { PersistentLokkaMCPClient } from '../../clients/PersistentLokkaMCPClient';
+import { ManagedDynamic_Endpoint_AssistantMCPClient } from '../../clients/ManagedLokkaMCPClient';
+import { PersistentDynamic_Endpoint_AssistantMCPClient } from '../../clients/PersistentLokkaMCPClient';
 import { ConfigService } from '../../../shared/ConfigService';
 
-export interface ExternalLokkaMCPServerConfig extends MCPServerConfig {
+export interface ExternalDynamic_Endpoint_AssistantMCPServerConfig extends MCPServerConfig {
   env?: {
     TENANT_ID?: string;
     CLIENT_ID?: string;
@@ -20,19 +20,19 @@ export interface ExternalLokkaMCPServerConfig extends MCPServerConfig {
   };
 }
 
-export class ExternalLokkaMCPStdioServer {
-  private config: ExternalLokkaMCPServerConfig;
+export class ExternalDynamic_Endpoint_AssistantMCPStdioServer {
+  private config: ExternalDynamic_Endpoint_AssistantMCPServerConfig;
   private authService: MCPAuthService;
   private configService: ConfigService;
   private mcpClient: StdioMCPClient | null = null;
   private enhancedMcpClient: EnhancedStdioMCPClient | null = null;
-  private managedClient: ManagedLokkaMCPClient | null = null;
-  private persistentClient: PersistentLokkaMCPClient | null = null; // NEW: Persistent client
+  private managedClient: ManagedDynamic_Endpoint_AssistantMCPClient | null = null;
+  private persistentClient: PersistentDynamic_Endpoint_AssistantMCPClient | null = null; // NEW: Persistent client
   private tools: MCPTool[] = [];
   private isStarting: boolean = false; // NEW: Prevent concurrent startup attempts
   private startupPromise: Promise<void> | null = null; // NEW: Track ongoing startup
 
-  constructor(config: ExternalLokkaMCPServerConfig, authService: MCPAuthService, configService: ConfigService) {
+  constructor(config: ExternalDynamic_Endpoint_AssistantMCPServerConfig, authService: MCPAuthService, configService: ConfigService) {
     this.config = config;
     this.authService = authService;
     this.configService = configService;
@@ -40,11 +40,11 @@ export class ExternalLokkaMCPStdioServer {
   }
 
   private initializeTools(): void {
-    // Define the tools we expect Lokka to provide (based on official documentation)
+    // Define the tools we expect Dynamic_Endpoint_Assistant to provide (based on official documentation)
     this.tools = [
       {
-        name: 'Lokka-Microsoft',
-        description: 'Query Microsoft Graph API via Lokka MCP server',
+        name: 'Dynamic_Endpoint_Assistant-Microsoft',
+        description: 'Query Microsoft Graph API via Dynamic_Endpoint_Assistant MCP server',
         inputSchema: {
           type: 'object',
           properties: {
@@ -168,7 +168,7 @@ export class ExternalLokkaMCPStdioServer {
         if (ipcMain) {
           // Emit debug info that can be captured
           console.log('🔍 [Portable Debug - IPC] Broadcasting Lokka environment info');
-          ipcMain.emit('lokka-debug', debugInfo);
+          ipcMain.emit('dynamic_endpoint_assistant-debug', debugInfo);
         }
       } catch (ipcError) {
         console.log('🔍 [Portable Debug] Could not send IPC debug info:', ipcError);
@@ -203,7 +203,7 @@ export class ExternalLokkaMCPStdioServer {
       port: this.config.port || 0, // Not used for stdio, but required by interface
       enabled: true,
       command: this.config.command || 'npx',
-      args: this.config.args || ['--yes', '@merill/lokka@latest'],
+      args: this.config.args || ['--yes', '@merill/dynamic_endpoint_assistant@latest'],
       env: env  // Put environment variables directly in env property
     };
 
@@ -1280,4 +1280,4 @@ export class ExternalLokkaMCPStdioServer {
 }
 
 // Export for module compatibility
-export default ExternalLokkaMCPStdioServer;
+export default ExternalDynamic_Endpoint_AssistantMCPStdioServer;

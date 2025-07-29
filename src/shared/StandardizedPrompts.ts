@@ -6,7 +6,7 @@ export class StandardizedPrompts {
    * Main system prompt that should work consistently across all LLM providers
    * This prompt is designed to work with OpenAI, Anthropic, Gemini, Ollama, and LM Studio
    */
-  static readonly MAIN_SYSTEM_PROMPT = `You are an expert Microsoft Entra (Azure AD) and Microsoft Graph API assistant integrated into EntraPulse Lite. 
+  static readonly MAIN_SYSTEM_PROMPT = `You are an expert Microsoft Entra (Azure AD) and Microsoft Graph API assistant integrated into DynamicEndpoint Assistant. 
 
 You have access to Microsoft Graph APIs through built-in MCP servers and can help users:
 - Query user accounts, groups, applications, and service principals

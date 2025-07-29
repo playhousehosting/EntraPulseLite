@@ -4,14 +4,14 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-interface LokkaMCPRequest {
+interface Dynamic_Endpoint_AssistantMCPRequest {
   jsonrpc: string;
   id: number;
   method: string;
   params?: any;
 }
 
-interface LokkaMCPResponse {
+interface Dynamic_Endpoint_AssistantMCPResponse {
   jsonrpc: string;
   id: number;
   result?: any;
@@ -28,10 +28,10 @@ interface PendingRequest {
 }
 
 /**
- * Persistent Lokka MCP Client - Runs Lokka as a long-lived background process
+ * Persistent Dynamic_Endpoint_Assistant MCP Client - Runs Dynamic_Endpoint_Assistant as a long-lived background process
  * Similar to a .NET/PowerShell Runspace - start once, reuse for all queries
  */
-export class PersistentLokkaMCPClient extends EventEmitter {
+export class PersistentDynamic_Endpoint_AssistantMCPClient extends EventEmitter {
   private process: ChildProcess | null = null;
   private isRunning = false;
   private initialized = false;
@@ -46,7 +46,7 @@ export class PersistentLokkaMCPClient extends EventEmitter {
   constructor(environment: Record<string, string> = {}) {
     super();
     this.environment = environment;
-    console.log('[PersistentLokka] Creating persistent Lokka client with environment:', {
+    console.log('[PersistentDynamic_Endpoint_Assistant] Creating persistent Dynamic_Endpoint_Assistant client with environment:', {
       envVarCount: Object.keys(environment).length,
       hasAccessToken: !!environment.ACCESS_TOKEN,
       hasClientId: !!environment.CLIENT_ID,
@@ -55,21 +55,21 @@ export class PersistentLokkaMCPClient extends EventEmitter {
   }
 
   /**
-   * Start the persistent Lokka process (similar to creating a Runspace)
+   * Start the persistent Dynamic_Endpoint_Assistant process (similar to creating a Runspace)
    */
   async start(): Promise<void> {
     if (this.isRunning) {
-      console.log('[PersistentLokka] Already running');
+      console.log('[PersistentDynamic_Endpoint_Assistant] Already running');
       return;
     }
 
-    console.log('[PersistentLokka] Starting persistent Lokka process...');
-    this.sendDebugToRenderer('Starting persistent Lokka process...');
+    console.log('[PersistentDynamic_Endpoint_Assistant] Starting persistent Dynamic_Endpoint_Assistant process...');
+    this.sendDebugToRenderer('Starting persistent Dynamic_Endpoint_Assistant process...');
 
     return new Promise<void>((resolve, reject) => {
       try {
         // Create a persistent directory for the process
-        this.tempDir = path.join(os.tmpdir(), 'persistent-lokka-' + Date.now());
+        this.tempDir = path.join(os.tmpdir(), 'persistent-dynamic-endpoint-assistant-' + Date.now());
         fs.mkdirSync(this.tempDir, { recursive: true });
 
         // Prepare environment variables with aggressive sanitization
@@ -82,7 +82,7 @@ export class PersistentLokkaMCPClient extends EventEmitter {
           }
         }
 
-        // Add Lokka-specific environment variables with sanitization
+        // Add Dynamic_Endpoint_Assistant-specific environment variables with sanitization
         for (const [key, value] of Object.entries(this.environment)) {
           if (value !== undefined && value !== '') { // Don't pass empty strings
             // Aggressive token sanitization for portable builds
@@ -108,7 +108,7 @@ export class PersistentLokkaMCPClient extends EventEmitter {
           processEnv['ACCESS_TOKEN'] = process.env.ACCESS_TOKEN;
         }
 
-        console.log('[PersistentLokka] Environment prepared for persistent process:', {
+        console.log('[PersistentDynamic_Endpoint_Assistant] Environment prepared for persistent process:', {
           TENANT_ID: processEnv['TENANT_ID'] ? 'SET' : 'NOT SET',
           CLIENT_ID: processEnv['CLIENT_ID'] ? 'SET' : 'NOT SET',
           USE_CLIENT_TOKEN: processEnv['USE_CLIENT_TOKEN'] || 'NOT SET',
@@ -134,22 +134,22 @@ export class PersistentLokkaMCPClient extends EventEmitter {
           this.sendDebugToRenderer(`WARNING: Empty string environment variables: ${emptyVars.join(', ')}`);
         }
         
-        // NEW: REVOLUTIONARY APPROACH - Use Lokka configuration file instead of environment variables
-        // Since environment variables aren't working in portable builds, create a config file that Lokka can read
-        const lokkaConfigPath = path.join(this.tempDir, 'lokka-config.json');
+        // NEW: REVOLUTIONARY APPROACH - Use Dynamic_Endpoint_Assistant configuration file instead of environment variables
+        // Since environment variables aren't working in portable builds, create a config file that Dynamic_Endpoint_Assistant can read
+        const lokkaConfigPath = path.join(this.tempDir, 'dynamic-endpoint-assistant-config.json');
         try {
-          const lokkaConfig = {
+          const dynamicEndpointAssistantConfig = {
             tenantId: processEnv['TENANT_ID'],
             clientId: processEnv['CLIENT_ID'],
             useClientToken: processEnv['USE_CLIENT_TOKEN'] === 'true',
             accessToken: processEnv['ACCESS_TOKEN'] || undefined
           };
           
-          fs.writeFileSync(lokkaConfigPath, JSON.stringify(lokkaConfig, null, 2));
-          this.sendDebugToRenderer(`CONFIG FILE: Created Lokka configuration file with settings`);
-          console.log('[PersistentLokka] Created Lokka configuration file for portable build compatibility');
+          fs.writeFileSync(lokkaConfigPath, JSON.stringify(dynamicEndpointAssistantConfig, null, 2));
+          this.sendDebugToRenderer(`CONFIG FILE: Created Dynamic_Endpoint_Assistant configuration file with settings`);
+          console.log('[PersistentDynamic_Endpoint_Assistant] Created Dynamic_Endpoint_Assistant configuration file for portable build compatibility');
         } catch (configError) {
-          console.warn('[PersistentLokka] Could not create Lokka config file:', configError);
+          console.warn('[PersistentDynamic_Endpoint_Assistant] Could not create Dynamic_Endpoint_Assistant config file:', configError);
         }
 
         // NEW: Try a different approach for portable builds - use environment file
@@ -163,15 +163,15 @@ export class PersistentLokkaMCPClient extends EventEmitter {
           
           fs.writeFileSync(envFilePath, envFileContent);
           this.sendDebugToRenderer(`ENVIRONMENT DEBUG: Created .env file with ${envFileContent.split('\n').length} variables`);
-          console.log('[PersistentLokka] Created .env file for portable build compatibility');
+          console.log('[PersistentDynamic_Endpoint_Assistant] Created .env file for portable build compatibility');
         } catch (envFileError) {
-          console.warn('[PersistentLokka] Could not create .env file:', envFileError);
+          console.warn('[PersistentDynamic_Endpoint_Assistant] Could not create .env file:', envFileError);
         }
 
         // Use a more reliable spawn approach for persistent process
-        console.log('[PersistentLokka] Spawning persistent Lokka process...');
-        console.log('[PersistentLokka] Command: npx -y @merill/lokka');
-        console.log('[PersistentLokka] Working directory:', this.tempDir);
+        console.log('[PersistentDynamic_Endpoint_Assistant] Spawning persistent Dynamic_Endpoint_Assistant process...');
+        console.log('[PersistentDynamic_Endpoint_Assistant] Command: npx -y @merill/lokka');
+        console.log('[PersistentDynamic_Endpoint_Assistant] Working directory:', this.tempDir);
 
         // NEW: SIMPLIFIED APPROACH - Just run Lokka with minimal environment
         // Let's try to isolate the environment variable issue by using a minimal clean environment
@@ -191,7 +191,7 @@ export class PersistentLokkaMCPClient extends EventEmitter {
         };
 
         this.sendDebugToRenderer(`MINIMAL ENV: Using minimal environment with ${Object.keys(minimalEnv).length} variables`);
-        console.log('[PersistentLokka] Using minimal environment to avoid conflicts');
+        console.log('[PersistentDynamic_Endpoint_Assistant] Using minimal environment to avoid conflicts');
 
         // Try multiple approaches for different environments
         let spawnOptions = {
@@ -205,13 +205,13 @@ export class PersistentLokkaMCPClient extends EventEmitter {
         // Attempt 1: Try with shell enabled for portable builds (Windows)
         if (process.platform === 'win32') {
           try {
-            console.log('[PersistentLokka] Attempting Windows shell spawn...');
+            console.log('[PersistentDynamic_Endpoint_Assistant] Attempting Windows shell spawn...');
             this.process = spawn('npx', ['-y', '@merill/lokka'], {
               ...spawnOptions,
               shell: true // Enable shell for Windows to find npx
             });
           } catch (shellError) {
-            console.warn('[PersistentLokka] Windows shell spawn failed:', shellError);
+            console.warn('[PersistentDynamic_Endpoint_Assistant] Windows shell spawn failed:', shellError);
             this.process = null;
           }
         }
@@ -219,10 +219,10 @@ export class PersistentLokkaMCPClient extends EventEmitter {
         // Attempt 2: Try batch file approach for portable builds (Windows only)
         if (!this.process && process.platform === 'win32') {
           try {
-            console.log('[PersistentLokka] Attempting batch file approach for portable build...');
+            console.log('[PersistentDynamic_Endpoint_Assistant] Attempting batch file approach for portable build...');
             
             // Create a batch file that sets environment variables and runs Lokka
-            const batchFilePath = path.join(this.tempDir, 'start-lokka.bat');
+            const batchFilePath = path.join(this.tempDir, 'start-dynamic-endpoint-assistant.bat');
             const batchContent = [
               '@echo off',
               `set TENANT_ID=${processEnv['TENANT_ID'] || ''}`,
@@ -230,7 +230,7 @@ export class PersistentLokkaMCPClient extends EventEmitter {
               `set USE_CLIENT_TOKEN=${processEnv['USE_CLIENT_TOKEN'] || 'true'}`,
               `set ACCESS_TOKEN=${processEnv['ACCESS_TOKEN'] || ''}`,
               `set ENTRAPULSE_TEST=${processEnv['ENTRAPULSE_TEST'] || ''}`,
-              'echo Starting Lokka with environment variables:',
+              'echo Starting Dynamic_Endpoint_Assistant with environment variables:',
               'echo TENANT_ID=%TENANT_ID%',
               'echo CLIENT_ID=%CLIENT_ID%',
               'echo USE_CLIENT_TOKEN=%USE_CLIENT_TOKEN%',
@@ -248,10 +248,10 @@ export class PersistentLokkaMCPClient extends EventEmitter {
               detached: false
             });
             
-            console.log('[PersistentLokka] Batch file approach spawned successfully');
+            console.log('[PersistentDynamic_Endpoint_Assistant] Batch file approach spawned successfully');
             
           } catch (batchError) {
-            console.warn('[PersistentLokka] Batch file approach failed:', batchError);
+            console.warn('[PersistentDynamic_Endpoint_Assistant] Batch file approach failed:', batchError);
             this.process = null;
           }
         }
@@ -259,13 +259,13 @@ export class PersistentLokkaMCPClient extends EventEmitter {
         // Attempt 3: Fallback to non-shell spawn if shell failed or non-Windows
         if (!this.process) {
           try {
-            console.log('[PersistentLokka] Attempting direct spawn...');
+            console.log('[PersistentDynamic_Endpoint_Assistant] Attempting direct spawn...');
             this.process = spawn('npx', ['-y', '@merill/lokka'], {
               ...spawnOptions,
               shell: false // Disable shell to avoid command injection issues
             });
           } catch (directError) {
-            console.warn('[PersistentLokka] Direct spawn failed:', directError);
+            console.warn('[PersistentDynamic_Endpoint_Assistant] Direct spawn failed:', directError);
             this.process = null;
           }
         }
@@ -273,13 +273,13 @@ export class PersistentLokkaMCPClient extends EventEmitter {
         // Attempt 3: Try with cmd.exe wrapper for Windows portable builds
         if (!this.process && process.platform === 'win32') {
           try {
-            console.log('[PersistentLokka] Attempting cmd.exe wrapper spawn...');
+            console.log('[PersistentDynamic_Endpoint_Assistant] Attempting cmd.exe wrapper spawn...');
             this.process = spawn('cmd.exe', ['/c', 'npx', '-y', '@merill/lokka'], {
               ...spawnOptions,
               shell: false
             });
           } catch (cmdError) {
-            console.warn('[PersistentLokka] cmd.exe wrapper spawn failed:', cmdError);
+            console.warn('[PersistentDynamic_Endpoint_Assistant] cmd.exe wrapper spawn failed:', cmdError);
             this.process = null;
           }
         }
@@ -297,14 +297,14 @@ export class PersistentLokkaMCPClient extends EventEmitter {
         // Set a reasonable startup timeout - reduced to prevent UI blocking
         const startupTimeout = setTimeout(() => {
           this.cleanup();
-          reject(new Error('Persistent Lokka startup timeout (10 seconds) - likely environment variable issue'));
+          reject(new Error('Persistent Dynamic_Endpoint_Assistant startup timeout (10 seconds) - likely environment variable issue'));
         }, 10000); // Reduced from 45 seconds to 10 seconds
 
         // Wait for process to be ready
         this.once('ready', () => {
           clearTimeout(startupTimeout);
           this.startupComplete = true;
-          console.log('[PersistentLokka] ✅ Persistent process ready');
+          console.log('[PersistentDynamic_Endpoint_Assistant] ✅ Persistent process ready');
           resolve();
         });
 
@@ -315,7 +315,7 @@ export class PersistentLokkaMCPClient extends EventEmitter {
         });
 
       } catch (error) {
-        console.error('[PersistentLokka] Failed to start persistent process:', error);
+        console.error('[PersistentDynamic_Endpoint_Assistant] Failed to start persistent process:', error);
         reject(error);
       }
     });
@@ -330,7 +330,7 @@ export class PersistentLokkaMCPClient extends EventEmitter {
     try {
       // Validate JWT format
       if (!token.match(/^[A-Za-z0-9\-_=]+\.[A-Za-z0-9\-_=]+\.[A-Za-z0-9\-_=]+$/)) {
-        console.warn('[PersistentLokka] ACCESS_TOKEN does not appear to be a valid JWT format');
+        console.warn('[PersistentDynamic_Endpoint_Assistant] ACCESS_TOKEN does not appear to be a valid JWT format');
       }
 
       // Aggressive sanitization for portable builds
@@ -341,7 +341,7 @@ export class PersistentLokkaMCPClient extends EventEmitter {
         .replace(/["\\']/g, '')        // Remove quotes
         .replace(/[;|&<>]/g, '');      // Remove command separators
 
-      console.log('[PersistentLokka] ACCESS_TOKEN sanitized:', {
+      console.log('[PersistentDynamic_Endpoint_Assistant] ACCESS_TOKEN sanitized:', {
         originalLength: token.length,
         sanitizedLength: sanitized.length,
         hadProblematicChars: sanitized.length !== token.length
@@ -349,7 +349,7 @@ export class PersistentLokkaMCPClient extends EventEmitter {
 
       return sanitized;
     } catch (error) {
-      console.error('[PersistentLokka] Error sanitizing ACCESS_TOKEN:', error);
+      console.error('[PersistentDynamic_Endpoint_Assistant] Error sanitizing ACCESS_TOKEN:', error);
       return token; // Return original if sanitization fails
     }
   }
@@ -361,7 +361,7 @@ export class PersistentLokkaMCPClient extends EventEmitter {
     if (!this.process) return;
 
     this.process.on('spawn', () => {
-      console.log('[PersistentLokka] ✅ Persistent process spawned successfully');
+      console.log('[PersistentDynamic_Endpoint_Assistant] ✅ Persistent process spawned successfully');
       this.sendDebugToRenderer('Persistent process spawned successfully');
       this.isRunning = true;
       
@@ -373,12 +373,12 @@ export class PersistentLokkaMCPClient extends EventEmitter {
     });
 
     this.process.on('error', (error) => {
-      console.error('[PersistentLokka] ❌ Persistent process error:', error);
+      console.error('[PersistentDynamic_Endpoint_Assistant] ❌ Persistent process error:', error);
       
       // Provide specific guidance for common errors
       if (error.message.includes('ENOENT') || error.message.includes('spawn npx')) {
-        console.error('[PersistentLokka] 🚨 NPX NOT FOUND: This likely means npx is not available in the portable build environment.');
-        console.error('[PersistentLokka] 💡 SOLUTION: The fallback clients should handle this. This is expected in portable builds.');
+        console.error('[PersistentDynamic_Endpoint_Assistant] 🚨 NPX NOT FOUND: This likely means npx is not available in the portable build environment.');
+        console.error('[PersistentDynamic_Endpoint_Assistant] 💡 SOLUTION: The fallback clients should handle this. This is expected in portable builds.');
         this.sendDebugToRenderer(`NPX not found in portable build environment: ${error.message}`);
       } else {
         this.sendDebugToRenderer(`Persistent process error: ${error.message}`);
@@ -389,7 +389,7 @@ export class PersistentLokkaMCPClient extends EventEmitter {
     });
 
     this.process.on('exit', (code, signal) => {
-      console.log(`[PersistentLokka] 🔄 Persistent process exited with code ${code}, signal ${signal}`);
+      console.log(`[PersistentDynamic_Endpoint_Assistant] 🔄 Persistent process exited with code ${code}, signal ${signal}`);
       this.sendDebugToRenderer(`Persistent process exited: code=${code}, signal=${signal}`);
       this.isRunning = false;
       this.initialized = false;
@@ -397,7 +397,7 @@ export class PersistentLokkaMCPClient extends EventEmitter {
     });
 
     this.process.on('close', (code, signal) => {
-      console.log(`[PersistentLokka] 🔄 Persistent process closed with code ${code}, signal ${signal}`);
+      console.log(`[PersistentDynamic_Endpoint_Assistant] 🔄 Persistent process closed with code ${code}, signal ${signal}`);
       this.sendDebugToRenderer(`Persistent process closed: code=${code}, signal=${signal}`);
       this.isRunning = false;
       this.initialized = false;
@@ -426,9 +426,9 @@ export class PersistentLokkaMCPClient extends EventEmitter {
       
       // Check for syntax errors that were causing crashes
       if (output.includes('SyntaxError') || output.includes('Invalid or unexpected token')) {
-        console.error('[PersistentLokka] 🚨 SYNTAX ERROR DETECTED in persistent process:', output);
+        console.error('[PersistentDynamic_Endpoint_Assistant] 🚨 SYNTAX ERROR DETECTED in persistent process:', output);
         this.sendDebugToRenderer(`🚨 SYNTAX ERROR in persistent process: ${output}`);
-        this.emit('error', new Error(`Lokka syntax error: ${output}`));
+        this.emit('error', new Error(`Dynamic_Endpoint_Assistant syntax error: ${output}`));
       }
     });
   }
@@ -447,11 +447,11 @@ export class PersistentLokkaMCPClient extends EventEmitter {
     for (const line of lines) {
       if (line.trim()) {
         try {
-          const message = JSON.parse(line) as LokkaMCPResponse;
+          const message = JSON.parse(line) as Dynamic_Endpoint_AssistantMCPResponse;
           this.handleResponse(message);
         } catch (parseError) {
           // Not JSON, might be startup output - ignore for now
-          console.log('[PersistentLokka] Non-JSON output:', line.substring(0, 100));
+          console.log('[PersistentDynamic_Endpoint_Assistant] Non-JSON output:', line.substring(0, 100));
         }
       }
     }
@@ -460,8 +460,8 @@ export class PersistentLokkaMCPClient extends EventEmitter {
   /**
    * Handle JSON-RPC response from Lokka
    */
-  private handleResponse(response: LokkaMCPResponse): void {
-    console.log('[PersistentLokka] Received JSON-RPC response:', response);
+  private handleResponse(response: Dynamic_Endpoint_AssistantMCPResponse): void {
+    console.log('[PersistentDynamic_Endpoint_Assistant] Received JSON-RPC response:', response);
 
     const pending = this.pendingRequests.get(response.id);
     if (pending) {
@@ -480,14 +480,14 @@ export class PersistentLokkaMCPClient extends EventEmitter {
    * Send JSON-RPC request to persistent Lokka process
    */
   async sendRequest(method: string, params?: any): Promise<any> {
-    console.log(`[PersistentLokka] SendRequest: method=${method}, isRunning=${this.isRunning}, initialized=${this.initialized}`);
+    console.log(`[PersistentDynamic_Endpoint_Assistant] SendRequest: method=${method}, isRunning=${this.isRunning}, initialized=${this.initialized}`);
     
     if (!this.isRunning || !this.initialized || !this.process || !this.process.stdin) {
       throw new Error(`Persistent Lokka process not ready (running: ${this.isRunning}, initialized: ${this.initialized})`);
     }
 
     const id = this.requestId++;
-    const request: LokkaMCPRequest = {
+    const request: Dynamic_Endpoint_AssistantMCPRequest = {
       jsonrpc: '2.0',
       id,
       method,
@@ -503,7 +503,7 @@ export class PersistentLokkaMCPClient extends EventEmitter {
       this.pendingRequests.set(id, { resolve, reject, timeout });
 
       const requestJson = JSON.stringify(request) + '\n';
-      console.log('[PersistentLokka] Sending JSON-RPC request:', requestJson.trim());
+      console.log('[PersistentDynamic_Endpoint_Assistant] Sending JSON-RPC request:', requestJson.trim());
       
       try {
         this.process!.stdin!.write(requestJson);
@@ -519,7 +519,7 @@ export class PersistentLokkaMCPClient extends EventEmitter {
    * Stop the persistent process
    */
   async stop(): Promise<void> {
-    console.log('[PersistentLokka] Stopping persistent process...');
+    console.log('[PersistentDynamic_Endpoint_Assistant] Stopping persistent process...');
     
     if (this.process) {
       // Clear any pending requests
@@ -553,7 +553,7 @@ export class PersistentLokkaMCPClient extends EventEmitter {
           }
         });
       } catch (error) {
-        console.error('[PersistentLokka] Error stopping persistent process:', error);
+        console.error('[PersistentDynamic_Endpoint_Assistant] Error stopping persistent process:', error);
       }
     }
 
@@ -585,11 +585,11 @@ export class PersistentLokkaMCPClient extends EventEmitter {
       try {
         fs.rmSync(this.tempDir, { recursive: true, force: true });
       } catch (error) {
-        console.warn('[PersistentLokka] Failed to clean up temp directory:', error);
+        console.warn('[PersistentDynamic_Endpoint_Assistant] Failed to clean up temp directory:', error);
       }
     }
     
-    console.log('[PersistentLokka] Cleanup completed');
+    console.log('[PersistentDynamic_Endpoint_Assistant] Cleanup completed');
     this.emit('exit', 0, 'cleanup');
   }
 
@@ -615,7 +615,7 @@ export class PersistentLokkaMCPClient extends EventEmitter {
       const result = await this.sendRequest('tools/list');
       return result.tools || [];
     } catch (error) {
-      console.error('[PersistentLokka] Failed to list tools:', error);
+      console.error('[PersistentDynamic_Endpoint_Assistant] Failed to list tools:', error);
       return [];
     }
   }
@@ -631,7 +631,7 @@ export class PersistentLokkaMCPClient extends EventEmitter {
       });
       return result;
     } catch (error) {
-      console.error('[PersistentLokka] Failed to call tool:', error);
+      console.error('[PersistentDynamic_Endpoint_Assistant] Failed to call tool:', error);
       throw error;
     }
   }
@@ -649,7 +649,7 @@ export class PersistentLokkaMCPClient extends EventEmitter {
         !this.isElectronAvailable()
       ) {
         // In test environment or when Electron is not available, just log to console
-        console.log(`[PERSISTENT-LOKKA-TRACE] ${message}`);
+        console.log(`[PERSISTENT-DYNAMIC_ENDPOINT_ASSISTANT-TRACE] ${message}`);
         return;
       }
 
@@ -658,7 +658,7 @@ export class PersistentLokkaMCPClient extends EventEmitter {
       
       if (mainWindow && mainWindow.webContents) {
         mainWindow.webContents.executeJavaScript(`
-          console.log('[PERSISTENT-LOKKA-TRACE] ${message.replace(/'/g, "\\'")}');
+          console.log('[PERSISTENT-DYNAMIC_ENDPOINT_ASSISTANT-TRACE] ${message.replace(/'/g, "\\'")}');
         `).catch(() => {
           // Silently fail if we can't send to renderer
         });
@@ -666,7 +666,7 @@ export class PersistentLokkaMCPClient extends EventEmitter {
     } catch (error) {
       // Silently fail - this is just for debugging
       // In case of Jest teardown, just log to console
-      console.log(`[PERSISTENT-LOKKA-TRACE] ${message}`);
+      console.log(`[PERSISTENT-DYNAMIC_ENDPOINT_ASSISTANT-TRACE] ${message}`);
     }
   }
 

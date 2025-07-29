@@ -27,6 +27,7 @@ export interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
   timestamp: Date;
+  artifacts?: import('./artifacts').Artifact[]; // Artifacts extracted from the message
   metadata?: {
     graphApiCalls?: GraphApiCall[];
     llmProvider?: string;
@@ -42,7 +43,17 @@ export interface ChatMessage {
       errors?: string[];
     };
     isError?: boolean; // Flag to identify error messages for special styling
+    hasArtifacts?: boolean; // Flag to indicate if message contains artifacts
   };
+}
+
+export interface ChatSession {
+  id: string;
+  title: string;
+  messages: ChatMessage[];
+  createdAt: Date;
+  updatedAt: Date;
+  summary?: string; // Brief summary of the conversation
 }
 
 export interface GraphApiCall {
@@ -111,11 +122,16 @@ export interface MCPConfig {
   microsoftDocs?: {
     enabled: boolean;
   };
+  // New: User-defined MCP servers
+  customServers?: MCPServerConfig[];
+  // Server management settings
+  allowCustomServers?: boolean;
+  maxCustomServers?: number;
 }
 
 export interface MCPServerConfig {
   name: string;
-  type: 'fetch' | 'external-lokka' | 'microsoft-docs';
+  type: 'fetch' | 'external-lokka' | 'microsoft-docs' | 'custom-stdio' | 'custom-http';
   port: number;
   enabled: boolean;
   url?: string;
@@ -127,6 +143,15 @@ export interface MCPServerConfig {
   env?: {
     [key: string]: string | undefined;
   };
+  // New fields for user-configurable servers
+  displayName?: string; // User-friendly name
+  description?: string; // User-provided description
+  isBuiltIn?: boolean; // Whether this is a built-in server
+  isUserDefined?: boolean; // Whether this is user-defined
+  category?: 'builtin' | 'community' | 'custom'; // Server category
+  version?: string; // Server version
+  author?: string; // Server author
+  documentation?: string; // Link to documentation
 }
 
 export interface AppConfig {
@@ -193,6 +218,13 @@ export interface ElectronAPI {
     saveMCPConfig: (config: MCPConfig) => Promise<void>;
     updateLokkaMCPConfig: (config: Partial<MCPConfig['lokka']>) => Promise<void>;
     isLokkaMCPConfigured: () => Promise<boolean>;
+    // Custom MCP Server management
+    addCustomMCPServer: (server: MCPServerConfig) => Promise<{ success: boolean; error?: string }>;
+    removeCustomMCPServer: (serverName: string) => Promise<{ success: boolean; error?: string }>;
+    updateCustomMCPServer: (serverName: string, updates: Partial<MCPServerConfig>) => Promise<{ success: boolean; error?: string }>;
+    getCustomMCPServers: () => Promise<MCPServerConfig[]>;
+    testMCPServerConnection: (server: MCPServerConfig) => Promise<{ success: boolean; error?: string; tools?: any[] }>;
+    validateMCPServerConfig: (server: MCPServerConfig) => Promise<{ valid: boolean; errors: string[] }>;
   };
   app: {
     getVersion: () => Promise<string>;

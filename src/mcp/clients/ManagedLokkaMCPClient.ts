@@ -3,14 +3,14 @@ import { EventEmitter } from 'events';
 import * as path from 'path';
 import * as fs from 'fs';
 
-interface LokkaMCPRequest {
+interface Dynamic_Endpoint_AssistantMCPRequest {
   jsonrpc: string;
   id: string | number;
   method: string;
   params?: any;
 }
 
-interface LokkaMCPResponse {
+interface Dynamic_Endpoint_AssistantMCPResponse {
   jsonrpc: string;
   id: string | number;
   result?: any;
@@ -18,10 +18,10 @@ interface LokkaMCPResponse {
 }
 
 /**
- * Managed Lokka MCP Client that runs Lokka in a persistent process
+ * Managed Dynamic_Endpoint_Assistant MCP Client that runs Dynamic_Endpoint_Assistant in a persistent process
  * with guaranteed environment variable access
  */
-export class ManagedLokkaMCPClient extends EventEmitter {
+export class ManagedDynamic_Endpoint_AssistantMCPClient extends EventEmitter {
   private process: ChildProcess | null = null;
   private isRunning: boolean = false;
   private initialized: boolean = false;
@@ -37,7 +37,7 @@ export class ManagedLokkaMCPClient extends EventEmitter {
 
   constructor(private environment: Record<string, string>) {
     super();
-    console.log('[ManagedLokkaMCP] Creating managed Lokka client with environment:', {
+    console.log('[ManagedDynamic_Endpoint_AssistantMCP] Creating managed Dynamic_Endpoint_Assistant client with environment:', {
       hasClientId: !!environment.CLIENT_ID,
       hasTenantId: !!environment.TENANT_ID,
       hasAccessToken: !!environment.ACCESS_TOKEN,
@@ -47,11 +47,11 @@ export class ManagedLokkaMCPClient extends EventEmitter {
   }
 
   /**
-   * Start the managed Lokka process
+   * Start the managed Dynamic_Endpoint_Assistant process
    */
   async start(): Promise<void> {
     if (this.isRunning) {
-      console.log('[ManagedLokkaMCP] Process already running');
+      console.log('[ManagedDynamic_Endpoint_AssistantMCP] Process already running');
       return;
     }
 
@@ -65,17 +65,17 @@ export class ManagedLokkaMCPClient extends EventEmitter {
 
   private async doStart(): Promise<void> {
     return new Promise((resolve, reject) => {
-      console.log('[ManagedLokkaMCP] Starting Lokka process...');
+      console.log('[ManagedDynamic_Endpoint_AssistantMCP] Starting Dynamic_Endpoint_Assistant process...');
 
       // Create a temporary directory for this process
-      const tempDir = path.join(process.cwd(), 'temp-lokka-' + Date.now());
+      const tempDir = path.join(process.cwd(), 'temp-dynamic-endpoint-assistant-' + Date.now());
       
       try {
         if (!fs.existsSync(tempDir)) {
           fs.mkdirSync(tempDir, { recursive: true });
         }
 
-        // Merge current environment with Lokka-specific variables
+        // Merge current environment with Dynamic_Endpoint_Assistant-specific variables
         const processEnv: Record<string, string> = {
           ...process.env as Record<string, string>,
           ...this.environment,
@@ -87,7 +87,7 @@ export class ManagedLokkaMCPClient extends EventEmitter {
           NPM_CONFIG_UPDATE_NOTIFIER: 'false'
         };
 
-        console.log('[ManagedLokkaMCP] Environment prepared:', {
+        console.log('[ManagedDynamic_Endpoint_AssistantMCP] Environment prepared:', {
           hasClientId: !!processEnv['CLIENT_ID'],
           hasTenantId: !!processEnv['TENANT_ID'],
           hasAccessToken: !!processEnv['ACCESS_TOKEN'],
@@ -95,7 +95,7 @@ export class ManagedLokkaMCPClient extends EventEmitter {
           workingDir: tempDir
         });
 
-        // Spawn the Lokka process with proper environment
+        // Spawn the Dynamic_Endpoint_Assistant process with proper environment
         this.process = spawn('npx', ['-y', '@merill/lokka'], {
           cwd: tempDir,
           env: processEnv,
@@ -110,13 +110,13 @@ export class ManagedLokkaMCPClient extends EventEmitter {
 
         // Handle process startup
         this.process.on('spawn', () => {
-          console.log('[ManagedLokkaMCP] ✅ Process spawned successfully');
+          console.log('[ManagedDynamic_Endpoint_AssistantMCP] ✅ Process spawned successfully');
           this.isRunning = true;
         });
 
         // Handle process errors
         this.process.on('error', (error) => {
-          console.error('[ManagedLokkaMCP] ❌ Process error:', error);
+          console.error('[ManagedDynamic_Endpoint_AssistantMCP] ❌ Process error:', error);
           this.isRunning = false;
           this.emit('error', error);
           reject(error);
@@ -124,7 +124,7 @@ export class ManagedLokkaMCPClient extends EventEmitter {
 
         // Handle process exit
         this.process.on('exit', (code, signal) => {
-          console.log('[ManagedLokkaMCP] Process exited:', { code, signal });
+          console.log('[ManagedDynamic_Endpoint_AssistantMCP] Process exited:', { code, signal });
           this.isRunning = false;
           this.emit('exit', code, signal);
           
@@ -134,7 +134,7 @@ export class ManagedLokkaMCPClient extends EventEmitter {
               fs.rmSync(tempDir, { recursive: true, force: true });
             }
           } catch (cleanupError) {
-            console.warn('[ManagedLokkaMCP] Failed to clean up temp directory:', cleanupError);
+            console.warn('[ManagedDynamic_Endpoint_AssistantMCP] Failed to clean up temp directory:', cleanupError);
           }
         });
 
@@ -150,13 +150,13 @@ export class ManagedLokkaMCPClient extends EventEmitter {
 
         // Wait for initialization or timeout
         const initTimeout = setTimeout(() => {
-          reject(new Error('Lokka initialization timeout'));
+          reject(new Error('Dynamic_Endpoint_Assistant initialization timeout'));
         }, 30000); // 30 second timeout
 
         // Try to initialize with a simple request
         setTimeout(async () => {
           try {
-            console.log('[ManagedLokkaMCP] Attempting to initialize with ping...');
+            console.log('[ManagedDynamic_Endpoint_AssistantMCP] Attempting to initialize with ping...');
             await this.sendRequest('initialize', {
               protocolVersion: '2024-11-05',
               capabilities: {},
@@ -167,34 +167,34 @@ export class ManagedLokkaMCPClient extends EventEmitter {
             });
             
             clearTimeout(initTimeout);
-            console.log('[ManagedLokkaMCP] ✅ Initialization successful');
+            console.log('[ManagedDynamic_Endpoint_AssistantMCP] ✅ Initialization successful');
             this.initialized = true;
             
             // List available tools for debugging
             try {
               const toolsResponse = await this.sendRequest('tools/list', {});
-              console.log('[ManagedLokkaMCP] 🛠️ Available tools:', JSON.stringify(toolsResponse, null, 2));
+              console.log('[ManagedDynamic_Endpoint_AssistantMCP] 🛠️ Available tools:', JSON.stringify(toolsResponse, null, 2));
             } catch (toolsError) {
-              console.log('[ManagedLokkaMCP] ⚠️ Could not list tools:', toolsError);
+              console.log('[ManagedDynamic_Endpoint_AssistantMCP] ⚠️ Could not list tools:', toolsError);
             }
             
             resolve();
           } catch (initError) {
             clearTimeout(initTimeout);
-            console.error('[ManagedLokkaMCP] ❌ Initialization failed:', initError);
+            console.error('[ManagedDynamic_Endpoint_AssistantMCP] ❌ Initialization failed:', initError);
             reject(initError);
           }
         }, 2000); // Wait 2 seconds for process to start
 
       } catch (error) {
-        console.error('[ManagedLokkaMCP] Failed to start process:', error);
+        console.error('[ManagedDynamic_Endpoint_AssistantMCP] Failed to start process:', error);
         reject(error);
       }
     });
   }
 
   /**
-   * Handle stdout data from Lokka process
+   * Handle stdout data from Dynamic_Endpoint_Assistant process
    */
   private handleStdoutData(data: Buffer): void {
     const text = data.toString();
@@ -207,29 +207,29 @@ export class ManagedLokkaMCPClient extends EventEmitter {
     for (const line of lines) {
       if (line.trim()) {
         try {
-          const message = JSON.parse(line) as LokkaMCPResponse;
+          const message = JSON.parse(line) as Dynamic_Endpoint_AssistantMCPResponse;
           this.handleResponse(message);
         } catch (parseError) {
-          console.warn('[ManagedLokkaMCP] Failed to parse response:', line, parseError);
+          console.warn('[ManagedDynamic_Endpoint_AssistantMCP] Failed to parse response:', line, parseError);
         }
       }
     }
   }
 
   /**
-   * Handle stderr data from Lokka process
+   * Handle stderr data from Dynamic_Endpoint_Assistant process
    */
   private handleStderrData(data: Buffer): void {
     const text = data.toString();
     this.stderrBuffer += text;
-    console.warn('[ManagedLokkaMCP] Stderr:', text);
+    console.warn('[ManagedDynamic_Endpoint_AssistantMCP] Stderr:', text);
   }
 
   /**
-   * Handle response from Lokka process
+   * Handle response from Dynamic_Endpoint_Assistant process
    */
-  private handleResponse(response: LokkaMCPResponse): void {
-    console.log('[ManagedLokkaMCP] Received response:', response);
+  private handleResponse(response: Dynamic_Endpoint_AssistantMCPResponse): void {
+    console.log('[ManagedDynamic_Endpoint_AssistantMCP] Received response:', response);
 
     const pending = this.pendingRequests.get(response.id);
     if (pending) {
@@ -245,15 +245,15 @@ export class ManagedLokkaMCPClient extends EventEmitter {
   }
 
   /**
-   * Send request to Lokka process
+   * Send request to Dynamic_Endpoint_Assistant process
    */
   async sendRequest(method: string, params?: any): Promise<any> {
     if (!this.isRunning || !this.process || !this.process.stdin) {
-      throw new Error('Lokka process not running');
+      throw new Error('Dynamic_Endpoint_Assistant process not running');
     }
 
     const id = this.requestId++;
-    const request: LokkaMCPRequest = {
+    const request: Dynamic_Endpoint_AssistantMCPRequest = {
       jsonrpc: '2.0',
       id,
       method,
@@ -269,7 +269,7 @@ export class ManagedLokkaMCPClient extends EventEmitter {
       this.pendingRequests.set(id, { resolve, reject, timeout });
 
       const requestJson = JSON.stringify(request) + '\n';
-      console.log('[ManagedLokkaMCP] Sending request:', requestJson.trim());
+      console.log('[ManagedDynamic_Endpoint_AssistantMCP] Sending request:', requestJson.trim());
       
       this.process!.stdin!.write(requestJson);
     });
@@ -283,7 +283,7 @@ export class ManagedLokkaMCPClient extends EventEmitter {
       const result = await this.sendRequest('tools/list');
       return result.tools || [];
     } catch (error) {
-      console.error('[ManagedLokkaMCP] Failed to list tools:', error);
+      console.error('[ManagedDynamic_Endpoint_AssistantMCP] Failed to list tools:', error);
       return [];
     }
   }
@@ -299,20 +299,20 @@ export class ManagedLokkaMCPClient extends EventEmitter {
       });
       return result;
     } catch (error) {
-      console.error('[ManagedLokkaMCP] Failed to call tool:', error);
+      console.error('[ManagedDynamic_Endpoint_AssistantMCP] Failed to call tool:', error);
       throw error;
     }
   }
 
   /**
-   * Stop the managed Lokka process
+   * Stop the managed Dynamic_Endpoint_Assistant process
    */
   async stop(): Promise<void> {
     if (!this.isRunning || !this.process) {
       return;
     }
 
-    console.log('[ManagedLokkaMCP] Stopping process...');
+    console.log('[ManagedDynamic_Endpoint_AssistantMCP] Stopping process...');
 
     return new Promise((resolve) => {
       if (!this.process) {
@@ -321,7 +321,7 @@ export class ManagedLokkaMCPClient extends EventEmitter {
       }
 
       this.process.on('exit', () => {
-        console.log('[ManagedLokkaMCP] Process stopped');
+        console.log('[ManagedDynamic_Endpoint_AssistantMCP] Process stopped');
         this.isRunning = false;
         this.initialized = false;
         this.process = null;
@@ -332,22 +332,22 @@ export class ManagedLokkaMCPClient extends EventEmitter {
       try {
         this.process.kill('SIGTERM');
       } catch (error) {
-        console.warn('[ManagedLokkaMCP] Graceful shutdown failed, forcing kill');
+        console.warn('[ManagedDynamic_Endpoint_AssistantMCP] Graceful shutdown failed, forcing kill');
         try {
           this.process.kill('SIGKILL');
         } catch (killError) {
-          console.error('[ManagedLokkaMCP] Failed to kill process:', killError);
+          console.error('[ManagedDynamic_Endpoint_AssistantMCP] Failed to kill process:', killError);
         }
       }
 
       // Force cleanup after timeout
       setTimeout(() => {
         if (this.process && this.isRunning) {
-          console.warn('[ManagedLokkaMCP] Force killing process');
+          console.warn('[ManagedDynamic_Endpoint_AssistantMCP] Force killing process');
           try {
             this.process.kill('SIGKILL');
           } catch (error) {
-            console.error('[ManagedLokkaMCP] Force kill failed:', error);
+            console.error('[ManagedDynamic_Endpoint_AssistantMCP] Force kill failed:', error);
           }
         }
         this.isRunning = false;
@@ -383,7 +383,7 @@ export class ManagedLokkaMCPClient extends EventEmitter {
       
       if (mainWindow && mainWindow.webContents) {
         mainWindow.webContents.executeJavaScript(`
-          console.log('[LOKKA-TRACE] ${message.replace(/'/g, "\\'")}');
+          console.log('[DYNAMIC_ENDPOINT_ASSISTANT-TRACE] ${message.replace(/'/g, "\\'")}');
         `).catch(() => {
           // Silently fail if we can't send to renderer
         });

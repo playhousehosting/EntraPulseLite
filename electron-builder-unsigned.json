@@ -1,6 +1,6 @@
 {
   "appId": "com.darrenjrobinson.entrapulselite",
-  "productName": "EntraPulse Lite",
+  "productName": "DynamicEndpoint Assistant",
   "directories": {
     "output": "dist-release"
   },

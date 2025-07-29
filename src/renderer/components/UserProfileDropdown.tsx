@@ -31,9 +31,12 @@ import {
   Info as InfoIcon,
   ContentCopy as CopyIcon,
   Close as CloseIcon,
+  Storage as MCPIcon,
+  Settings as SettingsIcon,
 } from '@mui/icons-material';
 import { User, AuthToken } from '../../types';
 import { UserProfileAvatar } from './UserProfileAvatar';
+import { MCPServerManagementDialog } from './MCPServerManagementDialog';
 
 interface UserProfileDropdownProps {
   anchorEl: HTMLElement | null;
@@ -73,6 +76,7 @@ export const UserProfileDropdown: React.FC<UserProfileDropdownProps> = ({
   authToken,
 }) => {
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
+  const [mcpDialogOpen, setMcpDialogOpen] = useState(false);
   const [idTokenClaims, setIdTokenClaims] = useState<IDTokenClaims | null>(null);
   useEffect(() => {
     if (authToken?.idToken) {
@@ -235,6 +239,14 @@ export const UserProfileDropdown: React.FC<UserProfileDropdownProps> = ({
             </ListItemIcon>
             <ListItemText>
               <Typography variant="body2">View Full Details</Typography>
+            </ListItemText>
+          </MenuItem>
+          <MenuItem onClick={() => setMcpDialogOpen(true)}>
+            <ListItemIcon>
+              <MCPIcon />
+            </ListItemIcon>
+            <ListItemText>
+              <Typography variant="body2">MCP Server Management</Typography>
             </ListItemText>
           </MenuItem>
         </MenuList>
@@ -405,6 +417,12 @@ export const UserProfileDropdown: React.FC<UserProfileDropdownProps> = ({
           <Button onClick={() => setDetailsDialogOpen(false)}>Close</Button>
         </DialogActions>
       </Dialog>
+
+      {/* MCP Server Management Dialog */}
+      <MCPServerManagementDialog
+        open={mcpDialogOpen}
+        onClose={() => setMcpDialogOpen(false)}
+      />
     </>
   );
 };
