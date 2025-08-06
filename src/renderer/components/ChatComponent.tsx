@@ -48,6 +48,8 @@ import { getAssetPath } from '../utils/assetUtils';
 import { ChatMessage, User, AuthToken, EnhancedLLMResponse, QueryAnalysis, ChatSession } from '../../types';
 import { Artifact } from '../../types/artifacts';
 import { AppIcon } from './AppIcon';
+import { organizationalIntelligence } from '../../shared/OrganizationalIntelligence';
+import { naturalLanguageProcessor } from '../../shared/NaturalLanguageProcessor';
 import { UserProfileAvatar } from './UserProfileAvatar';
 import { UserProfileDropdown } from './UserProfileDropdown';
 import { ArtifactViewer } from './ArtifactViewer';

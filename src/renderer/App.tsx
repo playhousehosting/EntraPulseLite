@@ -1,7 +1,7 @@
 // Main App component for EntraPulse Lite
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Box, AppBar, Toolbar, Typography, IconButton, Switch, FormControlLabel, Tooltip } from '@mui/material';
-import { Settings as SettingsIcon, Brightness4, Brightness7, Info as InfoIcon } from '@mui/icons-material';
+import { Settings as SettingsIcon, Brightness4, Brightness7, Info as InfoIcon, Psychology as BrainIcon } from '@mui/icons-material';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { ChatComponent } from './components/ChatComponent';
 import { AppIcon } from './components/AppIcon';
@@ -9,6 +9,7 @@ import { SettingsDialog } from './components/SettingsDialog';
 import { EnhancedSettingsDialog } from './components/EnhancedSettingsDialog';
 import { AboutDialog } from './components/AboutDialog';
 import { UpdateNotification } from './components/common/UpdateNotification';
+import { IntelligenceDashboard } from './components/IntelligenceDashboard';
 import { LLMConfig } from '../types';
 import { VERSION } from '../shared/version';
 import { LLMStatusProvider, useLLMStatus } from './context/LLMStatusContext';
@@ -28,6 +29,7 @@ const AppContent: React.FC<AppContentProps> = ({ settingsOpen, setSettingsOpen }
   
   const [darkMode, setDarkMode] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [showIntelligence, setShowIntelligence] = useState(false);
 
   const [aboutOpen, setAboutOpen] = useState(false);
   const [configReloadTimeout, setConfigReloadTimeout] = useState<NodeJS.Timeout | null>(null);
@@ -331,6 +333,23 @@ const AppContent: React.FC<AppContentProps> = ({ settingsOpen, setSettingsOpen }
               sx={{ mr: 1 }}
             />
             
+            <Tooltip title="Claude Intelligence Dashboard">
+              <IconButton
+                size="large"
+                edge="end"
+                color="inherit"
+                onClick={() => setShowIntelligence(!showIntelligence)}
+                sx={{ 
+                  backgroundColor: showIntelligence ? 'rgba(255,255,255,0.1)' : 'transparent',
+                  '&:hover': {
+                    backgroundColor: 'rgba(255,255,255,0.2)',
+                  }
+                }}
+              >
+                <BrainIcon />
+              </IconButton>
+            </Tooltip>
+            
             <IconButton
               size="large"
               edge="end"
@@ -354,7 +373,11 @@ const AppContent: React.FC<AppContentProps> = ({ settingsOpen, setSettingsOpen }
 
         {/* Main Content */}
         <Box sx={{ flex: 1, overflow: 'hidden' }}>
-          <ChatComponent />
+          {showIntelligence ? (
+            <IntelligenceDashboard />
+          ) : (
+            <ChatComponent />
+          )}
         </Box>
 
         {/* Settings Dialog */}        <EnhancedSettingsDialog
