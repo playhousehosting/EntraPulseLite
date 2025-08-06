@@ -251,6 +251,40 @@ export const ArtifactViewer: React.FC<ArtifactViewerProps> = ({
           </Box>
         );
       
+      case 'text/css':
+        return (
+          <Box sx={{ p: 2 }}>
+            <Typography variant="caption" color="textSecondary" gutterBottom>
+              CSS Styles Preview
+            </Typography>
+            <Box sx={{ 
+              backgroundColor: '#f8f9fa', 
+              padding: '16px', 
+              borderRadius: '8px',
+              border: '2px dashed #dee2e6',
+              textAlign: 'center',
+              mb: 2
+            }}>
+              <Typography variant="h6" color="primary" gutterBottom>
+                🎨 CSS Styles
+              </Typography>
+              <Typography variant="body2" color="textSecondary">
+                Apply these styles to see visual changes
+              </Typography>
+            </Box>
+            <pre style={{ 
+              backgroundColor: '#f5f5f5', 
+              padding: '12px', 
+              borderRadius: '4px',
+              fontSize: '12px',
+              overflow: 'auto',
+              maxHeight: '300px'
+            }}>
+              {editedContent}
+            </pre>
+          </Box>
+        );
+      
       case 'text/markdown':
         return (
           <Box sx={{ p: 2 }}>
@@ -360,11 +394,16 @@ export const ArtifactViewer: React.FC<ArtifactViewerProps> = ({
     'application/react', 
     'image/svg+xml', 
     'text/markdown',
+    'text/css',
     'application/streamlit',
     'application/nextjs',
     'application/webapp',
     'application/dashboard'
   ].includes(artifact.type);
+
+  // Check if this is interactive content like Claude does
+  const isInteractive = artifact.metadata?.isInteractive || 
+                       ['text/html', 'application/react', 'application/webapp', 'application/dashboard'].includes(artifact.type);
 
   return (
     <>
@@ -373,9 +412,19 @@ export const ArtifactViewer: React.FC<ArtifactViewerProps> = ({
         <Box sx={{ p: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
           <Box display="flex" justifyContent="space-between" alignItems="center">
             <Box>
-              <Typography variant="h6" gutterBottom>
-                {artifact.title}
-              </Typography>
+              <Box display="flex" alignItems="center" gap={1} mb={1}>
+                <Typography variant="h6">
+                  {artifact.title}
+                </Typography>
+                {isInteractive && (
+                  <Chip 
+                    label="Interactive" 
+                    size="small" 
+                    color="primary" 
+                    variant="outlined"
+                  />
+                )}
+              </Box>
               {artifact.description && (
                 <Typography variant="body2" color="textSecondary">
                   {artifact.description}

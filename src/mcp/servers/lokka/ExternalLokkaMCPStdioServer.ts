@@ -248,7 +248,7 @@ export class ExternalDynamic_Endpoint_AssistantMCPStdioServer {
         throw new Error('Required environment variables (TENANT_ID, CLIENT_ID) are missing or empty for persistent client');
       }
       
-      this.persistentClient = new PersistentLokkaMCPClient(filteredEnv);
+      this.persistentClient = new PersistentDynamic_Endpoint_AssistantMCPClient(filteredEnv);
       
       console.log('🔧 [ExternalLokkaMCPStdioServer] Starting Persistent Lokka Client...');
       await this.persistentClient.start();
@@ -307,7 +307,7 @@ export class ExternalDynamic_Endpoint_AssistantMCPStdioServer {
         throw new Error('Required environment variables (TENANT_ID, CLIENT_ID) are missing or empty for managed client');
       }
       
-      this.managedClient = new ManagedLokkaMCPClient(filteredEnv);
+      this.managedClient = new ManagedDynamic_Endpoint_AssistantMCPClient(filteredEnv);
       
       console.log('🔧 [ExternalLokkaMCPStdioServer] Starting Managed Lokka Client...');
       await this.managedClient.start();

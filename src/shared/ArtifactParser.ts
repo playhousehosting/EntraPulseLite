@@ -10,38 +10,44 @@ export interface ParsedResponse {
 
 export class ArtifactParser {
   private static readonly ARTIFACT_PATTERNS = {
-    // Code blocks with specific languages
-    codeBlock: /```(\w+)?\n([\s\S]*?)```/g,
+    // Code blocks with specific languages - more comprehensive detection like Claude
+    codeBlock: /```(\w+)?\n?([\s\S]*?)```/g,
     
-    // HTML content
-    html: /<(!DOCTYPE html|html|head|body)/i,
+    // HTML content - enhanced detection
+    html: /<(!DOCTYPE html|html|head|body|div|p|h[1-6]|script|style|link)/i,
     
-    // React/JSX content
-    react: /(import\s+.*from\s+['"]react|export\s+default\s+function|const\s+\w+\s*=\s*\(\s*\)\s*=>|function\s+\w+\s*\(\s*\)\s*{)/,
+    // React/JSX content - more comprehensive like Claude
+    react: /(import\s+.*from\s+['"]react|export\s+default\s+function|const\s+\w+\s*=\s*\(\s*\)\s*=>|function\s+\w+\s*\(\s*\)\s*{|<\w+[\s\S]*?>|jsx|tsx)/,
     
     // SVG content
     svg: /<svg[\s\S]*?<\/svg>/gi,
     
-    // CSS content
-    css: /(\.[a-zA-Z][\w-]*\s*{|#[a-zA-Z][\w-]*\s*{|@media|@keyframes)/,
+    // CSS content - enhanced detection
+    css: /(\.[a-zA-Z][\w-]*\s*{|#[a-zA-Z][\w-]*\s*{|@media|@keyframes|body\s*{|html\s*{|\.[\w-]+|#[\w-]+)/,
     
-    // JSON content
+    // JSON content - enhanced detection
     json: /^\s*[\{\[]/,
     
     // SQL content
-    sql: /\b(SELECT|INSERT|UPDATE|DELETE|CREATE|ALTER|DROP)\b/i,
+    sql: /\b(SELECT|INSERT|UPDATE|DELETE|CREATE|ALTER|DROP|WITH|FROM|WHERE|JOIN)\b/i,
     
-    // Python content
-    python: /\b(def\s+\w+|class\s+\w+|import\s+\w+|from\s+\w+\s+import)\b/,
+    // Python content - enhanced detection like Claude
+    python: /\b(def\s+\w+|class\s+\w+|import\s+\w+|from\s+\w+\s+import|if\s+__name__|print\(|for\s+\w+\s+in|while\s+|try:|except:|with\s+open)/,
     
     // Streamlit content
     streamlit: /\b(st\.|streamlit|import streamlit)/,
     
     // Next.js content
-    nextjs: /(import.*from\s+['"]next|export\s+default\s+function.*Page|getStaticProps|getServerSideProps)/,
+    nextjs: /(import.*from\s+['"]next|export\s+default\s+function.*Page|getStaticProps|getServerSideProps|useRouter|useEffect)/,
     
     // Web app generation requests
-    webAppRequest: /\b(create|generate|build)\s+(streamlit|html|react|nextjs|web)\s+(app|application|dashboard|site)/i
+    webAppRequest: /\b(create|generate|build)\s+(streamlit|html|react|nextjs|web)\s+(app|application|dashboard|site)/i,
+    
+    // Interactive content indicators - like Claude's detection
+    interactive: /\b(interactive|clickable|button|input|form|chart|graph|visualization|dashboard)\b/i,
+    
+    // Complete HTML documents
+    fullHtmlDoc: /<!DOCTYPE\s+html|<html[\s\S]*<\/html>/gi
   };
 
   /**
@@ -112,6 +118,12 @@ export class ArtifactParser {
     
     if (!code.trim()) return null;
 
+    // Only create artifacts for substantial code (like Claude does)
+    // Skip very short code snippets that are better displayed inline
+    if (code.length < 50 && !this.shouldForceArtifact(code, language)) {
+      return null;
+    }
+
     const type = this.getArtifactTypeFromLanguage(language, code);
     if (!type) return null;
 
@@ -128,9 +140,49 @@ export class ArtifactParser {
       updatedAt: new Date(),
       metadata: {
         size: code.length,
-        tags: [language]
+        tags: [language],
+        isInteractive: this.isInteractiveContent(code, type)
       }
     };
+  }
+
+  /**
+   * Check if code should be forced into an artifact even if short
+   */
+  private static shouldForceArtifact(code: string, language: string): boolean {
+    // Force artifact for HTML/SVG/CSS regardless of length
+    const forceTypes = ['html', 'css', 'svg'];
+    if (forceTypes.includes(language.toLowerCase())) return true;
+    
+    // Force for complete HTML documents
+    if (this.ARTIFACT_PATTERNS.fullHtmlDoc.test(code)) return true;
+    
+    // Force for interactive content
+    if (this.ARTIFACT_PATTERNS.interactive.test(code)) return true;
+    
+    // Force for React components (usually worth showing in artifact)
+    if (this.ARTIFACT_PATTERNS.react.test(code)) return true;
+    
+    return false;
+  }
+
+  /**
+   * Determine if content is interactive (like Claude's detection)
+   */
+  private static isInteractiveContent(code: string, type: ArtifactType): boolean {
+    // HTML/React/Apps are potentially interactive
+    if (['text/html', 'application/react', 'application/webapp', 'application/dashboard'].includes(type)) {
+      return this.ARTIFACT_PATTERNS.interactive.test(code) || 
+             code.includes('onclick') || 
+             code.includes('addEventListener') ||
+             code.includes('<button') ||
+             code.includes('<input') ||
+             code.includes('<form') ||
+             code.includes('useState') ||
+             code.includes('useEffect');
+    }
+    
+    return false;
   }
 
   /**
@@ -301,7 +353,41 @@ export class ArtifactParser {
     return (
       this.ARTIFACT_PATTERNS.codeBlock.test(content) ||
       this.ARTIFACT_PATTERNS.html.test(content) ||
-      this.ARTIFACT_PATTERNS.svg.test(content)
+      this.ARTIFACT_PATTERNS.svg.test(content) ||
+      this.ARTIFACT_PATTERNS.react.test(content) ||
+      this.ARTIFACT_PATTERNS.fullHtmlDoc.test(content)
     );
+  }
+
+  /**
+   * Test function to verify artifact parsing works correctly
+   */
+  static testArtifactParsing(): void {
+    console.log('🧪 Testing Enhanced Artifact Parser...');
+    
+    const testCases = [
+      {
+        name: 'HTML Document',
+        content: '```html\n<!DOCTYPE html>\n<html>\n<head><title>Test</title></head>\n<body><h1>Hello World</h1></body>\n</html>\n```'
+      },
+      {
+        name: 'React Component',
+        content: '```jsx\nfunction Button() {\n  return <button onClick={() => alert("Hello!")}>Click me</button>;\n}\nexport default Button;\n```'
+      },
+      {
+        name: 'CSS Styles',
+        content: '```css\n.button {\n  background: blue;\n  color: white;\n  padding: 10px;\n}\n```'
+      }
+    ];
+    
+    testCases.forEach(test => {
+      const result = this.parseResponse(test.content);
+      console.log(`✅ ${test.name}: Found ${result.artifacts.length} artifacts`);
+      result.artifacts.forEach(artifact => {
+        console.log(`   - ${artifact.title} (${artifact.type}) - Interactive: ${artifact.metadata?.isInteractive}`);
+      });
+    });
+    
+    console.log('🎉 Artifact Parser testing complete!');
   }
 }

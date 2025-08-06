@@ -1,7 +1,7 @@
 // Main App component for EntraPulse Lite
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Box, AppBar, Toolbar, Typography, IconButton, Switch, FormControlLabel, Tooltip } from '@mui/material';
-import { Settings as SettingsIcon, Brightness4, Brightness7, Info as InfoIcon, Psychology as BrainIcon } from '@mui/icons-material';
+import { Settings as SettingsIcon, Brightness4, Brightness7, Info as InfoIcon, Psychology as BrainIcon, Chat as ChatIcon, Home as HomeIcon } from '@mui/icons-material';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { ChatComponent } from './components/ChatComponent';
 import { AppIcon } from './components/AppIcon';
@@ -170,7 +170,26 @@ const AppContent: React.FC<AppContentProps> = ({ settingsOpen, setSettingsOpen }
     // Check authentication status on app load
     stableCheckAuthStatus();
     // Load saved LLM configuration
-    stableLoadLLMConfig();    // Listen for authentication configuration availability
+    stableLoadLLMConfig();
+
+    // Add keyboard shortcut for navigation (Ctrl+Tab or Ctrl+Shift+I)
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key === 'Tab') {
+        event.preventDefault();
+        setShowIntelligence(!showIntelligence);
+      } else if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key === 'I') {
+        event.preventDefault();
+        setShowIntelligence(!showIntelligence);
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [showIntelligence]); // Add dependency for keyboard shortcut
+
+  useEffect(() => {    // Listen for authentication configuration availability
     const handleConfigurationAvailable = (event: any, data: any) => {
       console.log('🔄 [App.tsx] Configuration available - checking if settings dialog is open:', settingsOpenRef.current);
       
@@ -301,24 +320,75 @@ const AppContent: React.FC<AppContentProps> = ({ settingsOpen, setSettingsOpen }
                 <Typography variant="h6" component="div">
                   EntraPulse Lite
                 </Typography>
-                <Tooltip title="Application Version">
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                  <Tooltip title="Application Version">
+                    <Typography 
+                      variant="caption" 
+                      sx={{ 
+                        opacity: 0.7, 
+                        fontSize: '0.6rem',
+                        lineHeight: 1
+                      }}
+                    >
+                      v{VERSION}
+                    </Typography>
+                  </Tooltip>
                   <Typography 
                     variant="caption" 
                     sx={{ 
-                      opacity: 0.7, 
+                      opacity: 0.6, 
                       fontSize: '0.6rem',
                       lineHeight: 1,
-                      display: 'block',
-                      marginTop: '-3px'
+                      ml: 1,
+                      color: showIntelligence ? 'primary.light' : 'inherit'
                     }}
                   >
-                    v{VERSION}
+                    • {showIntelligence ? '🧠 Intelligence' : '💬 Chat'}
                   </Typography>
-                </Tooltip>
+                </Box>
               </Box>
             </Box>
             
             <Box sx={{ flexGrow: 1 }} />
+            
+            {/* Navigation Buttons */}
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mr: 2 }}>
+              <Tooltip title="Chat Interface (Ctrl+Tab)">
+                <IconButton
+                  size="large"
+                  color="inherit"
+                  onClick={() => setShowIntelligence(false)}
+                  sx={{ 
+                    backgroundColor: !showIntelligence ? 'rgba(255,255,255,0.15)' : 'transparent',
+                    border: !showIntelligence ? '1px solid rgba(255,255,255,0.2)' : '1px solid transparent',
+                    borderRadius: 2,
+                    '&:hover': {
+                      backgroundColor: 'rgba(255,255,255,0.2)',
+                    }
+                  }}
+                >
+                  <ChatIcon />
+                </IconButton>
+              </Tooltip>
+              
+              <Tooltip title="Claude Intelligence Dashboard (Ctrl+Shift+I)">
+                <IconButton
+                  size="large"
+                  color="inherit"
+                  onClick={() => setShowIntelligence(true)}
+                  sx={{ 
+                    backgroundColor: showIntelligence ? 'rgba(255,255,255,0.15)' : 'transparent',
+                    border: showIntelligence ? '1px solid rgba(255,255,255,0.2)' : '1px solid transparent',
+                    borderRadius: 2,
+                    '&:hover': {
+                      backgroundColor: 'rgba(255,255,255,0.2)',
+                    }
+                  }}
+                >
+                  <BrainIcon />
+                </IconButton>
+              </Tooltip>
+            </Box>
             
             <FormControlLabel
               control={
@@ -332,23 +402,6 @@ const AppContent: React.FC<AppContentProps> = ({ settingsOpen, setSettingsOpen }
               label=""
               sx={{ mr: 1 }}
             />
-            
-            <Tooltip title="Claude Intelligence Dashboard">
-              <IconButton
-                size="large"
-                edge="end"
-                color="inherit"
-                onClick={() => setShowIntelligence(!showIntelligence)}
-                sx={{ 
-                  backgroundColor: showIntelligence ? 'rgba(255,255,255,0.1)' : 'transparent',
-                  '&:hover': {
-                    backgroundColor: 'rgba(255,255,255,0.2)',
-                  }
-                }}
-              >
-                <BrainIcon />
-              </IconButton>
-            </Tooltip>
             
             <IconButton
               size="large"
@@ -374,7 +427,7 @@ const AppContent: React.FC<AppContentProps> = ({ settingsOpen, setSettingsOpen }
         {/* Main Content */}
         <Box sx={{ flex: 1, overflow: 'hidden' }}>
           {showIntelligence ? (
-            <IntelligenceDashboard />
+            <IntelligenceDashboard onNavigateToChat={() => setShowIntelligence(false)} />
           ) : (
             <ChatComponent />
           )}

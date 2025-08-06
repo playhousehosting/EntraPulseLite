@@ -418,18 +418,18 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
         content = 'Sorry, I received an unexpected response format.';
       }
       
-      // Parse artifacts from the assistant's response
-      const parsedResponse = ArtifactParser.parseResponse(content);
+      // Parse artifacts from the assistant's response - Disabled for performance
+      // const parsedResponse = ArtifactParser.parseResponse(content);
       
       const assistantMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: parsedResponse.content,
+        content: content, // parsedResponse.content,
         timestamp: new Date(),
-        artifacts: parsedResponse.artifacts,
+        artifacts: [], // parsedResponse.artifacts,
         metadata: {
           ...metadata,
-          hasArtifacts: parsedResponse.artifacts.length > 0
+          hasArtifacts: false // parsedResponse.artifacts.length > 0
         },
       };
 
@@ -1462,8 +1462,8 @@ What would you like to explore?`,
                         </ReactMarkdown>
                       </Box>
                       
-                      {/* Artifacts Display */}
-                      {message.artifacts && message.artifacts.length > 0 && (
+                      {/* Artifacts Display - Disabled for performance */}
+                      {false && message.artifacts && message.artifacts.length > 0 && (
                         <Box sx={{ mt: 2 }}>
                           {message.artifacts.map((artifact) => (
                             <ArtifactViewer

@@ -48,7 +48,9 @@ import {
   ExpandLess as ExpandLessIcon,
   PlayArrow as PlayIcon,
   Pause as PauseIcon,
-  Settings as SettingsIcon
+  Settings as SettingsIcon,
+  ArrowBack as ArrowBackIcon,
+  Chat as ChatIcon
 } from '@mui/icons-material';
 import { organizationalIntelligence } from '../../shared/OrganizationalIntelligence';
 
@@ -71,7 +73,13 @@ function TabPanel(props: TabPanelProps) {
   );
 }
 
-export const IntelligenceDashboard: React.FC = () => {
+interface IntelligenceDashboardProps {
+  onNavigateToChat?: () => void;
+}
+
+export const IntelligenceDashboard: React.FC<IntelligenceDashboardProps> = ({ 
+  onNavigateToChat 
+}) => {
   const [activeTab, setActiveTab] = useState(0);
   const [insights, setInsights] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -484,6 +492,18 @@ export const IntelligenceDashboard: React.FC = () => {
         </Box>
         
         <Box display="flex" gap={1}>
+          {onNavigateToChat && (
+            <Tooltip title="Back to Chat">
+              <Button
+                variant="outlined"
+                startIcon={<ChatIcon />}
+                onClick={onNavigateToChat}
+                sx={{ mr: 1 }}
+              >
+                Chat
+              </Button>
+            </Tooltip>
+          )}
           <Tooltip title={autoRefresh ? "Auto-refresh enabled" : "Auto-refresh disabled"}>
             <IconButton
               onClick={() => setAutoRefresh(!autoRefresh)}
