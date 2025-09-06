@@ -1,6 +1,8 @@
 import { writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
 import { app } from 'electron';
+import * as ExcelJS from 'exceljs';
+import PDFDocument from 'pdfkit';
 
 export interface ReportTemplate {
   id: string;
@@ -446,17 +448,27 @@ export class ReportingService {
     
     for (const query of template.queries) {
       try {
-        // In a real implementation, this would use the enhanced MCP server
-        // to execute the actual Graph API queries
+        // Execute actual Microsoft Graph API query through the main process
         console.log(`Executing query: ${query.name} on endpoint: ${query.endpoint}`);
         
-        // Placeholder for actual query execution
-        results[query.id] = {
-          query: query.name,
+        // Call the Graph service through the main process
+        const graphResult = await (window.electronAPI as any).graph.executeQuery({
           endpoint: query.endpoint,
-          data: [], // Would contain actual query results
-          timestamp: new Date().toISOString()
-        };
+          method: query.method || 'GET',
+          parameters: query.parameters,
+          tenantId: tenantId
+        });
+
+        if (graphResult.success) {
+          results[query.id] = {
+            query: query.name,
+            endpoint: query.endpoint,
+            data: graphResult.data,
+            timestamp: new Date().toISOString()
+          };
+        } else {
+          throw new Error(graphResult.error || 'Query execution failed');
+        }
         
       } catch (error) {
         console.error(`Error executing query ${query.id}:`, error);
@@ -543,14 +555,10 @@ export class ReportingService {
         await writeFile(filePath, htmlContent);
         break;
       case ReportFormat.PDF:
-        // In a real implementation, this would use a PDF generation library
-        const pdfPlaceholder = `PDF Report: ${template.name}\nGenerated: ${new Date().toISOString()}\n\nData: ${JSON.stringify(data, null, 2)}`;
-        await writeFile(filePath, pdfPlaceholder);
+        await this.generatePDF(template, data, parameters, filePath);
         break;
       case ReportFormat.EXCEL:
-        // In a real implementation, this would use an Excel library like ExcelJS
-        const excelPlaceholder = `Excel Report: ${template.name}\nGenerated: ${new Date().toISOString()}\n\nData: ${JSON.stringify(data, null, 2)}`;
-        await writeFile(filePath, excelPlaceholder);
+        await this.generateExcel(template, data, parameters, filePath);
         break;
       default:
         throw new Error(`Unsupported format: ${format}`);
@@ -632,8 +640,38 @@ export class ReportingService {
 
   // Post-processing helper methods
   private calculateSecurityScore(data: any): number {
-    // Placeholder security score calculation
-    return Math.floor(Math.random() * 100);
+    // Calculate actual security score based on data
+    if (!data || !Array.isArray(data)) return 0;
+    
+    let score = 100;
+    let totalItems = data.length;
+    let securityIssues = 0;
+    
+    // Count security-related issues in the data
+    data.forEach(item => {
+      if (item.riskLevel === 'High' || item.severity === 'High') {
+        securityIssues += 3;
+      } else if (item.riskLevel === 'Medium' || item.severity === 'Medium') {
+        securityIssues += 2;
+      } else if (item.riskLevel === 'Low' || item.severity === 'Low') {
+        securityIssues += 1;
+      }
+      
+      // Check for common security indicators
+      if (item.isCompliant === false) securityIssues += 2;
+      if (item.hasVulnerabilities === true) securityIssues += 3;
+      if (item.lastSignIn && new Date(item.lastSignIn) < new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)) {
+        securityIssues += 1; // Inactive accounts
+      }
+    });
+    
+    // Calculate score based on ratio of issues to total items
+    if (totalItems > 0) {
+      const issueRatio = securityIssues / (totalItems * 3); // Max 3 points per item
+      score = Math.max(0, Math.round(100 - (issueRatio * 100)));
+    }
+    
+    return score;
   }
 
   private calculateComplianceRating(data: any): string {
@@ -747,5 +785,140 @@ export class ReportingService {
         error: error instanceof Error ? error.message : 'Unknown error' 
       });
     }
+  }
+
+  private async generatePDF(
+    template: ReportTemplate,
+    data: any,
+    parameters: Record<string, any>,
+    filePath: string
+  ): Promise<void> {
+    return new Promise((resolve, reject) => {
+      try {
+        const doc = new PDFDocument();
+        const stream = require('fs').createWriteStream(filePath);
+        
+        doc.pipe(stream);
+        
+        // Add title
+        doc.fontSize(20).text(template.name, 50, 50);
+        doc.fontSize(12).text(`Generated: ${new Date().toISOString()}`, 50, 80);
+        
+        // Add parameters
+        if (Object.keys(parameters).length > 0) {
+          doc.fontSize(14).text('Parameters:', 50, 120);
+          let yPos = 140;
+          for (const [key, value] of Object.entries(parameters)) {
+            doc.fontSize(10).text(`${key}: ${value}`, 50, yPos);
+            yPos += 15;
+          }
+        }
+        
+        // Add data
+        doc.fontSize(14).text('Report Data:', 50, 200);
+        if (Array.isArray(data)) {
+          let yPos = 220;
+          data.forEach((item, index) => {
+            if (yPos > 700) { // Start new page if needed
+              doc.addPage();
+              yPos = 50;
+            }
+            doc.fontSize(10).text(`${index + 1}. ${JSON.stringify(item)}`, 50, yPos, {
+              width: 500,
+              height: 50
+            });
+            yPos += 60;
+          });
+        } else {
+          doc.fontSize(10).text(JSON.stringify(data, null, 2), 50, 220, {
+            width: 500
+          });
+        }
+        
+        doc.end();
+        
+        stream.on('finish', () => resolve());
+        stream.on('error', reject);
+      } catch (error) {
+        reject(error);
+      }
+    });
+  }
+
+  private async generateExcel(
+    template: ReportTemplate,
+    data: any,
+    parameters: Record<string, any>,
+    filePath: string
+  ): Promise<void> {
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet(template.name);
+    
+    // Add title and metadata
+    worksheet.mergeCells('A1:E1');
+    worksheet.getCell('A1').value = template.name;
+    worksheet.getCell('A1').font = { size: 16, bold: true };
+    
+    worksheet.getCell('A2').value = `Generated: ${new Date().toISOString()}`;
+    worksheet.getCell('A2').font = { italic: true };
+    
+    // Add parameters
+    let currentRow = 4;
+    if (Object.keys(parameters).length > 0) {
+      worksheet.getCell(`A${currentRow}`).value = 'Parameters:';
+      worksheet.getCell(`A${currentRow}`).font = { bold: true };
+      currentRow++;
+      
+      for (const [key, value] of Object.entries(parameters)) {
+        worksheet.getCell(`A${currentRow}`).value = key;
+        worksheet.getCell(`B${currentRow}`).value = value;
+        currentRow++;
+      }
+      currentRow++;
+    }
+    
+    // Add data
+    if (Array.isArray(data) && data.length > 0) {
+      worksheet.getCell(`A${currentRow}`).value = 'Report Data:';
+      worksheet.getCell(`A${currentRow}`).font = { bold: true };
+      currentRow++;
+      
+      // Add headers if data contains objects
+      if (typeof data[0] === 'object' && data[0] !== null) {
+        const headers = Object.keys(data[0]);
+        headers.forEach((header, index) => {
+          const cell = worksheet.getCell(currentRow, index + 1);
+          cell.value = header;
+          cell.font = { bold: true };
+        });
+        currentRow++;
+        
+        // Add data rows
+        data.forEach(item => {
+          headers.forEach((header, index) => {
+            worksheet.getCell(currentRow, index + 1).value = item[header];
+          });
+          currentRow++;
+        });
+      } else {
+        // Simple array data
+        data.forEach(item => {
+          worksheet.getCell(`A${currentRow}`).value = item;
+          currentRow++;
+        });
+      }
+    } else {
+      worksheet.getCell(`A${currentRow}`).value = 'Report Data:';
+      worksheet.getCell(`A${currentRow}`).font = { bold: true };
+      currentRow++;
+      worksheet.getCell(`A${currentRow}`).value = JSON.stringify(data, null, 2);
+    }
+    
+    // Auto-fit columns
+    worksheet.columns.forEach(column => {
+      column.width = 15;
+    });
+    
+    await workbook.xlsx.writeFile(filePath);
   }
 }

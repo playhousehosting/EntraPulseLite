@@ -715,14 +715,42 @@ export class AdminTemplateService {
   }
 
   private async executeQuery(query: string, queryConfig: AdminQuery): Promise<any> {
-    // This would integrate with your Graph service
-    // For now, return mock data
-    console.log(`Executing: ${query}`);
-    return {
-      mockData: true,
-      query,
-      timestamp: new Date()
-    };
+    try {
+      // Execute actual Microsoft Graph API query
+      console.log(`Executing Graph query: ${queryConfig.name} - ${query}`);
+      
+      // Extract endpoint from the query string if it starts with a Graph endpoint pattern
+      let endpoint = 'https://graph.microsoft.com/v1.0/';
+      if (query.startsWith('https://graph.microsoft.com/')) {
+        endpoint = query;
+      } else if (query.startsWith('/')) {
+        endpoint = `https://graph.microsoft.com/v1.0${query}`;
+      } else {
+        endpoint = `https://graph.microsoft.com/v1.0/${query}`;
+      }
+
+      // Call the Graph service through the main process
+      const result = await (window.electronAPI as any).graph.executeQuery({
+        endpoint: endpoint,
+        method: 'GET',
+        query: queryConfig.name
+      });
+
+      if (!result.success) {
+        throw new Error(result.error || 'Query execution failed');
+      }
+
+      return {
+        data: result.data,
+        query: queryConfig.name,
+        endpoint: endpoint,
+        timestamp: new Date(),
+        success: true
+      };
+    } catch (error) {
+      console.error(`Failed to execute query ${queryConfig.name}:`, error);
+      throw error;
+    }
   }
 
   private validateQueryResult(result: any, rules: ValidationRule[]): void {

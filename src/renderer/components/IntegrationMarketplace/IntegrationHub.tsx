@@ -17,6 +17,7 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
+  DialogActions,
   Chip,
   List,
   ListItem,
@@ -57,17 +58,12 @@ interface IntegrationStats {
 }
 
 interface IntegrationHubProps {
-  onNavigateToMarketplace?: () => void;
-  onNavigateToWorkflows?: () => void;
-  onNavigateToAPIs?: () => void;
+  // No navigation props needed - navigation handled internally
 }
 
-export const IntegrationHub: React.FC<IntegrationHubProps> = ({
-  onNavigateToMarketplace,
-  onNavigateToWorkflows,
-  onNavigateToAPIs
-}) => {
+export const IntegrationHub: React.FC<IntegrationHubProps> = () => {
   const [activeTab, setActiveTab] = useState(0);
+  const [showSettings, setShowSettings] = useState(false);
   const [stats, setStats] = useState<IntegrationStats>({
     totalIntegrations: 12,
     activeConnections: 8,
@@ -185,7 +181,7 @@ export const IntegrationHub: React.FC<IntegrationHubProps> = ({
                   fullWidth
                   variant="outlined"
                   startIcon={<ExtensionIcon />}
-                  onClick={onNavigateToMarketplace}
+                  onClick={() => setActiveTab(1)}
                 >
                   Browse Marketplace
                 </Button>
@@ -195,7 +191,7 @@ export const IntegrationHub: React.FC<IntegrationHubProps> = ({
                   fullWidth
                   variant="outlined"
                   startIcon={<WorkflowIcon />}
-                  onClick={onNavigateToWorkflows}
+                  onClick={() => setActiveTab(2)}
                 >
                   Create Workflow
                 </Button>
@@ -205,7 +201,7 @@ export const IntegrationHub: React.FC<IntegrationHubProps> = ({
                   fullWidth
                   variant="outlined"
                   startIcon={<ApiIcon />}
-                  onClick={onNavigateToAPIs}
+                  onClick={() => setActiveTab(3)}
                 >
                   Add API Connection
                 </Button>
@@ -215,6 +211,7 @@ export const IntegrationHub: React.FC<IntegrationHubProps> = ({
                   fullWidth
                   variant="outlined"
                   startIcon={<SettingsIcon />}
+                  onClick={() => setShowSettings(true)}
                 >
                   Integration Settings
                 </Button>
@@ -430,6 +427,89 @@ export const IntegrationHub: React.FC<IntegrationHubProps> = ({
         {activeTab === 2 && renderWorkflows()}
         {activeTab === 3 && renderAPIConsole()}
       </Box>
+
+      {/* Integration Settings Dialog */}
+      <Dialog
+        open={showSettings}
+        onClose={() => setShowSettings(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>Integration Settings</DialogTitle>
+        <DialogContent>
+          <Grid container spacing={3} sx={{ mt: 1 }}>
+            <Grid item xs={12}>
+              <Typography variant="h6" gutterBottom>
+                MCP Server Configuration
+              </Typography>
+              <Box sx={{ p: 2, bgcolor: 'background.default', borderRadius: 1 }}>
+                <Typography variant="body2" color="text.secondary" gutterBottom>
+                  Configure Model Context Protocol servers for enhanced integrations
+                </Typography>
+                <Button variant="outlined" size="small" sx={{ mt: 1 }}>
+                  Manage MCP Servers
+                </Button>
+              </Box>
+            </Grid>
+            
+            <Grid item xs={12}>
+              <Typography variant="h6" gutterBottom>
+                Workflow Engine Settings
+              </Typography>
+              <Box sx={{ p: 2, bgcolor: 'background.default', borderRadius: 1 }}>
+                <Typography variant="body2" color="text.secondary" gutterBottom>
+                  Configure workflow execution and scheduling options
+                </Typography>
+                <Button variant="outlined" size="small" sx={{ mt: 1 }}>
+                  Configure Workflows
+                </Button>
+              </Box>
+            </Grid>
+            
+            <Grid item xs={12}>
+              <Typography variant="h6" gutterBottom>
+                API Connection Defaults
+              </Typography>
+              <Box sx={{ p: 2, bgcolor: 'background.default', borderRadius: 1 }}>
+                <Typography variant="body2" color="text.secondary" gutterBottom>
+                  Set default timeouts, retry policies, and authentication settings
+                </Typography>
+                <Button variant="outlined" size="small" sx={{ mt: 1 }}>
+                  Configure API Defaults
+                </Button>
+              </Box>
+            </Grid>
+            
+            <Grid item xs={12}>
+              <Typography variant="h6" gutterBottom>
+                Security & Permissions
+              </Typography>
+              <Box sx={{ p: 2, bgcolor: 'background.default', borderRadius: 1 }}>
+                <Typography variant="body2" color="text.secondary" gutterBottom>
+                  Manage integration security policies and user permissions
+                </Typography>
+                <Button variant="outlined" size="small" sx={{ mt: 1 }}>
+                  Security Settings
+                </Button>
+              </Box>
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShowSettings(false)}>
+            Close
+          </Button>
+          <Button 
+            variant="contained" 
+            onClick={() => {
+              setShowSettings(false);
+              // TODO: Save settings
+            }}
+          >
+            Save Settings
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };
