@@ -2,7 +2,7 @@
  * Version utilities for reading app version from package.json
  */
 
-import { app } from 'electron';
+import { app, ipcMain } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -31,8 +31,6 @@ export function getAppVersion(): string {
  * Get version for renderer process (via IPC)
  */
 export function exposeVersionToRenderer() {
-  const { ipcMain } = require('electron');
-  
   ipcMain.handle('app:getVersion', () => {
     return getAppVersion();
   });

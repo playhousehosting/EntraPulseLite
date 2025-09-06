@@ -50,9 +50,22 @@ import {
   Pause as PauseIcon,
   Settings as SettingsIcon,
   ArrowBack as ArrowBackIcon,
-  Chat as ChatIcon
+  Chat as ChatIcon,
+  Assignment as TemplateIcon,
+  Assessment as ReportsIcon,
+  AdminPanelSettings as RBACIcon,
+  Business as BusinessIcon,
+  VerifiedUser as ComplianceIcon,
+  Analytics as AnalyticsIcon
 } from '@mui/icons-material';
 import { organizationalIntelligence } from '../../shared/OrganizationalIntelligence';
+import { TemplateManager } from './TemplateManager';
+import { ReportingDashboard } from './ReportingDashboard';
+import { RBACDashboard } from './RBACDashboard';
+import { BillingDashboard } from './BillingDashboard';
+import ComplianceDashboard from './ComplianceDashboard';
+import AutomationDashboard from './AutomationDashboard';
+import AdvancedAnalyticsDashboard from './AdvancedAnalyticsDashboard';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -323,71 +336,6 @@ export const IntelligenceDashboard: React.FC<IntelligenceDashboardProps> = ({
     );
   };
 
-  const renderAutomationTab = () => {
-    if (!insights?.automationOpportunities?.length) {
-      return (
-        <Card>
-          <CardContent>
-            <Typography variant="h6" gutterBottom>
-              🤖 Automation Opportunities
-            </Typography>
-            <Typography color="textSecondary">
-              No automation workflows detected yet. Start using the system and Claude will identify automation opportunities.
-            </Typography>
-          </CardContent>
-        </Card>
-      );
-    }
-
-    return (
-      <Grid container spacing={3}>
-        {insights.automationOpportunities.map((workflow: any, index: number) => (
-          <Grid item xs={12} md={6} key={workflow.workflowId}>
-            <Card>
-              <CardContent>
-                <Box display="flex" alignItems="center" justifyContent="space-between" mb={2}>
-                  <Typography variant="h6">
-                    {workflow.name}
-                  </Typography>
-                  <Chip 
-                    label={workflow.status}
-                    color={workflow.status === 'active' ? 'success' : 'default'}
-                    size="small"
-                  />
-                </Box>
-                
-                <Typography variant="body2" color="textSecondary" paragraph>
-                  {workflow.description}
-                </Typography>
-                
-                <Box display="flex" flexWrap="wrap" gap={1} mb={2}>
-                  <Chip label={`${workflow.generatedSteps.length} steps`} size="small" />
-                  <Chip label={`${workflow.services.length} services`} size="small" />
-                  {workflow.successRate > 0 && (
-                    <Chip 
-                      label={`${Math.round(workflow.successRate * 100)}% success`}
-                      color="success"
-                      size="small"
-                    />
-                  )}
-                </Box>
-                
-                <Button
-                  variant="outlined"
-                  startIcon={<PlayIcon />}
-                  size="small"
-                  onClick={() => {/* TODO: Implement workflow execution */}}
-                >
-                  Execute Workflow
-                </Button>
-              </CardContent>
-            </Card>
-          </Grid>
-        ))}
-      </Grid>
-    );
-  };
-
   const renderBusinessProcessesTab = () => {
     if (!insights?.businessProcesses?.length) {
       return (
@@ -549,6 +497,36 @@ export const IntelligenceDashboard: React.FC<IntelligenceDashboardProps> = ({
               label="Business Processes" 
               iconPosition="start"
             />
+            <Tab 
+              icon={<TemplateIcon />} 
+              label="Admin Templates" 
+              iconPosition="start"
+            />
+            <Tab 
+              icon={<ReportsIcon />} 
+              label="Reports" 
+              iconPosition="start"
+            />
+            <Tab 
+              icon={<RBACIcon />} 
+              label="Access Control" 
+              iconPosition="start"
+            />
+            <Tab 
+              icon={<BusinessIcon />} 
+              label="Billing" 
+              iconPosition="start"
+            />
+            <Tab 
+              icon={<ComplianceIcon />} 
+              label="Compliance" 
+              iconPosition="start"
+            />
+            <Tab 
+              icon={<AnalyticsIcon />} 
+              label="Advanced Analytics" 
+              iconPosition="start"
+            />
           </Tabs>
         </Box>
 
@@ -561,11 +539,35 @@ export const IntelligenceDashboard: React.FC<IntelligenceDashboardProps> = ({
         </TabPanel>
 
         <TabPanel value={activeTab} index={2}>
-          {renderAutomationTab()}
+          <AutomationDashboard />
         </TabPanel>
 
         <TabPanel value={activeTab} index={3}>
           {renderBusinessProcessesTab()}
+        </TabPanel>
+
+        <TabPanel value={activeTab} index={4}>
+          <TemplateManager isVisible={true} />
+        </TabPanel>
+
+        <TabPanel value={activeTab} index={5}>
+          <ReportingDashboard />
+        </TabPanel>
+
+        <TabPanel value={activeTab} index={6}>
+          <RBACDashboard />
+        </TabPanel>
+
+        <TabPanel value={activeTab} index={7}>
+          <BillingDashboard />
+        </TabPanel>
+
+        <TabPanel value={activeTab} index={8}>
+          <ComplianceDashboard />
+        </TabPanel>
+
+        <TabPanel value={activeTab} index={9}>
+          <AdvancedAnalyticsDashboard />
         </TabPanel>
       </Card>
 
@@ -607,7 +609,7 @@ export const IntelligenceDashboard: React.FC<IntelligenceDashboardProps> = ({
                 {selectedPrediction.recommendedActions.map((action: string, index: number) => (
                   <ListItem key={index}>
                     <ListItemIcon>
-                      <CheckCircleIcon color="success" />
+                      <SuccessIcon color="success" />
                     </ListItemIcon>
                     <ListItemText primary={action} />
                   </ListItem>

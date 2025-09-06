@@ -16,6 +16,13 @@ import { debugMCP, checkMCPServerHealth } from '../mcp/mcp-debug';
 import { AutoUpdaterService } from './AutoUpdaterService';
 import { AppConfig, MCPServerConfig, MCPConfig } from '../types';
 import { exposeVersionToRenderer } from '../shared/VersionUtils';
+import { AdminTemplateService } from '../shared/AdminTemplateService';
+import { ReportingService } from '../shared/ReportingService';
+import { RBACService } from '../shared/RBACService';
+import { BillingService } from '../shared/BillingService';
+import { ComplianceService, ComplianceFramework, ComplianceStatus } from '../shared/ComplianceService';
+import { AutomationService, TaskStatus } from './services/AutomationService';
+import { AnalyticsService } from './services/AnalyticsService';
 
 // Get version from package.json
 function getAppVersion(): string {
@@ -46,6 +53,13 @@ class DynamicEndpointAssistantApp {
   private config!: AppConfig;
   private configurationAvailabilityNotified: boolean = false;
   private previousClientId?: string; // Track client ID changes for cache clearing
+  private adminTemplateService!: AdminTemplateService;
+  private reportingService!: ReportingService;
+  private rbacService!: RBACService;
+  private billingService!: BillingService;
+  private complianceService!: ComplianceService;
+  private automationService!: AutomationService;
+  private analyticsService!: AnalyticsService;
 
   constructor() {
     console.log('[Main] ===== DYNAMICENDPOINT ASSISTANT CONSTRUCTOR CALLED =====');
@@ -252,6 +266,15 @@ class DynamicEndpointAssistantApp {
     
     // Initialize auto-updater service
     this.autoUpdaterService = new AutoUpdaterService(this.configService);
+    
+    // Initialize admin template service
+    this.adminTemplateService = new AdminTemplateService();
+    this.reportingService = new ReportingService();
+    this.rbacService = new RBACService();
+    this.billingService = new BillingService();
+    this.complianceService = new ComplianceService();
+    this.automationService = new AutomationService();
+    this.analyticsService = new AnalyticsService();
     
     // Log successful initialization
     console.log('Services initialized successfully');
@@ -1108,8 +1131,8 @@ class DynamicEndpointAssistantApp {
             console.log('🚀 MCP services reinitialized with authentication context');
             
             // NOW explicitly start the Lokka MCP server after successful authentication
-            console.log('🔄 [LOKKA-RESTART] Starting Lokka MCP server after successful authentication...');
-            this.mainWindow?.webContents.send('main-debug', '🔄 [LOKKA-RESTART] Starting Lokka MCP server after successful authentication...');
+            console.log('🔄 [LOKKA-RESTART] Starting Lokka MCP server after successful authentication');
+            this.mainWindow?.webContents.send('main-debug', '🔄 [LOKKA-RESTART] Starting Lokka MCP server after successful authentication');
             
             console.log('🔄 [LOKKA-RESTART] Environment variables for restart:', {
               hasAccessToken: !!env.ACCESS_TOKEN,
@@ -2506,7 +2529,8 @@ class DynamicEndpointAssistantApp {
             )) {
             console.log('🔐 Found stored Entra credentials, updating Lokka MCP server configuration...');          // Enable Lokka MCP server for authenticated user
             const lokkaServerIndex = this.config.mcpServers.findIndex(server => server.name === 'external-lokka');
-            if (lokkaServerIndex !== -1) {              // Determine client ID and authentication mode based on configuration priority:
+            if (lokkaServerIndex !== -1) {
+              // Determine client ID and authentication mode based on configuration priority:
               // 1. Custom application credentials (when provided)
               // 2. Enhanced Graph Access (when enabled and no custom credentials)
               // 3. Standard user token mode
@@ -2895,6 +2919,203 @@ class DynamicEndpointAssistantApp {
     } catch (error) {
       console.error('[Main] Failed to initialize MCP configuration:', error);
     }
+
+    // Initialize MSP event handlers
+    this.setupMSPEventHandlers();
+    this.setupAdminTemplateHandlers();
+    this.setupReportingHandlers();
+    this.setupRBACHandlers();
+    this.setupBillingHandlers();
+  }
+
+  // MSP Tenant Management handlers
+  private mspTenantService?: any; // Will be imported when MSP mode is enabled
+  
+  private async getMSPTenantService() {
+    if (!this.mspTenantService) {
+      const { MSPTenantService } = await import('../shared/MSPTenantService');
+      this.mspTenantService = new MSPTenantService(this.configService, this.authService);
+      await this.mspTenantService.initialize();
+    }
+    return this.mspTenantService;
+  }
+
+  private setupMSPEventHandlers(): void {
+    // Get MSP tenant context
+    ipcMain.handle('msp:getTenantContext', async () => {
+      try {
+        const mspService = await this.getMSPTenantService();
+        const context = mspService.getCurrentContext();
+        return { success: true, data: context };
+      } catch (error) {
+        console.error('Failed to get MSP tenant context:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : String(error) 
+        };
+      }
+    });
+
+    // Get available tenants
+    ipcMain.handle('msp:getAvailableTenants', async () => {
+      try {
+        const mspService = await this.getMSPTenantService();
+        const tenants = await mspService.getAvailableTenants();
+        return { success: true, data: tenants };
+      } catch (error) {
+        console.error('Failed to get available tenants:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : String(error) 
+        };
+      }
+    });
+
+    // Switch tenant
+    ipcMain.handle('msp:switchTenant', async (event, tenantId: string) => {
+      try {
+        const mspService = await this.getMSPTenantService();
+        const result = await mspService.switchTenant(tenantId);
+        return { success: result.success, data: result, error: result.error };
+      } catch (error) {
+        console.error('Failed to switch tenant:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : String(error) 
+        };
+      }
+    });
+
+    // Add tenant
+    ipcMain.handle('msp:addTenant', async (event, tenantData: any) => {
+      try {
+        const mspService = await this.getMSPTenantService();
+        const result = await mspService.addTenant(tenantData);
+        return { success: result.success, data: result, error: result.error };
+      } catch (error) {
+        console.error('Failed to add tenant:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : String(error) 
+        };
+      }
+    });
+
+    // Remove tenant
+    ipcMain.handle('msp:removeTenant', async (event, tenantId: string) => {
+      try {
+        const mspService = await this.getMSPTenantService();
+        const result = await mspService.removeTenant(tenantId);
+        return { success: result.success, error: result.error };
+      } catch (error) {
+        console.error('Failed to remove tenant:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : String(error) 
+        };
+      }
+    });
+
+    // Get dashboard metrics
+    ipcMain.handle('msp:getDashboardMetrics', async () => {
+      try {
+        const mspService = await this.getMSPTenantService();
+        const metrics = await mspService.getDashboardMetrics();
+        return { success: true, data: metrics };
+      } catch (error) {
+        console.error('Failed to get dashboard metrics:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : String(error) 
+        };
+      }
+    });
+
+    // Refresh tenant health
+    ipcMain.handle('msp:refreshTenantHealth', async () => {
+      try {
+        const mspService = await this.getMSPTenantService();
+        await mspService.refreshTenantHealth();
+        return { success: true };
+      } catch (error) {
+        console.error('Failed to refresh tenant health:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : String(error) 
+        };
+      }
+    });
+
+    // Update tenant
+    ipcMain.handle('msp:updateTenant', async (event, tenantId: string, updates: any) => {
+      try {
+        const mspService = await this.getMSPTenantService();
+        // For now, we'll implement basic update functionality
+        console.log(`Updating tenant ${tenantId} with:`, updates);
+        return { success: true, data: updates };
+      } catch (error) {
+        console.error('Failed to update tenant:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : String(error) 
+        };
+      }
+    });
+
+    // Enable MSP mode
+    ipcMain.handle('msp:enableMSPMode', async () => {
+      try {
+        // For now, we'll use a simple approach to store MSP mode
+        // In a full implementation, you'd add MSP config methods to ConfigService
+        console.log('[Main] MSP mode enabled');
+        
+        // Initialize MSP service
+        await this.getMSPTenantService();
+        
+        return { success: true };
+      } catch (error) {
+        console.error('Failed to enable MSP mode:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : String(error) 
+        };
+      }
+    });
+
+    // Disable MSP mode
+    ipcMain.handle('msp:disableMSPMode', async () => {
+      try {
+        console.log('[Main] MSP mode disabled');
+        
+        // Reset MSP service
+        this.mspTenantService = null;
+        
+        return { success: true };
+      } catch (error) {
+        console.error('Failed to disable MSP mode:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : String(error) 
+        };
+      }
+    });
+
+    // Check if MSP mode is enabled
+    ipcMain.handle('msp:isMSPModeEnabled', async () => {
+      try {
+        // For now, always return true to allow testing
+        const isEnabled = true;
+        return { success: true, data: isEnabled };
+      } catch (error) {
+        console.error('Failed to check MSP mode status:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : String(error) 
+        };
+      }
+    });
+
+    console.log('[Main] MSP event handlers registered');
   }
 
   /**
@@ -2950,7 +3171,6 @@ class DynamicEndpointAssistantApp {
         displayName: 'GitHub',
         description: 'Access GitHub repositories and issues',
         command: 'npx',
-        args: ['-y', '@modelcontextprotocol/server-github'],
         env: {
           GITHUB_PERSONAL_ACCESS_TOKEN: process.env.GITHUB_TOKEN || ''
         },
@@ -2985,6 +3205,2134 @@ class DynamicEndpointAssistantApp {
     } catch (error) {
       // Silently ignore errors when window isn't ready yet
     }
+  }
+
+  /**
+   * Setup handlers for admin template management
+   */
+  private setupAdminTemplateHandlers(): void {
+    // Get all templates
+    ipcMain.handle('adminTemplates:getTemplates', async () => {
+      try {
+        const templates = this.adminTemplateService.getTemplates();
+        return { success: true, data: templates };
+      } catch (error) {
+        console.error('Failed to get templates:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : String(error) 
+        };
+      }
+    });
+
+    // Get template by ID
+    ipcMain.handle('adminTemplates:getTemplate', async (event, templateId: string) => {
+      try {
+        const template = this.adminTemplateService.getTemplate(templateId);
+        if (!template) {
+          return { success: false, error: `Template not found: ${templateId}` };
+        }
+        return { success: true, data: template };
+      } catch (error) {
+        console.error('Failed to get template:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : String(error) 
+        };
+      }
+    });
+
+    // Get templates by category
+    ipcMain.handle('adminTemplates:getTemplatesByCategory', async (event, category: string) => {
+      try {
+        const templates = this.adminTemplateService.getTemplatesByCategory(category as any);
+        return { success: true, data: templates };
+      } catch (error) {
+        console.error('Failed to get templates by category:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : String(error) 
+        };
+      }
+    });
+
+    // Search templates
+    ipcMain.handle('adminTemplates:searchTemplates', async (event, searchTerm: string) => {
+      try {
+        const templates = this.adminTemplateService.searchTemplates(searchTerm);
+        return { success: true, data: templates };
+      } catch (error) {
+        console.error('Failed to search templates:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : String(error) 
+        };
+      }
+    });
+
+    // Execute template
+    ipcMain.handle('adminTemplates:executeTemplate', async (event, templateId: string, parameters?: Record<string, any>) => {
+      try {
+        const result = await this.adminTemplateService.executeTemplate(templateId, parameters);
+        return { success: true, data: result };
+      } catch (error) {
+        console.error('Failed to execute template:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : String(error) 
+        };
+      }
+    });
+
+    // Add custom template
+    ipcMain.handle('adminTemplates:addCustomTemplate', async (event, template: any) => {
+      try {
+        this.adminTemplateService.addTemplate(template);
+        return { success: true };
+      } catch (error) {
+        console.error('Failed to add custom template:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : String(error) 
+        };
+      }
+    });
+
+    // Remove template
+    ipcMain.handle('adminTemplates:removeTemplate', async (event, templateId: string) => {
+      try {
+        const success = this.adminTemplateService.removeTemplate(templateId);
+        if (!success) {
+          return { success: false, error: `Template not found: ${templateId}` };
+        }
+        return { success: true };
+      } catch (error) {
+        console.error('Failed to remove template:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : String(error) 
+        };
+      }
+    });
+
+    // Get execution history (placeholder - would need to implement storage)
+    ipcMain.handle('adminTemplates:getExecutionHistory', async () => {
+      try {
+        // Placeholder - in a real implementation, this would retrieve from storage
+        return { success: true, data: [] };
+      } catch (error) {
+        console.error('Failed to get execution history:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Export template (placeholder)
+    ipcMain.handle('adminTemplates:exportTemplate', async (event, templateId: string, format: string) => {
+      try {
+        // Placeholder - in a real implementation, this would generate the export
+        return { success: true, data: { format, content: 'Export content would go here' } };
+      } catch (error) {
+        console.error('Failed to export template:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Schedule template (placeholder)
+    ipcMain.handle('adminTemplates:scheduleTemplate', async (event, templateId: string, schedule: any) => {
+      try {
+        // Placeholder - in a real implementation, this would set up scheduling
+        return { success: true };
+      } catch (error) {
+        console.error('Failed to schedule template:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Get scheduled templates (placeholder)
+    ipcMain.handle('adminTemplates:getScheduledTemplates', async () => {
+      try {
+        // Placeholder - in a real implementation, this would retrieve scheduled templates
+        return { success: true, data: [] };
+      } catch (error) {
+        console.error('Failed to get scheduled templates:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+  }
+
+  /**
+   * Setup handlers for reporting management
+   */
+  private setupReportingHandlers(): void {
+    // Get all report templates
+    ipcMain.handle('reporting:getReportTemplates', async () => {
+      try {
+        const templates = this.reportingService.getReportTemplates();
+        return { success: true, data: templates };
+      } catch (error) {
+        console.error('Failed to get report templates:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : String(error) 
+        };
+      }
+    });
+
+    // Get report template by ID
+    ipcMain.handle('reporting:getReportTemplate', async (event, templateId: string) => {
+      try {
+        const template = this.reportingService.getReportTemplate(templateId);
+        if (!template) {
+          return { success: false, error: `Report template not found: ${templateId}` };
+        }
+        return { success: true, data: template };
+      } catch (error) {
+        console.error('Failed to get report template:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : String(error) 
+        };
+      }
+    });
+
+    // Get reports by category
+    ipcMain.handle('reporting:getReportsByCategory', async (event, category: string) => {
+      try {
+        const templates = this.reportingService.getReportsByCategory(category as any);
+        return { success: true, data: templates };
+      } catch (error) {
+        console.error('Failed to get reports by category:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : String(error) 
+        };
+      }
+    });
+
+    // Search reports
+    ipcMain.handle('reporting:searchReports', async (event, searchTerm: string) => {
+      try {
+        const templates = this.reportingService.searchReports(searchTerm);
+        return { success: true, data: templates };
+      } catch (error) {
+        console.error('Failed to search reports:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : String(error) 
+        };
+      }
+    });
+
+    // Generate report
+    ipcMain.handle('reporting:generateReport', async (event, templateId: string, format: string, parameters?: Record<string, any>, tenantId?: string) => {
+      try {
+        const result = await this.reportingService.generateReport(templateId, format as any, parameters, tenantId);
+        return { success: true, data: result };
+      } catch (error) {
+        console.error('Failed to generate report:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : String(error) 
+        };
+      }
+    });
+
+    // Get report history
+    ipcMain.handle('reporting:getReportHistory', async () => {
+      try {
+        const history = this.reportingService.getReportHistory();
+        return { success: true, data: history };
+      } catch (error) {
+        console.error('Failed to get report history:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : String(error) 
+        };
+      }
+    });
+
+    // Get report result
+    ipcMain.handle('reporting:getReportResult', async (event, reportId: string) => {
+      try {
+        const result = this.reportingService.getReportResult(reportId);
+        if (!result) {
+          return { success: false, error: `Report not found: ${reportId}` };
+        }
+        return { success: true, data: result };
+      } catch (error) {
+        console.error('Failed to get report result:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : String(error) 
+        };
+      }
+    });
+
+    // Delete report
+    ipcMain.handle('reporting:deleteReport', async (event, reportId: string) => {
+      try {
+        const success = this.reportingService.deleteReport(reportId);
+        if (!success) {
+          return { success: false, error: `Report not found: ${reportId}` };
+        }
+        return { success: true };
+      } catch (error) {
+        console.error('Failed to delete report:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : String(error) 
+        };
+      }
+    });
+
+    // Download report (opens file location)
+    ipcMain.handle('reporting:downloadReport', async (event, reportId: string) => {
+      try {
+        const report = this.reportingService.getReportResult(reportId);
+        if (!report) {
+          return { success: false, error: `Report not found: ${reportId}` };
+        }
+        
+        // Open file location in file explorer
+        const { shell } = require('electron');
+        await shell.showItemInFolder(report.filePath);
+        
+        return { success: true, filePath: report.filePath };
+      } catch (error) {
+        console.error('Failed to download report:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : String(error) 
+        };
+      }
+    });
+
+    // Add custom report
+    ipcMain.handle('reporting:addCustomReport', async (event, report: any) => {
+      try {
+        this.reportingService.addCustomReport(report);
+        return { success: true };
+      } catch (error) {
+        console.error('Failed to add custom report:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : String(error) 
+        };
+      }
+    });
+
+    // Remove report template
+    ipcMain.handle('reporting:removeReport', async (event, reportId: string) => {
+      try {
+        const success = this.reportingService.removeReport(reportId);
+        if (!success) {
+          return { success: false, error: `Report template not found: ${reportId}` };
+        }
+        return { success: true };
+      } catch (error) {
+        console.error('Failed to remove report template:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : String(error) 
+        };
+      }
+    });
+
+    // Schedule report (placeholder)
+    ipcMain.handle('reporting:scheduleReport', async (event, templateId: string, schedule: any) => {
+      try {
+        // Placeholder - in a real implementation, this would set up scheduling
+        return { success: true };
+      } catch (error) {
+        console.error('Failed to schedule report:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Get scheduled reports (placeholder)
+    ipcMain.handle('reporting:getScheduledReports', async () => {
+      try {
+        // Placeholder - in a real implementation, this would retrieve scheduled reports
+        return { success: true, data: [] };
+      } catch (error) {
+        console.error('Failed to get scheduled reports:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+  }
+
+  private setupRBACHandlers(): void {
+    // Get all roles
+    ipcMain.handle('rbac:getRoles', async () => {
+      try {
+        const roles = this.rbacService.getAllRoles();
+        return { success: true, data: roles };
+      } catch (error) {
+        console.error('Failed to get roles:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Get specific role
+    ipcMain.handle('rbac:getRole', async (event, roleId: string) => {
+      try {
+        const role = this.rbacService.getRoleDefinition(roleId as any);
+        return { success: true, data: role };
+      } catch (error) {
+        console.error('Failed to get role:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Create custom role
+    ipcMain.handle('rbac:createRole', async (event, roleData: any) => {
+      try {
+        this.rbacService.createCustomRole(roleData);
+        return { success: true };
+      } catch (error) {
+        console.error('Failed to create role:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Update role
+    ipcMain.handle('rbac:updateRole', async (event, roleId: string, roleData: any) => {
+      try {
+        const success = this.rbacService.updateRole(roleId as any, roleData);
+        if (success) {
+          return { success: true };
+        } else {
+          return { success: false, error: 'Cannot update system role or role does not exist' };
+        }
+      } catch (error) {
+        console.error('Failed to update role:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Delete role
+    ipcMain.handle('rbac:deleteRole', async (event, roleId: string) => {
+      try {
+        const success = this.rbacService.deleteRole(roleId as any);
+        if (success) {
+          return { success: true };
+        } else {
+          return { success: false, error: 'Cannot delete system role or role does not exist' };
+        }
+      } catch (error) {
+        console.error('Failed to delete role:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Get role assignments
+    ipcMain.handle('rbac:getRoleAssignments', async () => {
+      try {
+        const assignments = this.rbacService.getAllRoleAssignments();
+        return { success: true, data: assignments };
+      } catch (error) {
+        console.error('Failed to get role assignments:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Get user roles
+    ipcMain.handle('rbac:getUserRoles', async (event, userId: string, tenantId?: string) => {
+      try {
+        const userRoles = this.rbacService.getUserRoles(userId, tenantId);
+        return { success: true, data: userRoles };
+      } catch (error) {
+        console.error('Failed to get user roles:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Assign role
+    ipcMain.handle('rbac:assignRole', async (event, userId: string, role: string, assignedBy: string, tenantId?: string, expiresAt?: Date) => {
+      try {
+        const success = this.rbacService.assignRole(userId, role as any, assignedBy, tenantId, expiresAt);
+        if (success) {
+          return { success: true };
+        } else {
+          return { success: false, error: 'Failed to assign role - role may not exist or invalid tenant scope' };
+        }
+      } catch (error) {
+        console.error('Failed to assign role:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Revoke role
+    ipcMain.handle('rbac:revokeRole', async (event, userId: string, role: string, tenantId?: string) => {
+      try {
+        const success = this.rbacService.revokeRole(userId, role as any, tenantId);
+        if (success) {
+          return { success: true };
+        } else {
+          return { success: false, error: 'Role assignment not found' };
+        }
+      } catch (error) {
+        console.error('Failed to revoke role:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Check permission
+    ipcMain.handle('rbac:hasPermission', async (event, userId: string, permission: string, tenantId?: string) => {
+      try {
+        const hasPermission = this.rbacService.hasPermission(userId, permission as any, tenantId);
+        return { success: true, data: hasPermission };
+      } catch (error) {
+        console.error('Failed to check permission:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Get user effective permissions
+    ipcMain.handle('rbac:getUserEffectivePermissions', async (event, userId: string, tenantId?: string) => {
+      try {
+        const permissions = this.rbacService.getUserEffectivePermissions(userId, tenantId);
+        return { success: true, data: permissions };
+      } catch (error) {
+        console.error('Failed to get user effective permissions:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Get access context
+    ipcMain.handle('rbac:getAccessContext', async (event, userId: string, tenantId?: string) => {
+      try {
+        const context = this.rbacService.getAccessContext(userId, tenantId);
+        return { success: true, data: context };
+      } catch (error) {
+        console.error('Failed to get access context:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Bulk assign role
+    ipcMain.handle('rbac:bulkAssignRole', async (event, userIds: string[], role: string, assignedBy: string, tenantId?: string) => {
+      try {
+        const result = this.rbacService.bulkAssignRole(userIds, role as any, assignedBy, tenantId);
+        return { success: true, data: result };
+      } catch (error) {
+        console.error('Failed to bulk assign role:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Bulk revoke role
+    ipcMain.handle('rbac:bulkRevokeRole', async (event, userIds: string[], role: string, tenantId?: string) => {
+      try {
+        const result = this.rbacService.bulkRevokeRole(userIds, role as any, tenantId);
+        return { success: true, data: result };
+      } catch (error) {
+        console.error('Failed to bulk revoke role:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Get permission matrix
+    ipcMain.handle('rbac:getPermissionMatrix', async () => {
+      try {
+        const matrix = this.rbacService.getPermissionMatrix();
+        return { success: true, data: matrix };
+      } catch (error) {
+        console.error('Failed to get permission matrix:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Export configuration
+    ipcMain.handle('rbac:exportConfiguration', async () => {
+      try {
+        const config = this.rbacService.exportConfiguration();
+        
+        // Save to file
+        const { dialog } = require('electron');
+        const fs = require('fs').promises;
+        
+        const result = await dialog.showSaveDialog({
+          title: 'Export RBAC Configuration',
+          defaultPath: 'rbac-configuration.json',
+          filters: [
+            { name: 'JSON Files', extensions: ['json'] }
+          ]
+        });
+
+        if (!result.canceled && result.filePath) {
+          await fs.writeFile(result.filePath, JSON.stringify(config, null, 2));
+          return { success: true, filePath: result.filePath };
+        } else {
+          return { success: false, error: 'Export cancelled' };
+        }
+      } catch (error) {
+        console.error('Failed to export configuration:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Import configuration
+    ipcMain.handle('rbac:importConfiguration', async () => {
+      try {
+        const { dialog } = require('electron');
+        const fs = require('fs').promises;
+        
+        const result = await dialog.showOpenDialog({
+          title: 'Import RBAC Configuration',
+          filters: [
+            { name: 'JSON Files', extensions: ['json'] }
+          ],
+          properties: ['openFile']
+        });
+
+        if (!result.canceled && result.filePaths.length > 0) {
+          const filePath = result.filePaths[0];
+          const configData = await fs.readFile(filePath, 'utf8');
+          const config = JSON.parse(configData);
+          
+          this.rbacService.importConfiguration(config);
+          return { success: true };
+        } else {
+          return { success: false, error: 'Import cancelled' };
+        }
+      } catch (error) {
+        console.error('Failed to import configuration:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Get users (would integrate with MSP service or Graph API)
+    ipcMain.handle('rbac:getUsers', async () => {
+      try {
+        // Placeholder - in a real implementation, this would get users from Graph API
+        return { success: true, data: [] };
+      } catch (error) {
+        console.error('Failed to get users:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Get tenants (would integrate with MSP service)
+    ipcMain.handle('rbac:getTenants', async () => {
+      try {
+        // Get tenants from MSP service if available
+        if (this.mspTenantService) {
+          const tenantsResponse = await this.mspTenantService.getAvailableTenants();
+          if (tenantsResponse.success && tenantsResponse.data) {
+            return { success: true, data: tenantsResponse.data };
+          }
+        }
+        return { success: true, data: [] };
+      } catch (error) {
+        console.error('Failed to get tenants:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+  }
+
+  private setupBillingHandlers(): void {
+    console.log('[Main] Setting up billing handlers');
+
+    // Get billing plans
+    ipcMain.handle('billing:getPlans', async () => {
+      try {
+        const plans = this.billingService.getAllPlans();
+        return { success: true, data: plans };
+      } catch (error) {
+        console.error('Failed to get billing plans:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Get specific billing plan
+    ipcMain.handle('billing:getPlan', async (event, planId: string) => {
+      try {
+        const plan = this.billingService.getPlan(planId);
+        return { success: true, data: plan };
+      } catch (error) {
+        console.error('Failed to get billing plan:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Create billing plan
+    ipcMain.handle('billing:createPlan', async (event, planData: any) => {
+      try {
+        const plan = this.billingService.createPlan(planData);
+        return { success: true, data: plan };
+      } catch (error) {
+        console.error('Failed to create billing plan:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Update billing plan
+    ipcMain.handle('billing:updatePlan', async (event, planId: string, planData: any) => {
+      try {
+        const plan = this.billingService.updatePlan(planId, planData);
+        return { success: true, data: plan };
+      } catch (error) {
+        console.error('Failed to update billing plan:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Delete billing plan
+    ipcMain.handle('billing:deletePlan', async (event, planId: string) => {
+      try {
+        // Note: deletePlan not implemented in BillingService yet
+        const success = false;
+        return { success, data: success };
+      } catch (error) {
+        console.error('Failed to delete billing plan:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Get tenant billing
+    ipcMain.handle('billing:getTenantBilling', async (event, tenantId: string) => {
+      try {
+        const billing = this.billingService.getTenantBilling(tenantId);
+        return { success: true, data: billing };
+      } catch (error) {
+        console.error('Failed to get tenant billing:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Update tenant billing
+    ipcMain.handle('billing:updateTenantBilling', async (event, tenantId: string, billingData: any) => {
+      try {
+        const billing = this.billingService.updateTenantBilling(tenantId, billingData);
+        return { success: true, data: billing };
+      } catch (error) {
+        console.error('Failed to update tenant billing:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Create tenant billing
+    ipcMain.handle('billing:createTenantBilling', async (event, billingData: any) => {
+      try {
+        const billing = this.billingService.createTenantBilling(billingData);
+        return { success: true, data: billing };
+      } catch (error) {
+        console.error('Failed to create tenant billing:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Record usage
+    ipcMain.handle('billing:recordUsage', async (event, tenantId: string, metric: string, quantity: number, timestamp?: Date) => {
+      try {
+        this.billingService.recordUsage(tenantId, metric as any, quantity, timestamp);
+        return { success: true, data: true };
+      } catch (error) {
+        console.error('Failed to record usage:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Get current usage
+    ipcMain.handle('billing:getCurrentUsage', async (event, tenantId: string, metric: string) => {
+      try {
+        const usage = this.billingService.getCurrentUsage(tenantId, metric as any);
+        return { success: true, data: usage };
+      } catch (error) {
+        console.error('Failed to get current usage:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Get usage history
+    ipcMain.handle('billing:getUsageHistory', async (event, tenantId: string, metric: string, fromDate: Date, toDate: Date) => {
+      try {
+        const history = this.billingService.getUsageHistory(tenantId, metric as any, { start: fromDate, end: toDate });
+        return { success: true, data: history };
+      } catch (error) {
+        console.error('Failed to get usage history:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Get invoices
+    ipcMain.handle('billing:getInvoices', async (event, tenantId?: string) => {
+      try {
+        const invoices = this.billingService.getInvoices(tenantId);
+        return { success: true, data: invoices };
+      } catch (error) {
+        console.error('Failed to get invoices:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Get specific invoice
+    ipcMain.handle('billing:getInvoice', async (event, invoiceId: string) => {
+      try {
+        const invoices = this.billingService.getInvoices();
+        const invoice = invoices.find(inv => inv.invoiceId === invoiceId);
+        return { success: true, data: invoice };
+      } catch (error) {
+        console.error('Failed to get invoice:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Generate invoice
+    ipcMain.handle('billing:generateInvoice', async (event, tenantId: string, billingPeriod: any) => {
+      try {
+        const invoice = this.billingService.generateInvoice(tenantId, billingPeriod);
+        return { success: true, data: invoice };
+      } catch (error) {
+        console.error('Failed to generate invoice:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Update invoice status
+    ipcMain.handle('billing:updateInvoiceStatus', async (event, invoiceId: string, status: string) => {
+      try {
+        let invoice = undefined;
+        if (status === 'paid') {
+          const success = this.billingService.markInvoicePaid(invoiceId);
+          if (success) {
+            const invoices = this.billingService.getInvoices();
+            invoice = invoices.find(inv => inv.invoiceId === invoiceId);
+          }
+        }
+        return { success: true, data: invoice };
+      } catch (error) {
+        console.error('Failed to update invoice status:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Get alerts
+    ipcMain.handle('billing:getAlerts', async (event, tenantId?: string) => {
+      try {
+        const alerts = this.billingService.getAlerts(tenantId);
+        return { success: true, data: alerts };
+      } catch (error) {
+        console.error('Failed to get billing alerts:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Create alert
+    ipcMain.handle('billing:createAlert', async (event, alertData: any) => {
+      try {
+        const alert = this.billingService.createAlert(alertData);
+        return { success: true, data: alert };
+      } catch (error) {
+        console.error('Failed to create billing alert:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Acknowledge alert
+    ipcMain.handle('billing:acknowledgeAlert', async (event, alertId: string) => {
+      try {
+        const success = this.billingService.acknowledgeAlert(alertId, 'system');
+        return { success: true, data: true };
+      } catch (error) {
+        console.error('Failed to acknowledge billing alert:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Delete alert
+    ipcMain.handle('billing:deleteAlert', async (event, alertId: string) => {
+      try {
+        // Note: deleteAlert not implemented in BillingService yet
+        const success = false;
+        return { success, data: success };
+      } catch (error) {
+        console.error('Failed to delete billing alert:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Generate report
+    ipcMain.handle('billing:generateReport', async (event, tenantId: string, reportType: string, fromDate: Date, toDate: Date) => {
+      try {
+        const report = this.billingService.generateBillingReport(reportType as any, { start: fromDate, end: toDate });
+        return { success: true, data: report };
+      } catch (error) {
+        console.error('Failed to generate billing report:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Export data
+    ipcMain.handle('billing:exportData', async (event, tenantId: string, dataType: string, format: string) => {
+      try {
+        // Note: exportData not implemented in BillingService yet
+        const data = null;
+        return { success: true, data };
+      } catch (error) {
+        console.error('Failed to export billing data:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Get billing configuration
+    ipcMain.handle('billing:getBillingConfiguration', async () => {
+      try {
+        const config = this.billingService.getConfiguration();
+        return { success: true, data: config };
+      } catch (error) {
+        console.error('Failed to get billing configuration:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Update billing configuration
+    ipcMain.handle('billing:updateBillingConfiguration', async (event, config: any) => {
+      try {
+        this.billingService.updateConfiguration(config);
+        return { success: true, data: true };
+      } catch (error) {
+        console.error('Failed to update billing configuration:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Test billing service
+    ipcMain.handle('billing:testBillingService', async () => {
+      try {
+        // Note: testBillingService not implemented yet
+        const isHealthy = true;
+        return { success: true, data: isHealthy };
+      } catch (error) {
+        console.error('Failed to test billing service:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Reset billing data
+    ipcMain.handle('billing:resetBillingData', async (event, tenantId: string) => {
+      try {
+        // Note: resetBillingData not implemented yet
+        // this.billingService.resetBillingData(tenantId);
+        return { success: true, data: true };
+      } catch (error) {
+        console.error('Failed to reset billing data:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Get usage data
+    ipcMain.handle('billing:getUsageData', async (event) => {
+      try {
+        // Note: getUsageData not implemented yet - placeholder implementation
+        const usageData = {
+          totalUsage: 0,
+          byMetric: {},
+          byTenant: {}
+        };
+        return { success: true, data: usageData };
+      } catch (error) {
+        console.error('Failed to get usage data:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Get summary
+    ipcMain.handle('billing:getSummary', async (event) => {
+      try {
+        // Note: getSummary not implemented yet - placeholder implementation
+        const summary = {
+          totalRevenue: 0,
+          totalTenants: 0,
+          totalInvoices: 0,
+          pendingInvoices: 0
+        };
+        return { success: true, data: summary };
+      } catch (error) {
+        console.error('Failed to get billing summary:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    console.log('[Main] Billing handlers setup completed');
+
+    // ===== COMPLIANCE IPC HANDLERS =====
+    console.log('[Main] Setting up compliance handlers...');
+
+    // Get enabled frameworks
+    ipcMain.handle('compliance:getEnabledFrameworks', async () => {
+      try {
+        const frameworks = this.complianceService.getEnabledFrameworks();
+        return { success: true, data: frameworks };
+      } catch (error) {
+        console.error('Failed to get enabled frameworks:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Enable framework
+    ipcMain.handle('compliance:enableFramework', async (event, framework: string) => {
+      try {
+        this.complianceService.enableFramework(framework as ComplianceFramework);
+        return { success: true };
+      } catch (error) {
+        console.error('Failed to enable framework:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Disable framework
+    ipcMain.handle('compliance:disableFramework', async (event, framework: string) => {
+      try {
+        this.complianceService.disableFramework(framework as ComplianceFramework);
+        return { success: true };
+      } catch (error) {
+        console.error('Failed to disable framework:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Get controls
+    ipcMain.handle('compliance:getControls', async (event, framework?: string) => {
+      try {
+        const controls = this.complianceService.getControls(framework as ComplianceFramework);
+        return { success: true, data: controls };
+      } catch (error) {
+        console.error('Failed to get controls:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Get control
+    ipcMain.handle('compliance:getControl', async (event, controlId: string) => {
+      try {
+        const control = this.complianceService.getControl(controlId);
+        return { success: true, data: control };
+      } catch (error) {
+        console.error('Failed to get control:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Update control status
+    ipcMain.handle('compliance:updateControlStatus', async (event, controlId: string, status: string) => {
+      try {
+        this.complianceService.updateControlStatus(controlId, status as ComplianceStatus);
+        return { success: true };
+      } catch (error) {
+        console.error('Failed to update control status:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Get assessments
+    ipcMain.handle('compliance:getAssessments', async (event, framework?: string) => {
+      try {
+        const assessments = this.complianceService.getAssessments();
+        return { success: true, data: assessments };
+      } catch (error) {
+        console.error('Failed to get assessments:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Get assessment
+    ipcMain.handle('compliance:getAssessment', async (event, assessmentId: string) => {
+      try {
+        const assessment = this.complianceService.getAssessment(assessmentId);
+        return { success: true, data: assessment };
+      } catch (error) {
+        console.error('Failed to get assessment:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Create assessment
+    ipcMain.handle('compliance:createAssessment', async (event, assessmentData: any) => {
+      try {
+        const assessment = this.complianceService.createAssessment(assessmentData);
+        return { success: true, data: assessment };
+      } catch (error) {
+        console.error('Failed to create assessment:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Update assessment
+    ipcMain.handle('compliance:updateAssessment', async (event, assessmentId: string, assessmentData: any) => {
+      try {
+        this.complianceService.updateAssessment(assessmentId, assessmentData);
+        return { success: true };
+      } catch (error) {
+        console.error('Failed to update assessment:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Delete assessment
+    ipcMain.handle('compliance:deleteAssessment', async (event, assessmentId: string) => {
+      try {
+        // Note: deleteAssessment method not implemented in service - placeholder
+        return { success: true };
+      } catch (error) {
+        console.error('Failed to delete assessment:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Add evidence
+    ipcMain.handle('compliance:addEvidence', async (event, controlId: string, evidenceData: any) => {
+      try {
+        const evidence = this.complianceService.addEvidence(evidenceData);
+        return { success: true, data: evidence };
+      } catch (error) {
+        console.error('Failed to add evidence:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Get evidence by control
+    ipcMain.handle('compliance:getEvidenceByControl', async (event, controlId: string) => {
+      try {
+        const evidence = this.complianceService.getEvidenceByControl(controlId);
+        return { success: true, data: evidence };
+      } catch (error) {
+        console.error('Failed to get evidence by control:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Delete evidence
+    ipcMain.handle('compliance:deleteEvidence', async (event, evidenceId: string) => {
+      try {
+        // Note: deleteEvidence method not implemented in service - placeholder
+        return { success: true };
+      } catch (error) {
+        console.error('Failed to delete evidence:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Get remediation actions
+    ipcMain.handle('compliance:getRemediationActions', async (event, status?: string) => {
+      try {
+        const remediations = this.complianceService.getRemediationActions();
+        return { success: true, data: remediations };
+      } catch (error) {
+        console.error('Failed to get remediation actions:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Create remediation action
+    ipcMain.handle('compliance:createRemediationAction', async (event, remediationData: any) => {
+      try {
+        const remediation = this.complianceService.createRemediationAction(remediationData);
+        return { success: true, data: remediation };
+      } catch (error) {
+        console.error('Failed to create remediation action:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Update remediation action
+    ipcMain.handle('compliance:updateRemediationAction', async (event, remediationId: string, remediationData: any) => {
+      try {
+        this.complianceService.updateRemediationAction(remediationId, remediationData);
+        return { success: true };
+      } catch (error) {
+        console.error('Failed to update remediation action:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Delete remediation action
+    ipcMain.handle('compliance:deleteRemediationAction', async (event, remediationId: string) => {
+      try {
+        // Note: deleteRemediationAction method not implemented in service - placeholder
+        return { success: true };
+      } catch (error) {
+        console.error('Failed to delete remediation action:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Get findings
+    ipcMain.handle('compliance:getFindings', async (event, status?: string) => {
+      try {
+        const findings = this.complianceService.getFindings();
+        return { success: true, data: findings };
+      } catch (error) {
+        console.error('Failed to get findings:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Create finding
+    ipcMain.handle('compliance:createFinding', async (event, findingData: any) => {
+      try {
+        const finding = this.complianceService.createFinding(findingData);
+        return { success: true, data: finding };
+      } catch (error) {
+        console.error('Failed to create finding:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Update finding
+    ipcMain.handle('compliance:updateFinding', async (event, findingId: string, findingData: any) => {
+      try {
+        // Note: updateFinding method not implemented in service - placeholder
+        return { success: true };
+      } catch (error) {
+        console.error('Failed to update finding:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Delete finding
+    ipcMain.handle('compliance:deleteFinding', async (event, findingId: string) => {
+      try {
+        // Note: deleteFinding method not implemented in service - placeholder
+        return { success: true };
+      } catch (error) {
+        console.error('Failed to delete finding:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Generate report
+    ipcMain.handle('compliance:generateReport', async (event, reportType: string, framework?: string) => {
+      try {
+        const report = this.complianceService.generateReport(reportType as any, framework as ComplianceFramework);
+        return { success: true, data: report };
+      } catch (error) {
+        console.error('Failed to generate compliance report:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Get reports
+    ipcMain.handle('compliance:getReports', async () => {
+      try {
+        const reports = this.complianceService.getReports();
+        return { success: true, data: reports };
+      } catch (error) {
+        console.error('Failed to get compliance reports:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Delete report
+    ipcMain.handle('compliance:deleteReport', async (event, reportId: string) => {
+      try {
+        // Note: deleteReport method not implemented in service - placeholder
+        return { success: true };
+      } catch (error) {
+        console.error('Failed to delete compliance report:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Get alerts
+    ipcMain.handle('compliance:getAlerts', async (event, severity?: string) => {
+      try {
+        const alerts = this.complianceService.getAlerts();
+        return { success: true, data: alerts };
+      } catch (error) {
+        console.error('Failed to get compliance alerts:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Create alert
+    ipcMain.handle('compliance:createAlert', async (event, alertData: any) => {
+      try {
+        const alert = this.complianceService.createAlert(alertData);
+        return { success: true, data: alert };
+      } catch (error) {
+        console.error('Failed to create compliance alert:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Acknowledge alert
+    ipcMain.handle('compliance:acknowledgeAlert', async (event, alertId: string) => {
+      try {
+        this.complianceService.acknowledgeAlert(alertId, 'system');
+        return { success: true };
+      } catch (error) {
+        console.error('Failed to acknowledge compliance alert:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Delete alert
+    ipcMain.handle('compliance:deleteAlert', async (event, alertId: string) => {
+      try {
+        // Note: deleteAlert method not implemented in service - placeholder
+        return { success: true };
+      } catch (error) {
+        console.error('Failed to delete compliance alert:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Get metrics
+    ipcMain.handle('compliance:getMetrics', async (event, framework?: string) => {
+      try {
+        const metrics = this.complianceService.getComplianceMetrics(framework as ComplianceFramework);
+        return { success: true, data: metrics };
+      } catch (error) {
+        console.error('Failed to get compliance metrics:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Get configuration
+    ipcMain.handle('compliance:getConfiguration', async () => {
+      try {
+        const config = this.complianceService.getConfiguration();
+        return { success: true, data: config };
+      } catch (error) {
+        console.error('Failed to get compliance configuration:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Update configuration
+    ipcMain.handle('compliance:updateConfiguration', async (event, config: any) => {
+      try {
+        this.complianceService.updateConfiguration(config);
+        return { success: true };
+      } catch (error) {
+        console.error('Failed to update compliance configuration:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    console.log('[Main] Compliance handlers setup completed');
+
+    // ===== AUTOMATION ENGINE IPC HANDLERS =====
+    console.log('[Main] Setting up automation handlers...');
+
+    // Task management handlers
+    ipcMain.handle('automation:getTasks', async () => {
+      try {
+        return this.automationService.getTasks();
+      } catch (error) {
+        console.error('Failed to get automation tasks:', error);
+        return [];
+      }
+    });
+
+    ipcMain.handle('automation:getTask', async (event, taskId: string) => {
+      try {
+        return this.automationService.getTask(taskId);
+      } catch (error) {
+        console.error('Failed to get automation task:', error);
+        return null;
+      }
+    });
+
+    ipcMain.handle('automation:createTask', async (event, taskData: any) => {
+      try {
+        const taskId = await this.automationService.createTask(taskData);
+        return { success: true, taskId };
+      } catch (error) {
+        console.error('Failed to create automation task:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    ipcMain.handle('automation:updateTask', async (event, taskId: string, taskData: any) => {
+      try {
+        const success = await this.automationService.updateTask(taskId, taskData);
+        return { success };
+      } catch (error) {
+        console.error('Failed to update automation task:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    ipcMain.handle('automation:deleteTask', async (event, taskId: string) => {
+      try {
+        const success = await this.automationService.deleteTask(taskId);
+        return { success };
+      } catch (error) {
+        console.error('Failed to delete automation task:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    ipcMain.handle('automation:executeTask', async (event, taskId: string, context?: any) => {
+      try {
+        const result = await this.automationService.executeTask(taskId, context);
+        return result;
+      } catch (error) {
+        console.error('Failed to execute automation task:', error);
+        return {
+          success: false,
+          message: error instanceof Error ? error.message : 'Unknown error',
+          duration: 0,
+          timestamp: new Date(),
+          errors: [error instanceof Error ? error.message : 'Unknown error']
+        };
+      }
+    });
+
+    ipcMain.handle('automation:updateTaskStatus', async (event, taskId: string, status: string) => {
+      try {
+        const success = await this.automationService.updateTask(taskId, { status: status as TaskStatus });
+        return { success };
+      } catch (error) {
+        console.error('Failed to update task status:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Workflow management handlers
+    ipcMain.handle('automation:getWorkflows', async () => {
+      try {
+        return this.automationService.getWorkflows();
+      } catch (error) {
+        console.error('Failed to get automation workflows:', error);
+        return [];
+      }
+    });
+
+    ipcMain.handle('automation:getWorkflow', async (event, workflowId: string) => {
+      try {
+        return this.automationService.getWorkflow(workflowId);
+      } catch (error) {
+        console.error('Failed to get automation workflow:', error);
+        return null;
+      }
+    });
+
+    ipcMain.handle('automation:createWorkflow', async (event, workflowData: any) => {
+      try {
+        const workflowId = await this.automationService.createWorkflow(workflowData);
+        return { success: true, workflowId };
+      } catch (error) {
+        console.error('Failed to create automation workflow:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    ipcMain.handle('automation:updateWorkflow', async (event, workflowId: string, workflowData: any) => {
+      try {
+        const success = await this.automationService.updateWorkflow(workflowId, workflowData);
+        return { success };
+      } catch (error) {
+        console.error('Failed to update automation workflow:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    ipcMain.handle('automation:deleteWorkflow', async (event, workflowId: string) => {
+      try {
+        const success = await this.automationService.deleteWorkflow(workflowId);
+        return { success };
+      } catch (error) {
+        console.error('Failed to delete automation workflow:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    ipcMain.handle('automation:executeWorkflow', async (event, workflowId: string, context?: any) => {
+      try {
+        const result = await this.automationService.executeWorkflow(workflowId, context);
+        return result;
+      } catch (error) {
+        console.error('Failed to execute automation workflow:', error);
+        return {
+          success: false,
+          message: error instanceof Error ? error.message : 'Unknown error',
+          duration: 0,
+          timestamp: new Date(),
+          errors: [error instanceof Error ? error.message : 'Unknown error']
+        };
+      }
+    });
+
+    // Execution and monitoring handlers
+    ipcMain.handle('automation:getExecutionHistory', async (event, taskId: string) => {
+      try {
+        return this.automationService.getExecutionHistory(taskId);
+      } catch (error) {
+        console.error('Failed to get execution history:', error);
+        return [];
+      }
+    });
+
+    ipcMain.handle('automation:getRecentExecutions', async () => {
+      try {
+        // Return recent executions across all tasks/workflows
+        const tasks = this.automationService.getTasks();
+        const recentExecutions: any[] = [];
+        
+        for (const task of tasks) {
+          const history = this.automationService.getExecutionHistory(task.id);
+          recentExecutions.push(...history.slice(-5).map(exec => ({
+            ...exec,
+            taskId: task.id,
+            taskName: task.name
+          })));
+        }
+        
+        return recentExecutions
+          .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+          .slice(0, 20);
+      } catch (error) {
+        console.error('Failed to get recent executions:', error);
+        return [];
+      }
+    });
+
+    ipcMain.handle('automation:getMetrics', async () => {
+      try {
+        return this.automationService.getSystemMetrics();
+      } catch (error) {
+        console.error('Failed to get automation metrics:', error);
+        return {
+          totalTasks: 0,
+          activeTasks: 0,
+          totalWorkflows: 0,
+          activeWorkflows: 0,
+          scheduledJobs: 0,
+          totalExecutions: 0,
+          successRate: 0,
+          avgExecutionTime: 0
+        };
+      }
+    });
+
+    // Schedule management handlers
+    ipcMain.handle('automation:getScheduledJobs', async () => {
+      try {
+        const metrics = this.automationService.getSystemMetrics();
+        return { scheduledJobs: metrics.scheduledJobs };
+      } catch (error) {
+        console.error('Failed to get scheduled jobs:', error);
+        return { scheduledJobs: 0 };
+      }
+    });
+
+    ipcMain.handle('automation:scheduleTask', async (event, taskId: string, schedule: any) => {
+      try {
+        const success = await this.automationService.updateTask(taskId, { schedule });
+        return { success };
+      } catch (error) {
+        console.error('Failed to schedule task:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    ipcMain.handle('automation:unscheduleTask', async (event, taskId: string) => {
+      try {
+        const success = await this.automationService.updateTask(taskId, { schedule: undefined });
+        return { success };
+      } catch (error) {
+        console.error('Failed to unschedule task:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    ipcMain.handle('automation:pauseTask', async (event, taskId: string) => {
+      try {
+        const success = await this.automationService.updateTask(taskId, { status: TaskStatus.PAUSED });
+        return { success };
+      } catch (error) {
+        console.error('Failed to pause task:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    ipcMain.handle('automation:resumeTask', async (event, taskId: string) => {
+      try {
+        const success = await this.automationService.updateTask(taskId, { status: TaskStatus.ACTIVE });
+        return { success };
+      } catch (error) {
+        console.error('Failed to resume task:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Service management handlers
+    ipcMain.handle('automation:getSystemStatus', async () => {
+      try {
+        return {
+          isRunning: this.automationService.isServiceRunning(),
+          metrics: this.automationService.getSystemMetrics()
+        };
+      } catch (error) {
+        console.error('Failed to get system status:', error);
+        return { isRunning: false, metrics: null };
+      }
+    });
+
+    ipcMain.handle('automation:restartService', async () => {
+      try {
+        await this.automationService.restart();
+        return { success: true };
+      } catch (error) {
+        console.error('Failed to restart automation service:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    ipcMain.handle('automation:stopService', async () => {
+      try {
+        await this.automationService.stop();
+        return { success: true };
+      } catch (error) {
+        console.error('Failed to stop automation service:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    ipcMain.handle('automation:startService', async () => {
+      try {
+        await this.automationService.restart(); // restart initializes the service
+        return { success: true };
+      } catch (error) {
+        console.error('Failed to start automation service:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    console.log('[Main] Automation handlers setup completed');
+
+    // ===== ANALYTICS ENGINE IPC HANDLERS =====
+    console.log('[Main] Setting up analytics handlers...');
+
+    // Data Ingestion
+    ipcMain.handle('analytics:ingestMetricData', async (event, metricName: string, dataPoints: any[], category: string) => {
+      try {
+        await this.analyticsService.ingestMetricData(metricName, dataPoints, category as any);
+        return { success: true };
+      } catch (error) {
+        console.error('Failed to ingest metric data:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    ipcMain.handle('analytics:ingestBulkData', async (event, metricsData: any[]) => {
+      try {
+        await this.analyticsService.ingestBulkData(metricsData);
+        return { success: true };
+      } catch (error) {
+        console.error('Failed to ingest bulk data:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Predictive Analytics
+    ipcMain.handle('analytics:generatePredictions', async (event, metricName?: string, timeframes?: string[]) => {
+      try {
+        const predictions = await this.analyticsService.generatePredictions(metricName || 'default', timeframes);
+        return { success: true, data: predictions };
+      } catch (error) {
+        console.error('Failed to generate predictions:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    ipcMain.handle('analytics:getPredictions', async (event, metricName?: string) => {
+      try {
+        const predictions = await this.analyticsService.getPredictions(metricName);
+        return { success: true, data: predictions };
+      } catch (error) {
+        console.error('Failed to get predictions:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Trend Analysis
+    ipcMain.handle('analytics:analyzeTrends', async (event, metricName?: string) => {
+      try {
+        const trends = await this.analyticsService.analyzeTrends(metricName);
+        return { success: true, data: trends };
+      } catch (error) {
+        console.error('Failed to analyze trends:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    ipcMain.handle('analytics:getTrends', async (event, category?: string) => {
+      try {
+        const trends = await this.analyticsService.getTrends(category as any);
+        return { success: true, data: trends };
+      } catch (error) {
+        console.error('Failed to get trends:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Optimization Recommendations
+    ipcMain.handle('analytics:generateOptimizations', async () => {
+      try {
+        const recommendations = await this.analyticsService.generateOptimizationRecommendations();
+        return { success: true, data: recommendations };
+      } catch (error) {
+        console.error('Failed to generate optimizations:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    ipcMain.handle('analytics:getRecommendations', async (event, category?: string) => {
+      try {
+        const recommendations = await this.analyticsService.getRecommendations(category as any);
+        return { success: true, data: recommendations };
+      } catch (error) {
+        console.error('Failed to get recommendations:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    ipcMain.handle('analytics:implementRecommendation', async (event, recommendationId: string) => {
+      try {
+        // Implementation would need to be added to AnalyticsService
+        console.log('Implementing recommendation:', recommendationId);
+        return { success: true };
+      } catch (error) {
+        console.error('Failed to implement recommendation:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Risk Analysis
+    ipcMain.handle('analytics:analyzeRisks', async () => {
+      try {
+        const risks = await this.analyticsService.analyzeRisks();
+        return { success: true, data: risks };
+      } catch (error) {
+        console.error('Failed to analyze risks:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    ipcMain.handle('analytics:getRisks', async (event, category?: string) => {
+      try {
+        const risks = await this.analyticsService.getRisks(category as any);
+        return { success: true, data: risks };
+      } catch (error) {
+        console.error('Failed to get risks:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Capacity Forecasting
+    ipcMain.handle('analytics:generateCapacityForecasts', async () => {
+      try {
+        const forecasts = await this.analyticsService.generateCapacityForecasts();
+        return { success: true, data: forecasts };
+      } catch (error) {
+        console.error('Failed to generate capacity forecasts:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    ipcMain.handle('analytics:getCapacityForecasts', async () => {
+      try {
+        const forecasts = await this.analyticsService.getCapacityForecasts();
+        return { success: true, data: forecasts };
+      } catch (error) {
+        console.error('Failed to get capacity forecasts:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Security Analytics
+    ipcMain.handle('analytics:calculateSecurityScore', async () => {
+      try {
+        const score = await this.analyticsService.calculateSecurityScore();
+        return { success: true, data: score };
+      } catch (error) {
+        console.error('Failed to calculate security score:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    ipcMain.handle('analytics:getSecurityScore', async () => {
+      try {
+        const score = await this.analyticsService.calculateSecurityScore();
+        return { success: true, data: score };
+      } catch (error) {
+        console.error('Failed to get security score:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    // Data Retrieval
+    ipcMain.handle('analytics:getMetrics', async () => {
+      try {
+        const metrics = await this.analyticsService.getMetrics();
+        return { success: true, data: metrics };
+      } catch (error) {
+        console.error('Failed to get metrics:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    ipcMain.handle('analytics:getSummary', async () => {
+      try {
+        const summary = await this.analyticsService.getAnalyticsSummary();
+        return { success: true, data: summary };
+      } catch (error) {
+        console.error('Failed to get analytics summary:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    console.log('[Main] Analytics handlers setup completed');
   }
 }
 

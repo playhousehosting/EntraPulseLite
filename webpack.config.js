@@ -75,7 +75,7 @@ const mainConfig = {
 // Renderer process configuration
 const rendererConfig = {
   ...commonConfig,
-  target: 'electron-renderer',
+  target: ['web', 'es2020'],
   entry: './src/renderer/index.tsx',
   output: {
     path: path.resolve(__dirname, 'dist'),
@@ -99,7 +99,15 @@ const rendererConfig = {
       "querystring": require.resolve("querystring-es3"),
       "worker_threads": false,
       "child_process": false,
-      "module": false
+      "module": false,
+      "events": require.resolve("events-browserify"), // Use events-browserify for proper polyfill
+      "http": false,
+      "https": false,
+      "zlib": false,
+      "tls": false,
+      "net": false,
+      "dns": false,
+      "global": require.resolve("global")
     }
   },
   plugins: [
@@ -126,7 +134,8 @@ const rendererConfig = {
     // Provide global variables for Node.js compatibility
     new (require('webpack')).ProvidePlugin({
       process: 'process/browser',
-      Buffer: ['buffer', 'Buffer']
+      Buffer: ['buffer', 'Buffer'],
+      global: 'global'
     })
   ],
   externals: {

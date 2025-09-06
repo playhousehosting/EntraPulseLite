@@ -124,7 +124,7 @@ export class ProfilePhotoService {
     
     try {
       // Import the ResponseType enum from the Microsoft Graph client
-      const { ResponseType } = require('@microsoft/microsoft-graph-client');
+      const { ResponseType } = await import('@microsoft/microsoft-graph-client');
       
       // If userId is an email, we need to get the user's ID first
       let userIdToUse = userId;

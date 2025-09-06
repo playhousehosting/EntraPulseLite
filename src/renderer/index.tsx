@@ -55,6 +55,14 @@ if (container) {
       </ThemeProvider>
     </React.StrictMode>
   );
+  
+  // Hide loading overlay once React app has mounted
+  setTimeout(() => {
+    const loadingOverlay = document.getElementById('loading-overlay');
+    if (loadingOverlay) {
+      loadingOverlay.style.display = 'none';
+    }
+  }, 100);
 } else {
   console.error('Root element not found');
 }

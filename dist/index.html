@@ -18,6 +18,17 @@
             flex-direction: column;
         }
         
+        /* Loading overlay for initial load */
+        #loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #1e1e1e;
+            z-index: 9999;
+        }
+        
         /* Loading spinner for initial load */
         .loading {
             display: flex;
@@ -40,4 +51,75 @@
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
-        }</style><script defer="defer" src="renderer.js"></script></head><body><div id="root"><div class="loading"><div class="spinner"></div><p>Loading DynamicEndpoint Assistant...</p></div></div></body></html>
+        }</style><script defer="defer" src="renderer.js"></script></head><body><div id="loading-overlay" class="loading"><div class="spinner"></div><p>Loading DynamicEndpoint Assistant...</p></div><div id="root"></div><script>console.log('HTML page loaded, initializing...');
+        
+        // Debug function to check React mounting
+        function checkReactMount() {
+            const root = document.getElementById('root');
+            const loadingOverlay = document.getElementById('loading-overlay');
+            
+            console.log('Checking React mount state:', {
+                rootExists: !!root,
+                rootHasChildren: root ? root.children.length : 0,
+                loadingOverlayVisible: loadingOverlay ? loadingOverlay.style.display !== 'none' : false
+            });
+            
+            if (root && root.children.length > 0) {
+                console.log('React app detected, hiding loading overlay');
+                if (loadingOverlay) {
+                    loadingOverlay.style.display = 'none';
+                }
+                return true;
+            }
+            return false;
+        }
+        
+        // Hide loading overlay once the page is fully loaded
+        window.addEventListener('load', function() {
+            console.log('Window load event fired');
+            setTimeout(function() {
+                if (!checkReactMount()) {
+                    console.log('React app not mounted after window load, hiding overlay anyway');
+                    const loadingOverlay = document.getElementById('loading-overlay');
+                    if (loadingOverlay) {
+                        loadingOverlay.style.display = 'none';
+                    }
+                }
+            }, 1000); // Increased delay to give React more time
+        });
+        
+        // Also hide loading overlay when React app mounts
+        const observer = new MutationObserver(function(mutations) {
+            mutations.forEach(function(mutation) {
+                if (mutation.type === 'childList') {
+                    if (checkReactMount()) {
+                        observer.disconnect();
+                    }
+                }
+            });
+        });
+        
+        // Error handling for React mounting
+        window.addEventListener('error', function(event) {
+            console.error('JavaScript error detected:', event.error);
+            const loadingOverlay = document.getElementById('loading-overlay');
+            if (loadingOverlay) {
+                loadingOverlay.innerHTML = '<div class="loading"><div class="spinner"></div><p>Error loading application. Please check console.</p></div>';
+            }
+        });
+        
+        const root = document.getElementById('root');
+        if (root) {
+            observer.observe(root, { childList: true, subtree: true });
+        } else {
+            console.error('Root element not found!');
+        }
+        
+        // Fallback - hide overlay after 3 seconds regardless
+        setTimeout(function() {
+            console.log('Fallback: Hiding loading overlay after 3 seconds');
+            const loadingOverlay = document.getElementById('loading-overlay');
+            if (loadingOverlay) {
+                loadingOverlay.style.display = 'none';
+            }
+        }, 3000);</script></body></html>

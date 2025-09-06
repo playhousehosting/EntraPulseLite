@@ -1,7 +1,7 @@
 // Main App component for EntraPulse Lite
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Box, AppBar, Toolbar, Typography, IconButton, Switch, FormControlLabel, Tooltip } from '@mui/material';
-import { Settings as SettingsIcon, Brightness4, Brightness7, Info as InfoIcon, Psychology as BrainIcon, Chat as ChatIcon, Home as HomeIcon } from '@mui/icons-material';
+import { Settings as SettingsIcon, Brightness4, Brightness7, Info as InfoIcon, Psychology as BrainIcon, Chat as ChatIcon, Home as HomeIcon, Extension as ExtensionIcon } from '@mui/icons-material';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { ChatComponent } from './components/ChatComponent';
 import { AppIcon } from './components/AppIcon';
@@ -10,6 +10,7 @@ import { EnhancedSettingsDialog } from './components/EnhancedSettingsDialog';
 import { AboutDialog } from './components/AboutDialog';
 import { UpdateNotification } from './components/common/UpdateNotification';
 import { IntelligenceDashboard } from './components/IntelligenceDashboard';
+import { IntegrationHub } from './components/IntegrationMarketplace/IntegrationHub';
 import { LLMConfig } from '../types';
 import { VERSION } from '../shared/version';
 import { LLMStatusProvider, useLLMStatus } from './context/LLMStatusContext';
@@ -30,6 +31,7 @@ const AppContent: React.FC<AppContentProps> = ({ settingsOpen, setSettingsOpen }
   const [darkMode, setDarkMode] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [showIntelligence, setShowIntelligence] = useState(false);
+  const [showIntegrationHub, setShowIntegrationHub] = useState(false);
 
   const [aboutOpen, setAboutOpen] = useState(false);
   const [configReloadTimeout, setConfigReloadTimeout] = useState<NodeJS.Timeout | null>(null);
@@ -180,13 +182,15 @@ const AppContent: React.FC<AppContentProps> = ({ settingsOpen, setSettingsOpen }
       } else if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key === 'I') {
         event.preventDefault();
         setShowIntelligence(!showIntelligence);
+      } else if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'm') {
+        event.preventDefault();
+        setShowIntegrationHub(!showIntegrationHub);
+        setShowIntelligence(false); // Close other views
       }
     };
 
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, [showIntelligence]); // Add dependency for keyboard shortcut
 
   useEffect(() => {    // Listen for authentication configuration availability
@@ -388,6 +392,27 @@ const AppContent: React.FC<AppContentProps> = ({ settingsOpen, setSettingsOpen }
                   <BrainIcon />
                 </IconButton>
               </Tooltip>
+
+              <Tooltip title="Integration Hub (Ctrl+Shift+M)">
+                <IconButton
+                  size="large"
+                  color="inherit"
+                  onClick={() => {
+                    setShowIntegrationHub(!showIntegrationHub);
+                    setShowIntelligence(false); // Close intelligence dashboard when opening hub
+                  }}
+                  sx={{ 
+                    backgroundColor: showIntegrationHub ? 'rgba(255,255,255,0.15)' : 'transparent',
+                    border: showIntegrationHub ? '1px solid rgba(255,255,255,0.2)' : '1px solid transparent',
+                    borderRadius: 2,
+                    '&:hover': {
+                      backgroundColor: 'rgba(255,255,255,0.2)',
+                    }
+                  }}
+                >
+                  <ExtensionIcon />
+                </IconButton>
+              </Tooltip>
             </Box>
             
             <FormControlLabel
@@ -426,7 +451,13 @@ const AppContent: React.FC<AppContentProps> = ({ settingsOpen, setSettingsOpen }
 
         {/* Main Content */}
         <Box sx={{ flex: 1, overflow: 'hidden' }}>
-          {showIntelligence ? (
+          {showIntegrationHub ? (
+            <IntegrationHub 
+              onNavigateToMarketplace={() => {}}
+              onNavigateToWorkflows={() => {}}
+              onNavigateToAPIs={() => {}}
+            />
+          ) : showIntelligence ? (
             <IntelligenceDashboard onNavigateToChat={() => setShowIntelligence(false)} />
           ) : (
             <ChatComponent />

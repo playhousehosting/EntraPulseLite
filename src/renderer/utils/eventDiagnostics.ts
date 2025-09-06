@@ -22,9 +22,11 @@ export const setupEventDiagnostics = () => {
       
       // Check if EventManager is available
       try {
-        const { eventManager } = require('../../shared/EventManager');
-        const eventManagerDiagnostics = eventManager.getDiagnostics();
-        console.log('🔍 EventManager Diagnostics:', eventManagerDiagnostics);      } catch (error) {
+        import('../../shared/EventManager').then(({ eventManager }) => {
+          const eventManagerDiagnostics = eventManager.getDiagnostics();
+          console.log('🔍 EventManager Diagnostics:', eventManagerDiagnostics);
+        });
+      } catch (error) {
         console.log('EventManager not available:', (error as Error).message);
       }
       
