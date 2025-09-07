@@ -58,8 +58,20 @@ import { WebAppGeneratorDialog } from './WebAppGeneratorDialog';
 import { useLLMStatus } from '../context/LLMStatusContext';
 import { eventManager } from '../../shared/EventManager';
 import { ArtifactParser } from '../../shared/ArtifactParser';
+import { conversationContextManager } from '../../shared/ConversationContextManager';
 
 interface ChatComponentProps {}
+
+// Enhanced conversation context interface
+interface ConversationContext {
+  sessionId: string;
+  currentTopic: string | null;
+  followUpCount: number;
+  maxFollowUps: number;
+  lastUserIntent: string | null;
+  isInFollowUpMode: boolean;
+  contextStartTime: Date;
+}
 
 export const ChatComponent: React.FC<ChatComponentProps> = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -83,6 +95,17 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
   const [currentModel, setCurrentModel] = useState<string | null>(null);
   const [copyStatus, setCopyStatus] = useState<{ [key: string]: boolean }>({});
   const [sessionId, setSessionId] = useState<string>(() => `session-${Date.now()}`);
+  
+  // Enhanced conversation context state
+  const [conversationContext, setConversationContext] = useState<ConversationContext>({
+    sessionId: sessionId,
+    currentTopic: null,
+    followUpCount: 0,
+    maxFollowUps: 10,
+    lastUserIntent: null,
+    isInFollowUpMode: false,
+    contextStartTime: new Date()
+  });
   
   // Chat history state
   const [chatHistoryOpen, setChatHistoryOpen] = useState(false);
@@ -239,17 +262,10 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
         console.log('📋 Authentication Info received:', authInfo);
         setAuthMode(authInfo.mode);
         
-        // CRITICAL: If user is already authenticated, trigger the backend authentication restart
-        // This ensures Lokka gets the proper ACCESS_TOKEN even for existing sessions
+        // If user is already authenticated, skip re-authentication
+        // This prevents forcing users to sign in again when navigating between components
         if (authInfo.isAuthenticated) {
-          console.log('🔐 [INIT] User already authenticated - triggering backend restart for Lokka...');
-          try {
-            // Call the auth:login handler to trigger Lokka restart with authentication
-            await window.electronAPI.auth.login();
-            console.log('✅ [INIT] Backend authentication restart completed for existing session');
-          } catch (restartError) {
-            console.warn('⚠️ [INIT] Failed to restart backend authentication for existing session:', restartError);
-          }
+          console.log('🔐 [INIT] User already authenticated - skipping re-authentication');
         }
         
         // Set permissions based on authentication mode and what's available
@@ -358,6 +374,133 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
   const handleCloseProfileDropdown = () => {
     setProfileDropdownAnchor(null);
   };
+
+  // Conversation context helper functions
+  const analyzeUserIntent = (message: string): { intent: string; keywords: string[]; isFollowUp: boolean } => {
+    const lowerMessage = message.toLowerCase();
+    const keywords = message.split(' ').filter(word => word.length > 3);
+    
+    // Follow-up indicators
+    const followUpIndicators = [
+      'also', 'additionally', 'furthermore', 'what about', 'how about', 'can you also',
+      'tell me more', 'explain', 'show me', 'what if', 'and', 'but', 'however',
+      'more details', 'elaborate', 'expand', 'continue', 'next', 'another'
+    ];
+    
+    const isFollowUp = followUpIndicators.some(indicator => lowerMessage.includes(indicator)) ||
+                      (!!conversationContext.currentTopic && lowerMessage.length < 50);
+    
+    // Intent classification
+    let intent = 'general';
+    if (lowerMessage.includes('policy') || lowerMessage.includes('policies')) intent = 'policy_analysis';
+    else if (lowerMessage.includes('user') || lowerMessage.includes('users')) intent = 'user_management';
+    else if (lowerMessage.includes('group') || lowerMessage.includes('groups')) intent = 'group_management';
+    else if (lowerMessage.includes('app') || lowerMessage.includes('application')) intent = 'app_management';
+    else if (lowerMessage.includes('permission') || lowerMessage.includes('permissions')) intent = 'permissions';
+    else if (lowerMessage.includes('compliance') || lowerMessage.includes('security')) intent = 'compliance';
+    else if (lowerMessage.includes('report') || lowerMessage.includes('analytics')) intent = 'reporting';
+    
+    return { intent, keywords, isFollowUp };
+  };
+
+  const updateConversationContext = (userMessage: string, assistantResponse: string) => {
+    const analysis = analyzeUserIntent(userMessage);
+    
+    setConversationContext(prev => {
+      const isTopicChange = prev.currentTopic && prev.currentTopic !== analysis.intent;
+      const shouldResetContext = isTopicChange || prev.followUpCount >= prev.maxFollowUps;
+      
+      if (shouldResetContext) {
+        // Reset context for new topic or max follow-ups reached
+        return {
+          sessionId: prev.sessionId,
+          currentTopic: analysis.intent,
+          followUpCount: 0,
+          maxFollowUps: 10,
+          lastUserIntent: analysis.intent,
+          isInFollowUpMode: false,
+          contextStartTime: new Date()
+        };
+      } else {
+        // Continue current conversation
+        return {
+          ...prev,
+          currentTopic: prev.currentTopic || analysis.intent,
+          followUpCount: analysis.isFollowUp ? prev.followUpCount + 1 : prev.followUpCount,
+          lastUserIntent: analysis.intent,
+          isInFollowUpMode: analysis.isFollowUp || prev.followUpCount > 0
+        };
+      }
+    });
+  };
+
+  const resetConversationContext = () => {
+    setConversationContext({
+      sessionId: sessionId,
+      currentTopic: null,
+      followUpCount: 0,
+      maxFollowUps: 10,
+      lastUserIntent: null,
+      isInFollowUpMode: false,
+      contextStartTime: new Date()
+    });
+  };
+
+  // Helper function to get context-aware placeholder text
+  const getPlaceholderText = (): string => {
+    if (!chatAvailable) {
+      return "No LLM configured - configure a local or cloud LLM to enable chat...";
+    }
+    
+    if (conversationContext.isInFollowUpMode && conversationContext.currentTopic) {
+      const remainingFollowUps = conversationContext.maxFollowUps - conversationContext.followUpCount;
+      return `Continue asking about ${conversationContext.currentTopic.replace('_', ' ')} (${remainingFollowUps} follow-ups remaining)...`;
+    }
+    
+    return "Ask about your Microsoft Entra environment...";
+  };
+
+  // Helper function to get context-aware helper text
+  const getHelperText = (): string => {
+    if (!chatAvailable) {
+      return "Configure Ollama, LM Studio, or cloud LLM providers to enable chat functionality";
+    }
+    
+    if (conversationContext.followUpCount >= conversationContext.maxFollowUps) {
+      return "Maximum follow-ups reached. Your next question will start a new conversation topic.";
+    }
+    
+    if (conversationContext.isInFollowUpMode) {
+      return `Follow-up mode: I'll provide detailed answers building on our ${conversationContext.currentTopic?.replace('_', ' ')} discussion.`;
+    }
+    
+    return "";
+  };
+
+  const getContextualPrompt = (userMessage: string): string => {
+    const basePrompt = userMessage;
+    
+    if (!conversationContext.isInFollowUpMode || !conversationContext.currentTopic) {
+      return basePrompt;
+    }
+    
+    // Enhanced prompt for follow-up questions
+    const contextPrompt = `
+**Conversation Context:**
+- Current Topic: ${conversationContext.currentTopic}
+- Follow-up Question #${conversationContext.followUpCount + 1} of ${conversationContext.maxFollowUps}
+- Previous Intent: ${conversationContext.lastUserIntent}
+
+**User Question:** ${userMessage}
+
+**Instructions:** This is a follow-up question in an ongoing conversation about ${conversationContext.currentTopic}. 
+Please provide a contextual response that builds upon our previous discussion. Consider the conversation history 
+and provide detailed, relevant information. If this seems like a topic change, mention it and ask for clarification.
+`;
+    
+    return contextPrompt;
+  };
+
   const handleSendMessage = async () => {
     if (!inputMessage.trim() || isLoading) return;
 
@@ -370,11 +513,19 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
       return;
     }
 
+    const originalContent = inputMessage.trim();
     const userMessage: ChatMessage = {
       id: Date.now().toString(),
       role: 'user',
-      content: inputMessage.trim(),
+      content: originalContent,
       timestamp: new Date(),
+      metadata: {
+        conversationContext: {
+          currentTopic: conversationContext.currentTopic,
+          followUpCount: conversationContext.followUpCount,
+          isFollowUp: conversationContext.isInFollowUpMode
+        }
+      }
     };
 
     // Set chat title based on first user message
@@ -385,10 +536,21 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
     setMessages(prev => [...prev, userMessage]);
     setInputMessage('');
     setIsLoading(true);
-    setError(null);    try {
+    setError(null);
+
+    try {
+      // Create contextual prompt for better understanding
+      const contextualPrompt = getContextualPrompt(originalContent);
+      
+      // Create enhanced user message for LLM with context
+      const enhancedUserMessage: ChatMessage = {
+        ...userMessage,
+        content: contextualPrompt
+      };
+      
       // Send message to enhanced LLM service with session ID
-      console.log(`🔄 ChatComponent: Sending message with sessionId: ${sessionId}`);
-      const enhancedResponse = await window.electronAPI.llm.chat([...messages, userMessage], sessionId);
+      console.log(`🔄 ChatComponent: Sending message with sessionId: ${sessionId}, followUp: ${conversationContext.followUpCount}`);
+      const enhancedResponse = await window.electronAPI.llm.chat([...messages, enhancedUserMessage], sessionId);
       
       // Update cloud LLM status on success
       updateCloudLLMStatus();
@@ -429,11 +591,19 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
         artifacts: [], // parsedResponse.artifacts,
         metadata: {
           ...metadata,
-          hasArtifacts: false // parsedResponse.artifacts.length > 0
+          hasArtifacts: false, // parsedResponse.artifacts.length > 0
+          conversationContext: {
+            currentTopic: conversationContext.currentTopic,
+            followUpCount: conversationContext.followUpCount,
+            isFollowUp: conversationContext.isInFollowUpMode
+          }
         },
       };
 
       setMessages(prev => [...prev, assistantMessage]);
+      
+      // Update conversation context based on the interaction
+      updateConversationContext(originalContent, content);
     } catch (error) {
       console.error('Failed to send message:', error);
       
@@ -574,6 +744,17 @@ export const ChatComponent: React.FC<ChatComponentProps> = () => {
       setSessionId(newSessionId);
       setCurrentChatTitle('New Chat');
       
+      // Reset conversation context
+      setConversationContext({
+        sessionId: newSessionId,
+        currentTopic: null,
+        followUpCount: 0,
+        maxFollowUps: 10,
+        lastUserIntent: null,
+        isInFollowUpMode: false,
+        contextStartTime: new Date()
+      });
+      
       // Add welcome message after clearing
       const welcomeMessage: ChatMessage = {
         id: 'welcome-new',
@@ -585,7 +766,7 @@ What would you like to explore?`,
       };
       setMessages([welcomeMessage]);
       
-      console.log('✅ Started new chat session with ID:', newSessionId);
+      console.log('✅ Started new chat session with ID:', newSessionId, 'and reset conversation context');
     } catch (error) {
       console.error('Failed to start new chat:', error);
       setError('Failed to start new chat. Please try again.');
@@ -1112,6 +1293,20 @@ What would you like to explore?`,
               />
             </Tooltip>
           )}
+          
+          {/* Conversation Context Indicators */}
+          {conversationContext.currentTopic && (
+            <Tooltip title={`Current conversation topic. ${conversationContext.followUpCount}/${conversationContext.maxFollowUps} follow-ups used.`}>
+              <Chip 
+                label={`${conversationContext.currentTopic.replace('_', ' ').toUpperCase()} (${conversationContext.followUpCount}/${conversationContext.maxFollowUps})`}
+                color={conversationContext.followUpCount >= conversationContext.maxFollowUps ? "warning" : "secondary"}
+                size="small"
+                variant="outlined"
+                onDelete={conversationContext.followUpCount > 0 ? resetConversationContext : undefined}
+                deleteIcon={<ClearIcon fontSize="small" />}
+              />
+            </Tooltip>
+          )}
         </Box>        <Box display="flex" alignItems="center" gap={1}>
           <Tooltip title="Start New Chat">
             <Button
@@ -1208,6 +1403,26 @@ What would you like to explore?`,
                             size="small"
                             variant="outlined"
                             color="secondary"
+                          />
+                        </Tooltip>
+                      )}
+                      {message.metadata?.conversationContext?.isFollowUp && (
+                        <Tooltip title={`Follow-up question #${message.metadata.conversationContext.followUpCount} about ${message.metadata.conversationContext.currentTopic}`}>
+                          <Chip
+                            label={`Follow-up #${message.metadata.conversationContext.followUpCount}`}
+                            size="small"
+                            variant="outlined"
+                            color="info"
+                          />
+                        </Tooltip>
+                      )}
+                      {message.metadata?.conversationContext?.currentTopic && !message.metadata?.conversationContext?.isFollowUp && (
+                        <Tooltip title={`Starting conversation about ${message.metadata.conversationContext.currentTopic}`}>
+                          <Chip
+                            label={message.metadata.conversationContext.currentTopic.replace('_', ' ')}
+                            size="small"
+                            variant="filled"
+                            color="primary"
                           />
                         </Tooltip>
                       )}
@@ -1463,9 +1678,9 @@ What would you like to explore?`,
                       </Box>
                       
                       {/* Artifacts Display - Disabled for performance */}
-                      {false && message.artifacts && message.artifacts.length > 0 && (
+                      {false && message.artifacts && (message.artifacts?.length ?? 0) > 0 && (
                         <Box sx={{ mt: 2 }}>
-                          {message.artifacts.map((artifact) => (
+                          {message.artifacts?.map((artifact) => (
                             <ArtifactViewer
                               key={artifact.id}
                               artifact={artifact}
@@ -1621,14 +1836,13 @@ What would you like to explore?`,
             maxRows={4}
             value={inputMessage}
             onChange={(e) => setInputMessage(e.target.value)}
-            onKeyPress={handleKeyPress}            placeholder={!chatAvailable 
-              ? "No LLM configured - configure a local or cloud LLM to enable chat..." 
-              : "Ask about your Microsoft Entra environment..."
-            }
+            onKeyPress={handleKeyPress}
+            placeholder={getPlaceholderText()}
             disabled={isLoading}
             variant="outlined"
             size="medium"  // Changed from small to medium for better visibility
-            helperText={!chatAvailable ? "Configure Ollama, LM Studio, or cloud LLM providers to enable chat functionality" : ""}            sx={{
+            helperText={getHelperText()}
+            sx={{
               '& .MuiOutlinedInput-root': {
                 minHeight: 44  // Reduced to match the more compact button
               }

@@ -876,4 +876,60 @@ export class AuthService {
       };
     }
   }
+
+  /**
+   * Add a single scope to the current configuration
+   * @param scope Permission scope to add
+   */
+  async addScope(scope: string): Promise<void> {
+    if (!this.config) {
+      throw new Error('Authentication service not initialized');
+    }
+
+    // Add scope if not already present
+    if (!this.config.auth.scopes.includes(scope)) {
+      this.config.auth.scopes.push(scope);
+      console.log(`Added scope: ${scope}`);
+    }
+  }
+
+  /**
+   * Get current configured scopes
+   * @returns Array of currently configured scopes
+   */
+  async getCurrentScopes(): Promise<string[]> {
+    if (!this.config) {
+      throw new Error('Authentication service not initialized');
+    }
+    return [...this.config.auth.scopes];
+  }
+
+  /**
+   * Get scopes from the current access token
+   * @returns Array of scopes from the current token
+   */
+  async getTokenScopes(): Promise<string[]> {
+    try {
+      const token = await this.getToken();
+      if (!token) {
+        return [];
+      }
+      return this.decodeTokenPermissions(token.accessToken);
+    } catch (error) {
+      console.error('Failed to get token scopes:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Set scopes replacing the current configuration
+   * @param scopes Array of permission scopes to set
+   */
+  async setScopes(scopes: string[]): Promise<void> {
+    if (!this.config) {
+      throw new Error('Authentication service not initialized');
+    }
+    this.config.auth.scopes = [...scopes];
+    console.log(`Set ${scopes.length} scopes in configuration`);
+  }
 }

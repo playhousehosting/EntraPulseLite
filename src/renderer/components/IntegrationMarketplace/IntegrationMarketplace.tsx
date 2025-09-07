@@ -97,15 +97,10 @@ import MCPService, {
   MCPConnection 
 } from '../../services/MCPService';
 import WorkflowService, { 
-  WorkflowDefinition, 
-  WorkflowTemplate, 
-  WorkflowExecution 
+  WorkflowTemplate 
 } from '../../services/WorkflowService';
-import APIService, { 
-  APIService_Definition, 
-  APIMarketplaceItem, 
-  APIConnection 
-} from '../../services/APIService';
+import APIService from '../../services/APIService';
+import type { APIMarketplaceItem } from '../../services/APIService';
 
 // Enhanced marketplace interfaces
 interface EnhancedMarketplaceItem {
@@ -199,37 +194,37 @@ export const IntegrationMarketplace: React.FC = () => {
         // MCP Servers
         ...mcpItems.map((item: MCPMarketplaceItem) => ({
           id: item.id,
-          name: item.server.name,
-          description: item.server.description,
+          name: item.server?.name || 'Unknown',
+          description: item.server?.description || 'No description',
           category: 'mcp-server' as const,
-          type: item.server.isOfficial ? 'official' as const : 'community' as const,
+          type: item.server?.isOfficial ? 'official' as const : 'community' as const,
           icon: <ExtensionIcon />,
-          status: item.server.status === 'Running' ? 'running' as const : 
-                  item.server.status === 'Installed' ? 'installed' as const :
-                  item.server.status === 'Stopped' ? 'stopped' as const : 'available' as const,
-          version: item.server.version,
-          author: item.server.author,
-          rating: item.server.rating,
-          reviewCount: item.reviews.length,
-          downloads: item.server.downloads,
-          tags: item.tags,
-          features: item.server.capabilities,
-          requirements: item.server.dependencies,
-          screenshots: item.screenshots,
-          documentation: item.documentation,
+          status: item.server?.status === 'Running' ? 'running' as const : 
+                  item.server?.status === 'Installed' ? 'installed' as const :
+                  item.server?.status === 'Stopped' ? 'stopped' as const : 'available' as const,
+          version: item.server?.version || '1.0.0',
+          author: item.server?.author || 'Unknown',
+          rating: item.server?.rating || 0,
+          reviewCount: item.reviews?.length || 0,
+          downloads: item.server?.downloads || 0,
+          tags: item.tags || [],
+          features: item.server?.capabilities || [],
+          requirements: item.server?.dependencies || [],
+          screenshots: item.screenshots || [],
+          documentation: item.documentation || '',
           sourceUrl: item.sourceUrl,
           supportUrl: item.supportUrl,
-          license: item.licenseType,
+          license: item.licenseType || 'Unknown',
           pricing: {
-            type: item.pricing.type.toLowerCase() as any,
-            amount: item.pricing.amount,
-            currency: item.pricing.currency
+            type: item.pricing?.type?.toLowerCase() as any || 'free',
+            amount: item.pricing?.amount || 0,
+            currency: item.pricing?.currency || 'USD'
           },
-          metadata: item.server.config,
-          created: new Date(item.server.lastUpdated),
-          updated: new Date(item.server.lastUpdated),
-          featured: item.featured,
-          verified: item.server.isOfficial
+          metadata: item.server?.config || {},
+          created: new Date(item.server?.lastUpdated || Date.now()),
+          updated: new Date(item.server?.lastUpdated || Date.now()),
+          featured: item.featured || false,
+          verified: item.server?.isOfficial || false
         })),
         
         // Workflow Templates
@@ -241,56 +236,55 @@ export const IntegrationMarketplace: React.FC = () => {
           type: template.isOfficial ? 'official' as const : 'community' as const,
           icon: <WorkflowIcon />,
           status: 'available' as const,
-          version: template.version,
-          author: template.author,
-          rating: template.rating,
+          version: template.version || '1.0.0',
+          author: template.author || 'Unknown',
+          rating: template.rating || 0,
           reviewCount: 0,
-          downloads: template.downloads,
-          tags: template.tags,
+          downloads: template.downloads || 0,
+          tags: template.tags || [],
           features: [],
-          requirements: template.requirements,
-          screenshots: template.screenshots,
-          documentation: template.documentation,
+          requirements: template.requirements || [],
+          screenshots: template.screenshots || [],
+          documentation: template.documentation || '',
           license: 'MIT',
           pricing: { type: 'free' as const },
-          metadata: template.workflow,
+          metadata: template.workflow || {},
           created: new Date(),
           updated: new Date(),
-          featured: template.isOfficial,
-          verified: template.isOfficial
+          featured: template.isOfficial || false,
+          verified: template.isOfficial || false
         })),
         
         // API Services
         ...apiItems.map((item: APIMarketplaceItem) => ({
           id: item.id,
-          name: item.service.name,
-          description: item.service.description,
+          name: item.service?.name || 'Unknown',
+          description: item.service?.description || 'No description',
           category: 'api-service' as const,
-          type: item.service.isOfficial ? 'official' as const : 'community' as const,
+          type: item.service?.isOfficial ? 'official' as const : 'community' as const,
           icon: <ApiIcon />,
-          status: item.service.isActive ? 'available' as const : 'stopped' as const,
-          version: item.service.version,
-          author: item.service.provider,
-          rating: item.rating,
-          reviewCount: item.reviews.length,
-          downloads: item.downloads,
-          tags: item.tags,
+          status: item.service?.isActive ? 'available' as const : 'stopped' as const,
+          version: item.service?.version || '1.0.0',
+          author: item.service?.provider || 'Unknown',
+          rating: item.rating || 0,
+          reviewCount: item.reviews?.length || 0,
+          downloads: item.downloads || 0,
+          tags: item.tags || [],
           features: [],
           requirements: [],
-          screenshots: item.screenshots,
-          documentation: item.service.documentation || '',
-          supportUrl: item.service.supportUrl,
+          screenshots: item.screenshots || [],
+          documentation: '',
           license: 'Various',
           pricing: {
-            type: item.pricing.type.toLowerCase() as any,
-            amount: item.pricing.amount,
-            currency: item.pricing.currency
+            type: item.pricing?.type?.toLowerCase() as any || 'free',
+            amount: item.pricing?.amount || 0,
+            currency: item.pricing?.currency || 'USD'
           },
-          metadata: item.service.metadata,
-          created: new Date(item.service.lastUpdated),
-          updated: new Date(item.service.lastUpdated),
-          featured: item.featured,
-          verified: item.service.isOfficial
+          metadata: {},
+          created: new Date(),
+          updated: new Date(),
+          featured: item.featured || false,
+          verified: item.service?.isOfficial || false
         }))
       ];
       
@@ -334,7 +328,8 @@ export const IntegrationMarketplace: React.FC = () => {
           success = await mcpService.installServer(itemId, { autoStart: true });
           break;
         case 'workflow':
-          success = await workflowService.createWorkflowFromTemplate(itemId, item.name) !== null;
+          const workflowId = await workflowService.createWorkflowFromTemplate(itemId, item.name);
+          success = !!workflowId;
           break;
         case 'api-service':
           success = await apiService.installService(itemId);

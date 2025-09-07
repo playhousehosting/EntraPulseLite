@@ -209,10 +209,10 @@ export class EnhancedLLMService {
         }
       }
 
-      // Lokka MCP for Microsoft Graph data
+      // Enhanced Lokka MCP with autonomous error recovery and query refinement
       if (analysis.needsLokkaMcp && analysis.graphEndpoint) {
         try {
-          trace.push('Calling Lokka MCP for Graph data');
+          trace.push('Calling Lokka MCP for Graph data with intelligent error recovery');
           
           // Convert query parameters to strings as required by Lokka MCP
           const stringifiedQueryParams = analysis.graphParams ? 
@@ -221,25 +221,122 @@ export class EnhancedLLMService {
                 key, 
                 typeof value === 'string' ? value : String(value)
               ])
-            ) : undefined;          // Ensure method is lowercase as required by Lokka MCP
+            ) : undefined;
+
+          // Ensure method is lowercase as required by Lokka MCP
           const method = (analysis.graphMethod || 'get').toLowerCase();
-            // Use external-lokka server directly
+          
+          // Use external-lokka server directly
           const serverName = 'external-lokka';
           const toolName = 'microsoft_graph_query';
           
           console.log(`🔧 EnhancedLLMService: Using MCP server: ${serverName}, tool: ${toolName}`);
-          
-          mcpResults.lokkaResult = await this.mcpClient.callTool(serverName, toolName, {
-            apiType: 'graph',
-            method: method,
+          console.log(`📋 Enhanced Query Details:`, {
             endpoint: analysis.graphEndpoint,
-            queryParams: stringifiedQueryParams
+            method: method,
+            params: stringifiedQueryParams,
+            reasoning: analysis.reasoning
           });
-          trace.push('Lokka MCP completed successfully');
+          
+          try {
+            // Primary attempt with original query
+            mcpResults.lokkaResult = await this.mcpClient.callTool(serverName, toolName, {
+              apiType: 'graph',
+              method: method,
+              endpoint: analysis.graphEndpoint,
+              queryParams: stringifiedQueryParams
+            });
+            trace.push('Lokka MCP completed successfully');
+          } catch (primaryError) {
+            console.warn('🔄 Primary Lokka query failed, attempting autonomous recovery:', primaryError);
+            trace.push(`Primary query failed: ${primaryError}, attempting recovery`);
+            
+            // Autonomous Error Recovery Strategy 1: Fix common filter syntax issues
+            if (String(primaryError).includes('unterminated string') || String(primaryError).includes('syntax')) {
+              trace.push('Detected syntax error - applying automatic query correction');
+              
+              // Fix common OData filter syntax issues
+              let correctedParams = { ...stringifiedQueryParams };
+              if (correctedParams['$filter']) {
+                let filter = correctedParams['$filter'];
+                
+                // Auto-fix missing quotes around strings
+                filter = filter.replace(/eq ([^'\s]+@[^'\s]+)/g, "eq '$1'");
+                filter = filter.replace(/contains\(([^,]+),([^)'\s]+)\)/g, "contains($1,'$2')");
+                
+                correctedParams['$filter'] = filter;
+                console.log('🔧 Auto-corrected filter syntax:', filter);
+                
+                try {
+                  mcpResults.lokkaResult = await this.mcpClient.callTool(serverName, toolName, {
+                    apiType: 'graph',
+                    method: method,
+                    endpoint: analysis.graphEndpoint,
+                    queryParams: correctedParams
+                  });
+                  trace.push('✅ Syntax error recovery successful');
+                } catch (syntaxRecoveryError) {
+                  console.warn('❌ Syntax recovery failed:', syntaxRecoveryError);
+                  throw syntaxRecoveryError;
+                }
+              }
+            }
+            // Autonomous Error Recovery Strategy 2: Simplify complex queries
+            else if (String(primaryError).includes('permission') || String(primaryError).includes('forbidden')) {
+              trace.push('Detected permission error - attempting simplified query');
+              
+              // Try simplified endpoint without complex parameters
+              try {
+                const simplifiedEndpoint = analysis.graphEndpoint.split('?')[0]; // Remove query params from URL
+                mcpResults.lokkaResult = await this.mcpClient.callTool(serverName, toolName, {
+                  apiType: 'graph',
+                  method: method,
+                  endpoint: simplifiedEndpoint,
+                  queryParams: undefined // Remove all parameters
+                });
+                trace.push('✅ Permission error recovery with simplified query successful');
+              } catch (simplifiedError) {
+                console.warn('❌ Simplified query recovery failed:', simplifiedError);
+                throw simplifiedError;
+              }
+            }
+            // Autonomous Error Recovery Strategy 3: Alternative endpoints
+            else {
+              trace.push('Attempting alternative endpoint strategy');
+              
+              // Try common alternative endpoints based on original intent
+              const alternativeEndpoints = this.getAlternativeEndpoints(analysis.graphEndpoint, userQuery);
+              
+              for (const altEndpoint of alternativeEndpoints) {
+                try {
+                  console.log(`🔄 Trying alternative endpoint: ${altEndpoint}`);
+                  mcpResults.lokkaResult = await this.mcpClient.callTool(serverName, toolName, {
+                    apiType: 'graph',
+                    method: method,
+                    endpoint: altEndpoint,
+                    queryParams: undefined // Start simple with alternatives
+                  });
+                  trace.push(`✅ Alternative endpoint recovery successful: ${altEndpoint}`);
+                  break;
+                } catch (altError) {
+                  console.warn(`❌ Alternative endpoint ${altEndpoint} failed:`, altError);
+                  continue;
+                }
+              }
+              
+              // If all alternatives fail, throw the original error
+              if (!mcpResults.lokkaResult) {
+                throw primaryError;
+              }
+            }
+          }
         } catch (error) {
-          const errorMsg = `Lokka MCP failed: ${error}`;
+          const errorMsg = `All Lokka MCP recovery strategies failed: ${error}`;
           errors.push(errorMsg);
           trace.push(errorMsg);
+          
+          // Add helpful context about what was attempted
+          trace.push('💡 Attempted recovery strategies: syntax correction, query simplification, alternative endpoints');
         }
       }      // Step 4: Generate final response using LLM with MCP results
       trace.push('Generating final response with LLM');
@@ -402,11 +499,26 @@ Respond ONLY with a JSON object in this exact format:
     // Fallback to heuristic analysis
     return this.heuristicAnalysis(query);
   }  /**
-   * Fallback heuristic analysis when LLM analysis fails
+   * Enhanced heuristic analysis with agentic capabilities for automatic query refinement
    */
   private heuristicAnalysis(query: string): QueryAnalysis {
     const lowerQuery = query.toLowerCase();
-      // Check for Microsoft-related keywords (prioritize Microsoft Docs MCP)
+    
+    // Detect ambiguous user queries and apply intelligent refinement
+    const ambiguousPatterns = [
+      { pattern: /when did (\w+) (sign in|login|last access)/i, refinement: 'sign-in activity query' },
+      { pattern: /who is (\w+)/i, refinement: 'user information query' },
+      { pattern: /show me (\w+)/i, refinement: 'data retrieval query' },
+      { pattern: /tell me about (\w+)/i, refinement: 'information query' },
+      { pattern: /get (\w+)/i, refinement: 'data access query' },
+      { pattern: /find (\w+)/i, refinement: 'search query' }
+    ];
+    
+    // Detect specific user name patterns and enhance query specificity
+    const userNamePattern = /(?:user|person|account)\s+(\w+@\w+\.\w+|\w+\.\w+|\w+)/i;
+    const userNameMatch = query.match(userNamePattern);
+    
+    // Check for Microsoft-related keywords (prioritize Microsoft Docs MCP)
     const microsoftKeywords = [
       'microsoft', 'azure', 'graph', 'entra', 'active directory', 'ad', 'aad',
       'office', 'office 365', 'o365', 'sharepoint', 'teams', 'outlook',
@@ -423,40 +535,136 @@ Respond ONLY with a JSON object in this exact format:
     const needsMicrosoftDocsMcp = microsoftKeywords.some(keyword => lowerQuery.includes(keyword)) ||
       microsoftDocKeywords.some(keyword => lowerQuery.includes(keyword));
     
-    // For non-Microsoft content, default to Fetch MCP for general web searches
-    // Only avoid Fetch MCP if it's clearly a Graph data query
-    const graphKeywords = ['users', 'groups', 'me', 'mail', 'calendar', 'contacts', 'teams', 'sites', 'files', 'list', 'show', 'get', 'find', 'count'];
-    const isGraphDataQuery = graphKeywords.some(keyword => lowerQuery.includes(keyword));
+    // Enhanced Graph API keyword detection with context awareness
+    const signInKeywords = ['sign in', 'signin', 'login', 'last access', 'authentication', 'activity'];
+    const userKeywords = ['users', 'user', 'people', 'person', 'account', 'profile'];
+    const groupKeywords = ['groups', 'group', 'team', 'distribution', 'security group'];
+    const mailKeywords = ['mail', 'email', 'message', 'inbox', 'sent'];
+    const calendarKeywords = ['calendar', 'appointment', 'meeting', 'event'];
+    
+    const isSignInQuery = signInKeywords.some(keyword => lowerQuery.includes(keyword));
+    const isUserQuery = userKeywords.some(keyword => lowerQuery.includes(keyword));
+    const isGroupQuery = groupKeywords.some(keyword => lowerQuery.includes(keyword));
+    const isMailQuery = mailKeywords.some(keyword => lowerQuery.includes(keyword));
+    const isCalendarQuery = calendarKeywords.some(keyword => lowerQuery.includes(keyword));
+    
+    const isGraphDataQuery = isSignInQuery || isUserQuery || isGroupQuery || isMailQuery || isCalendarQuery;
     
     const needsFetchMcp = !needsMicrosoftDocsMcp && !isGraphDataQuery;
     const needsLokkaMcp = isGraphDataQuery;
     
     let graphEndpoint = '/me'; // Default endpoint
     let graphParams: any = undefined;
+    let enhancedReasoning = '';
     
-    // Determine specific endpoint based on query content
-    if (lowerQuery.includes('how many') || lowerQuery.includes('count') || lowerQuery.includes('number of')) {
-      if (lowerQuery.includes('user')) {
+    // Intelligent Graph API endpoint determination with error recovery patterns
+    if (isSignInQuery && isUserQuery) {
+      // Handle sign-in activity queries with automatic refinement
+      if (userNameMatch) {
+        const userName = userNameMatch[1];
+        graphEndpoint = '/auditLogs/signIns';
+        graphParams = { 
+          '$filter': `userPrincipalName eq '${userName}' or contains(userDisplayName,'${userName.split('@')[0]}')`,
+          '$orderby': 'createdDateTime desc',
+          '$top': 10
+        };
+        enhancedReasoning = `Detected specific user sign-in query for '${userName}' - automatically crafted precise filter`;
+      } else {
+        // Extract any name-like patterns from the query
+        const namePattern = /(?:for|about|of)\s+([a-zA-Z]+(?:\s+[a-zA-Z]+)?)/i;
+        const nameMatch = query.match(namePattern);
+        if (nameMatch) {
+          const name = nameMatch[1];
+          graphEndpoint = '/auditLogs/signIns';
+          graphParams = { 
+            '$filter': `contains(userDisplayName,'${name}')`,
+            '$orderby': 'createdDateTime desc',
+            '$top': 10
+          };
+          enhancedReasoning = `Detected sign-in query for '${name}' - proactively refined to search by display name`;
+        } else {
+          graphEndpoint = '/auditLogs/signIns';
+          graphParams = { 
+            '$orderby': 'createdDateTime desc',
+            '$top': 20
+          };
+          enhancedReasoning = 'General sign-in activity query - showing recent activity';
+        }
+      }
+    } else if (lowerQuery.includes('how many') || lowerQuery.includes('count') || lowerQuery.includes('number of')) {
+      if (isUserQuery) {
         graphEndpoint = '/users/$count';
         graphParams = { 'ConsistencyLevel': 'eventual' };
-      } else if (lowerQuery.includes('group')) {
+        enhancedReasoning = 'Count query for users - using $count endpoint for efficiency';
+      } else if (isGroupQuery) {
         graphEndpoint = '/groups/$count';
         graphParams = { 'ConsistencyLevel': 'eventual' };
+        enhancedReasoning = 'Count query for groups - using $count endpoint for efficiency';
       }
-    } else if (lowerQuery.includes('users')) {
+    } else if (isUserQuery) {
       graphEndpoint = '/users';
       if (lowerQuery.includes('guest')) {
         graphParams = { '$filter': "userType eq 'Guest'" };
+        enhancedReasoning = 'Guest user query - automatically applied userType filter';
+      } else if (userNameMatch) {
+        const userName = userNameMatch[1];
+        graphParams = { 
+          '$filter': `userPrincipalName eq '${userName}' or contains(displayName,'${userName.split('@')[0]}')`
+        };
+        enhancedReasoning = `Specific user query for '${userName}' - searching by UPN and display name`;
+      } else {
+        enhancedReasoning = 'General user query - retrieving user list';
       }
-    } else if (lowerQuery.includes('groups')) {
+    } else if (isGroupQuery) {
       graphEndpoint = '/groups';
-      // Do NOT add ConsistencyLevel for regular group listings
+      enhancedReasoning = 'Group query detected - retrieving groups list';
     } else if (lowerQuery.includes('applications') || lowerQuery.includes('app registration')) {
       graphEndpoint = '/applications';
-      // Do NOT add ConsistencyLevel for regular application listings
-    } else if (lowerQuery.includes('mail')) {
+      enhancedReasoning = 'Application registration query - accessing applications endpoint';
+    } else if (isMailQuery) {
       graphEndpoint = '/me/messages';
-    }    return {
+      if (lowerQuery.includes('unread')) {
+        graphParams = { '$filter': 'isRead eq false', '$top': 20 };
+        enhancedReasoning = 'Unread mail query - automatically applied isRead filter';
+      } else if (lowerQuery.includes('recent') || lowerQuery.includes('latest')) {
+        graphParams = { '$orderby': 'receivedDateTime desc', '$top': 10 };
+        enhancedReasoning = 'Recent mail query - sorted by received date';
+      } else {
+        enhancedReasoning = 'General mail query - accessing messages';
+      }
+    } else if (isCalendarQuery) {
+      graphEndpoint = '/me/events';
+      if (lowerQuery.includes('today')) {
+        const today = new Date().toISOString().split('T')[0];
+        graphParams = { 
+          '$filter': `start/dateTime ge '${today}T00:00:00' and start/dateTime lt '${today}T23:59:59'`,
+          '$orderby': 'start/dateTime'
+        };
+        enhancedReasoning = "Today's calendar events - automatically applied date filter";
+      } else if (lowerQuery.includes('upcoming') || lowerQuery.includes('next')) {
+        const now = new Date().toISOString();
+        graphParams = { 
+          '$filter': `start/dateTime ge '${now}'`,
+          '$orderby': 'start/dateTime',
+          '$top': 10
+        };
+        enhancedReasoning = 'Upcoming events query - filtered for future events';
+      } else {
+        enhancedReasoning = 'General calendar query - accessing events';
+      }
+    }
+
+    // Determine confidence based on query specificity and pattern matching
+    let confidence = 0.7; // Base confidence
+    if (userNameMatch) confidence += 0.2;
+    if (isSignInQuery && isUserQuery) confidence += 0.1;
+    if (enhancedReasoning.includes('automatically')) confidence += 0.1;
+    
+    const finalReasoning = needsMicrosoftDocsMcp 
+      ? 'Used enhanced heuristic analysis - prioritizing Microsoft Docs MCP for Microsoft content with intelligent query refinement'
+      : needsLokkaMcp 
+        ? `Used enhanced heuristic analysis for Graph data query. ${enhancedReasoning}`
+        : 'Used enhanced heuristic analysis - using Fetch MCP for general web search';    return {
       needsFetchMcp,
       needsLokkaMcp,
       needsMicrosoftDocsMcp,
@@ -464,14 +672,67 @@ Respond ONLY with a JSON object in this exact format:
       graphMethod: 'get', // Use lowercase as required by Lokka MCP
       graphParams,
       documentationQuery: needsMicrosoftDocsMcp ? query : undefined,
-      confidence: 0.7,
-      reasoning: needsMicrosoftDocsMcp 
-        ? 'Used heuristic analysis as fallback - prioritizing Microsoft Docs MCP for Microsoft content'
-        : needsLokkaMcp 
-          ? 'Used heuristic analysis as fallback - using Lokka MCP for Graph data'
-          : 'Used heuristic analysis as fallback - using Fetch MCP for general web search'
+      confidence: Math.min(confidence, 1.0), // Cap at 1.0
+      reasoning: finalReasoning
     };
   }
+
+  /**
+   * Get alternative endpoints for autonomous error recovery
+   */
+  private getAlternativeEndpoints(originalEndpoint: string, userQuery: string): string[] {
+    const alternatives: string[] = [];
+    const lowerQuery = userQuery.toLowerCase();
+    
+    // For sign-in queries, try different approaches
+    if (originalEndpoint.includes('/auditLogs/signIns')) {
+      alternatives.push('/me');
+      alternatives.push('/users');
+      if (lowerQuery.includes('user') || lowerQuery.includes('sign')) {
+        alternatives.push('/auditLogs/signIns');
+      }
+    }
+    
+    // For user queries
+    else if (originalEndpoint.includes('/users')) {
+      alternatives.push('/me');
+      alternatives.push('/directoryObjects');
+      if (!originalEndpoint.includes('/$count')) {
+        alternatives.push('/users/$count');
+      }
+    }
+    
+    // For group queries
+    else if (originalEndpoint.includes('/groups')) {
+      alternatives.push('/me/memberOf');
+      alternatives.push('/directoryObjects');
+      if (!originalEndpoint.includes('/$count')) {
+        alternatives.push('/groups/$count');
+      }
+    }
+    
+    // For mail queries
+    else if (originalEndpoint.includes('/messages')) {
+      alternatives.push('/me/mailFolders/inbox/messages');
+      alternatives.push('/me/mailFolders');
+      alternatives.push('/me');
+    }
+    
+    // For calendar queries
+    else if (originalEndpoint.includes('/events')) {
+      alternatives.push('/me/calendar/events');
+      alternatives.push('/me/calendars');
+      alternatives.push('/me');
+    }
+    
+    // Always include /me as final fallback
+    if (!alternatives.includes('/me')) {
+      alternatives.push('/me');
+    }
+    
+    return alternatives;
+  }
+
   /**
    * Generate the final response using LLM with MCP results
    */

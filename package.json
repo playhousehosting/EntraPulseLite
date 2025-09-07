@@ -54,7 +54,13 @@
     "build:signed:publish": "powershell -ExecutionPolicy Bypass -File scripts/build-and-sign.ps1 -Publish",
     "create-release": "pwsh scripts/create-release.ps1",
     "release:unsigned": "npm run build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --publish=never",
-    "release:unsigned:publish": "npm run build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --config electron-builder-unsigned.json --publish=always"
+    "release:unsigned:publish": "npm run build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --config electron-builder-unsigned.json --publish=always",
+    "dist": "powershell -ExecutionPolicy Bypass -File scripts/build-distribution.ps1",
+    "dist:portable": "powershell -ExecutionPolicy Bypass -File scripts/build-distribution.ps1 -Type portable",
+    "dist:installer": "powershell -ExecutionPolicy Bypass -File scripts/build-distribution.ps1 -Type installer", 
+    "dist:msi": "powershell -ExecutionPolicy Bypass -File scripts/build-distribution.ps1 -Type msi",
+    "dist:clean": "powershell -ExecutionPolicy Bypass -File scripts/build-distribution.ps1 -Clean",
+    "dist:help": "powershell -ExecutionPolicy Bypass -File scripts/build-distribution.ps1 -Help"
   },
   "keywords": [
     "microsoft",

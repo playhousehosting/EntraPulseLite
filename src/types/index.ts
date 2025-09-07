@@ -44,6 +44,12 @@ export interface ChatMessage {
     };
     isError?: boolean; // Flag to identify error messages for special styling
     hasArtifacts?: boolean; // Flag to indicate if message contains artifacts
+    conversationContext?: {
+      currentTopic?: string | null;
+      followUpCount?: number;
+      isFollowUp?: boolean;
+      intent?: string;
+    };
   };
 }
 

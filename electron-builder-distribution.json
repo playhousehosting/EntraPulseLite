@@ -1,0 +1,97 @@
+{
+  "appId": "com.darrenjrobinson.entrapulselite",
+  "productName": "DynamicEndpoint Assistant",
+  "directories": {
+    "output": "dist-release"
+  },
+  "files": [
+    "dist/**/*",
+    "package.json"
+  ],
+  "extraResources": [
+    {
+      "from": "assets",
+      "to": "assets"
+    }
+  ],
+  "win": {
+    "target": [
+      {
+        "target": "portable",
+        "arch": ["x64"]
+      },
+      {
+        "target": "nsis",
+        "arch": ["x64"]
+      },
+      {
+        "target": "msi",
+        "arch": ["x64"]
+      }
+    ],
+    "icon": "assets/icon.ico",
+    "forceCodeSigning": false,
+    "verifyUpdateCodeSignature": false,
+    "requestedExecutionLevel": "asInvoker",
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}"
+  },
+  "portable": {
+    "artifactName": "${productName}-${version}-portable.exe"
+  },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "shortcutName": "DynamicEndpoint Assistant",
+    "artifactName": "${productName}-${version}-installer.exe",
+    "installerIcon": "assets/icon.ico",
+    "uninstallerIcon": "assets/icon.ico",
+    "license": "LICENSE",
+    "allowElevation": true,
+    "perMachine": false,
+    "menuCategory": "Microsoft Entra Tools",
+    "displayLanguageSelector": false,
+    "runAfterFinish": true
+  },
+  "msi": {
+    "artifactName": "${productName}-${version}-installer.msi",
+    "oneClick": false,
+    "warningsAsErrors": false,
+    "upgradeCode": "12345678-1234-1234-1234-123456789012"
+  },
+  "mac": {
+    "target": [
+      {
+        "target": "dmg",
+        "arch": ["x64", "arm64"]
+      },
+      {
+        "target": "zip",
+        "arch": ["x64", "arm64"]
+      }
+    ],
+    "icon": "assets/icon.png",
+    "category": "public.app-category.productivity"
+  },
+  "linux": {
+    "target": [
+      {
+        "target": "AppImage",
+        "arch": ["x64"]
+      },
+      {
+        "target": "deb",
+        "arch": ["x64"]
+      }
+    ],
+    "icon": "assets/icon.png",
+    "category": "Office"
+  },
+  "publish": {
+    "provider": "github",
+    "owner": "darrenjrobinson",
+    "repo": "EntraPulseLite",
+    "releaseType": "release"
+  }
+}
